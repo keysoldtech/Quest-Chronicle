@@ -47,6 +47,7 @@ const playerStatsDiv = document.getElementById('player-stats');
 const equippedItemsDiv = document.getElementById('equipped-items');
 const advancedCardChoiceDiv = document.getElementById('advanced-card-choice');
 const advancedChoiceButtonsDiv = document.getElementById('advanced-choice-buttons');
+const playerActionsContainer = document.getElementById('player-actions-container');
 
 
 // --- Helper Functions ---
@@ -85,8 +86,8 @@ function createCardElement(card, actions = {}) {
     else if (card.type === 'World Event' && card.tags) typeInfo = card.tags;
     
     let bonusesHTML = '';
-    if (card.bonuses) {
-        bonusesHTML = Object.entries(card.bonuses).map(([key, value]) => 
+    if (card.effect?.bonuses) {
+        bonusesHTML = Object.entries(card.effect.bonuses).map(([key, value]) => 
             `<div class="card-bonus">${key.charAt(0).toUpperCase() + key.slice(1)}: ${value > 0 ? '+' : ''}${value}</div>`
         ).join('');
     }
@@ -96,11 +97,19 @@ function createCardElement(card, actions = {}) {
         monsterStatsHTML = `<div class="card-bonus">HP: ${card.currentHp} / ${card.maxHp}</div>`;
     }
 
+    let statusEffectsHTML = '';
+    if (card.statusEffects && card.statusEffects.length > 0) {
+        statusEffectsHTML = `<div class="status-effects-container">` +
+            card.statusEffects.map(e => `<span class="status-effect">${e.name}</span>`).join(' ') +
+            `</div>`;
+    }
+
     cardDiv.innerHTML = `
         <div class="card-content">
             <h3 class="card-title">${card.name}</h3>
-            <p class="card-effect">${card.effect || card.outcome || ''}</p>
+            <p class="card-effect">${card.effect?.description || card.outcome || ''}</p>
         </div>
+        ${statusEffectsHTML}
         <div class="card-footer">
             ${bonusesHTML}
             ${monsterStatsHTML}
@@ -113,14 +122,16 @@ function createCardElement(card, actions = {}) {
 
     if (isPlayable) {
         const playBtn = document.createElement('button');
-        playBtn.textContent = 'Play';
+        const cardEffect = card.effect || {};
+        playBtn.textContent = card.type === 'Spell' ? 'Cast' : 'Use';
         playBtn.className = 'fantasy-button-xs fantasy-button-primary';
         playBtn.onclick = () => {
-            if ((card.category === 'Damage' || card.category === 'Attack') && !selectedTargetId) {
-                alert("You must select a monster to target with this card!");
+            if ((cardEffect.type === 'damage' || cardEffect.target === 'any-monster') && !selectedTargetId) {
+                alert("You must select a monster to target!");
                 return;
             }
-            socket.emit('playCard', { cardId: card.id, targetId: selectedTargetId });
+            const action = card.type === 'Spell' ? 'castSpell' : 'useItem';
+            socket.emit('playerAction', { action, cardId: card.id, targetId: selectedTargetId });
             selectedTargetId = null; // Reset target after playing
         };
         actionContainer.appendChild(playBtn);
@@ -137,7 +148,7 @@ function createCardElement(card, actions = {}) {
 }
 
 function renderPlayerList(players, gameState) {
-    const currentPlayerId = gameState.turnOrder?.[gameState.currentPlayerIndex];
+    const currentPlayerId = gameState.combatState.isActive ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] : null;
     playerList.innerHTML = ''; 
     Object.values(players).forEach(player => {
         const isCurrentTurn = player.id === currentPlayerId;
@@ -148,6 +159,10 @@ function renderPlayerList(players, gameState) {
         const npcTag = player.isNpc ? '<span class="npc-tag">[NPC]</span> ' : '';
         const roleClass = player.role === 'DM' ? 'dm' : 'explorer';
         const classText = player.class ? `<span class="player-class"> - ${player.class}</span>` : '';
+        
+        const statusEffectsHTML = (player.statusEffects || [])
+            .map(e => `<span class="status-effect-sm">${e.name}</span>`)
+            .join(' ');
 
         li.innerHTML = `
             <div class="player-info">
@@ -155,6 +170,7 @@ function renderPlayerList(players, gameState) {
                 <span class="player-role ${roleClass}">${player.role}</span>
             </div>
             <div class="player-hp">HP: ${player.stats.currentHp || '?'} / ${player.stats.maxHp || '?'}</div>
+            <div class="player-status-effects">${statusEffectsHTML}</div>
         `;
         playerList.appendChild(li);
     });
@@ -169,15 +185,17 @@ function renderGameState(room) {
     renderPlayerList(players, gameState);
     
     // --- Phase-specific UI rendering ---
-    const isMyTurn = gameState.turnOrder?.[gameState.currentPlayerIndex] === myId;
+    const isCombat = gameState.combatState.isActive;
+    const isMyTurn = isCombat ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] === myId : (gameState.currentPlayerIndex !== -1 ? gameState.turnOrder[gameState.currentPlayerIndex] === myId : false);
     const isDm = myPlayerInfo.role === 'DM';
-    const canPlayDamage = gameState.board.monsters.length > 0;
+    const canPlayTargetedCard = gameState.board.monsters.length > 0;
     
     classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || isDm);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || isDm);
     playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
     endTurnBtn.classList.toggle('hidden', !isMyTurn);
     dmControls.classList.toggle('hidden', !isDm || gameState.phase === 'lobby');
+    playerActionsContainer.classList.toggle('hidden', !isMyTurn);
     
     // --- Lobby Phase ---
     if (gameState.phase === 'lobby' && !isDm) {
@@ -207,36 +225,35 @@ function renderGameState(room) {
         }
     }
     
-    // --- World Event Setup Phase ---
-    if (gameState.phase === 'world_event_setup') {
-        turnIndicator.textContent = "Waiting for DM to create a World Event...";
-        worldEventBtn.disabled = !isDm || !myPlayerInfo.hand.some(c => c.type === 'World Event');
+    // --- Active Game & Turn Indicator ---
+    if (gameState.phase !== 'lobby' && gameState.phase !== 'advanced_setup_choice') {
+        const turnTakerId = isCombat ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] : 'N/A';
+        const turnTaker = players[turnTakerId] || gameState.board.monsters.find(m => m.id === turnTakerId);
+        if (turnTaker) {
+            turnIndicator.textContent = `Current Turn: ${turnTaker.name}`;
+            if(isMyTurn) turnIndicator.textContent += " (Your Turn!)";
+        } else {
+            turnIndicator.textContent = "Waiting for DM...";
+        }
     }
-    
-    // --- Active Game Phase ---
-    if (gameState.phase === 'active') {
-        const currentPlayer = players[gameState.turnOrder[gameState.currentPlayerIndex]];
-        turnIndicator.textContent = `Current Turn: ${currentPlayer?.name || 'Unknown'}`;
-        if (isMyTurn) turnIndicator.textContent += " (Your Turn!)";
-        
-        const { stats } = myPlayerInfo;
-        playerStatsDiv.innerHTML = `
-            <span>HP:</span> <span class="stat-value">${stats.currentHp} / ${stats.maxHp}</span>
-            <span>Damage Bonus:</span> <span class="stat-value">${stats.damageBonus > 0 ? '+' : ''}${stats.damageBonus}</span>
-            <span>Shield Bonus:</span> <span class="stat-value">${stats.shieldBonus > 0 ? '+' : ''}${stats.shieldBonus}</span>
-            <span>Action Points:</span> <span class="stat-value">${stats.ap}</span>
-        `;
-    }
+
+    const { stats, currentAp } = myPlayerInfo;
+    playerStatsDiv.innerHTML = `
+        <span>HP:</span> <span class="stat-value">${stats.currentHp} / ${stats.maxHp}</span>
+        <span>Damage Bonus:</span> <span class="stat-value">${stats.damageBonus > 0 ? '+' : ''}${stats.damageBonus}</span>
+        <span>Shield Bonus:</span> <span class="stat-value">${stats.shieldBonus > 0 ? '+' : ''}${stats.shieldBonus}</span>
+        <span>Action Points:</span> <span class="stat-value">${currentAp} / ${stats.ap}</span>
+        <span>Health Dice:</span> <span class="stat-value">${myPlayerInfo.healthDice?.current || 0} / ${myPlayerInfo.healthDice?.max || 0}</span>
+    `;
 
     // --- Render Hand & Equipment ---
     playerHandDiv.innerHTML = '';
     equippedItemsDiv.innerHTML = '';
-    const holdingDamageCard = myPlayerInfo.hand?.some(c => c.category === 'Damage' || c.category === 'Attack');
     
     if (myPlayerInfo.hand) {
         myPlayerInfo.hand.forEach(card => {
             const isEquippable = card.type === 'Weapon' || card.type === 'Armor';
-            const isPlayable = isMyTurn && ((card.category !== 'Damage' && card.category !== 'Attack') || canPlayDamage);
+            const isPlayable = isMyTurn && ((card.effect?.target !== 'any-monster' || canPlayTargetedCard));
             playerHandDiv.appendChild(createCardElement(card, { isPlayable, isEquippable }));
         });
     }
@@ -249,7 +266,7 @@ function renderGameState(room) {
     // --- Render Board & World Events ---
     gameBoardDiv.innerHTML = '';
     (gameState.board.monsters || []).forEach(monster => {
-        const isTargetable = isMyTurn && holdingDamageCard;
+        const isTargetable = isMyTurn;
         const monsterCard = createCardElement(monster, { isTargetable });
         if(isTargetable) {
             monsterCard.onclick = () => {
@@ -264,6 +281,22 @@ function renderGameState(room) {
     (gameState.worldEvents?.currentSequence || []).forEach(card => {
         worldEventsContainer.appendChild(createCardElement(card, {}));
     });
+
+    // Render contextual actions
+    playerActionsContainer.innerHTML = '';
+    if (isMyTurn && !isCombat) {
+        const respiteBtn = document.createElement('button');
+        respiteBtn.textContent = 'Brief Respite';
+        respiteBtn.className = 'fantasy-button-sm fantasy-button-secondary';
+        respiteBtn.onclick = () => socket.emit('playerAction', { action: 'briefRespite' });
+        playerActionsContainer.appendChild(respiteBtn);
+        
+        const restBtn = document.createElement('button');
+        restBtn.textContent = 'Full Rest';
+        restBtn.className = 'fantasy-button-sm fantasy-button-success';
+        restBtn.onclick = () => socket.emit('playerAction', { action: 'fullRest' });
+        playerActionsContainer.appendChild(restBtn);
+    }
 }
 
 function showGameArea(room) {
@@ -305,7 +338,15 @@ document.querySelector('input[name="gameMode"]:checked').parentElement.classList
 chatForm.addEventListener('submit', (e) => { e.preventDefault(); const msg=chatInput.value.trim(); if (msg) { socket.emit('sendMessage', { channel: chatChannel.value, message: msg }); chatInput.value = ''; } });
 startGameBtn.addEventListener('click', () => socket.emit('startGame', { gameMode: document.querySelector('input[name="gameMode"]:checked').value }));
 endTurnBtn.addEventListener('click', () => socket.emit('endTurn'));
-worldEventBtn.addEventListener('click', () => socket.emit('gmAction', { action: 'startWorldEventSequence' }));
+worldEventBtn.addEventListener('click', () => {
+    const worldEventCard = myPlayerInfo.hand.find(c => c.type === 'World Event');
+    if (worldEventCard) {
+        socket.emit('playCard', { cardId: worldEventCard.id });
+    } else {
+        alert("You don't have a World Event card to play!");
+    }
+});
+
 
 // --- Socket.IO Event Handlers ---
 socket.on('roomCreated', (room) => {
