@@ -1,0 +1,15 @@
+{
+  "name": "quest-and-chronicle-server",
+  "version": "1.0.0",
+  "description": "Multiplayer server for Quest & Chronicle card game.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
