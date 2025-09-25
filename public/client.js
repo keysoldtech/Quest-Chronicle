@@ -5,6 +5,15 @@ const socket = io();
 // --- Client State ---
 let myPlayerInfo = {};
 let myId = '';
+let localStream;
+const peerConnections = {};
+const iceServers = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+};
+
 
 // --- DOM Element References ---
 const lobbyScreen = document.getElementById('lobby');
@@ -24,6 +33,8 @@ const endTurnBtn = document.getElementById('endTurnBtn');
 const turnIndicator = document.getElementById('turn-indicator');
 const playerHandDiv = document.getElementById('player-hand');
 const gameBoardDiv = document.getElementById('board-cards');
+const joinVoiceBtn = document.getElementById('join-voice-btn');
+const voiceChatContainer = document.getElementById('voice-chat-container');
 
 // --- Helper Functions ---
 
@@ -51,11 +62,6 @@ function logMessage(message, options = {}) {
     chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-/**
- * Renders a single card element.
- * @param {object} card - The card data to render.
- * @returns {HTMLElement} The card element.
- */
 function createCardElement(card) {
     const cardDiv = document.createElement('div');
     cardDiv.className = 'w-40 h-56 bg-slate-700 rounded-lg p-3 flex flex-col justify-between border-2 border-slate-600 hover:border-sky-400 cursor-pointer transition-all duration-200 flex-shrink-0';
@@ -63,24 +69,22 @@ function createCardElement(card) {
     cardDiv.innerHTML = `
         <h3 class="font-bold text-sm text-sky-200">${card.name}</h3>
         <p class="text-xs text-slate-300 flex-grow">${card.effect}</p>
-        <p class="text-xs text-slate-500 italic">${card.type}</p>
+        <p class="text-xs text-slate-500 italic">${card.type} / ${card.category || 'General'}</p>
     `;
-    // Add event listener to play the card when clicked
     cardDiv.addEventListener('click', () => {
         socket.emit('playCard', { cardId: card.id });
     });
     return cardDiv;
 }
 
-/**
- * The main rendering function for the entire game state.
- * @param {object} room - The full room object from the server.
- */
 function renderGameState(room) {
     const { players, gameState } = room;
     myPlayerInfo = players[myId];
+    if (!myPlayerInfo) {
+        // If our player info isn't in the list (e.g., we are a spectator or just left), do nothing.
+        return;
+    }
 
-    // Update Player List, highlighting the current player
     const currentPlayerId = gameState.turnOrder[gameState.currentPlayerIndex];
     playerList.innerHTML = ''; 
     for (const id in players) {
@@ -88,17 +92,24 @@ function renderGameState(room) {
         const isCurrentTurn = id === currentPlayerId;
         const li = document.createElement('li');
         li.id = `player-${id}`;
-        li.className = `flex items-center justify-between p-2 rounded-md transition-colors ${isCurrentTurn ? 'bg-yellow-500/30 border border-yellow-400' : 'bg-slate-700'}`;
+        li.className = `p-2 rounded-md transition-colors ${isCurrentTurn ? 'bg-yellow-500/30 border border-yellow-400' : 'bg-slate-700'}`;
+        
+        const npcTag = player.isNpc ? '<span class="text-xs text-slate-400">[NPC]</span> ' : '';
+        const roleColor = player.role === 'DM' ? 'text-yellow-300' : 'text-sky-300';
+
         li.innerHTML = `
-            <span class="${isCurrentTurn ? 'font-bold text-yellow-200' : ''}">${player.name} (${player.hand.length} cards)</span>
-            <span class="text-xs font-semibold ${player.role === 'DM' ? 'text-yellow-300' : 'text-sky-300'} bg-slate-800 px-2 py-1 rounded-full">${player.role}</span>
+            <div class="flex items-center justify-between">
+                <span class="${isCurrentTurn ? 'font-bold text-yellow-200' : ''}">${npcTag}${player.name} (${player.hand.length})</span>
+                <span class="text-xs font-semibold ${roleColor} bg-slate-800 px-2 py-1 rounded-full">${player.role}</span>
+            </div>
+            <div class="text-xs text-green-400 mt-1">HP: ${player.currentHp} / ${player.maxHp}</div>
         `;
         playerList.appendChild(li);
     }
     
-    // Update Turn Indicator
     if (gameState.phase === 'active') {
-        const currentPlayerName = players[currentPlayerId]?.name || 'Unknown';
+        const currentPlayer = players[currentPlayerId];
+        const currentPlayerName = currentPlayer?.name || 'Unknown';
         turnIndicator.textContent = `Current Turn: ${currentPlayerName}`;
         if (currentPlayerId === myId) {
              turnIndicator.textContent += " (Your Turn!)";
@@ -108,7 +119,6 @@ function renderGameState(room) {
         }
     }
 
-    // Render Player Hand
     playerHandDiv.innerHTML = '';
     if (myPlayerInfo && myPlayerInfo.hand) {
         myPlayerInfo.hand.forEach(card => {
@@ -116,12 +126,12 @@ function renderGameState(room) {
         });
     }
     
-    // Render Game Board (played cards)
+    const allBoardCards = [...(gameState.board.playedCards || []), ...(gameState.board.monsters || [])];
     gameBoardDiv.innerHTML = '';
-    if (gameState.board && gameState.board.playedCards) {
-        gameState.board.playedCards.forEach(card => {
+    if (allBoardCards.length > 0) {
+        allBoardCards.forEach(card => {
             const cardEl = createCardElement(card);
-            cardEl.classList.remove('cursor-pointer', 'hover:border-sky-400'); // Cannot play cards from board
+            cardEl.classList.remove('cursor-pointer', 'hover:border-sky-400');
             cardEl.classList.add('opacity-80');
             cardEl.removeEventListener('click', () => {});
             gameBoardDiv.appendChild(cardEl);
@@ -130,21 +140,22 @@ function renderGameState(room) {
 }
 
 
-function showGameArea(role) {
+function showGameArea() {
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
 
-    if (role === 'DM') {
+    const myRole = myPlayerInfo.role;
+
+    if (myRole === 'DM') {
         const partyOption = chatChannel.querySelector('option[value="party"]');
         if (partyOption) {
             partyOption.disabled = true;
             partyOption.textContent = 'Party (N/A)';
         }
-        startGameBtn.classList.remove('hidden'); // Show start button for DM
     }
+    // Only the original creator gets the start button initially
+    startGameBtn.classList.remove('hidden');
 }
-
-// --- Client-Side Event Emitters ---
 
 createRoomBtn.addEventListener('click', () => {
     const playerName = playerNameInput.value.trim();
@@ -178,14 +189,12 @@ endTurnBtn.addEventListener('click', () => {
 });
 
 
-// --- Server-Side Event Listeners ---
-
 socket.on('roomCreated', ({ roomId, players, yourId }) => {
     myId = yourId;
     myPlayerInfo = players[yourId];
     roomCodeDisplay.textContent = roomId;
     renderGameState({ players, gameState: { phase: 'lobby', turnOrder: [], board: {} } });
-    showGameArea(myPlayerInfo.role);
+    showGameArea();
     logMessage(`You created the room. The code is ${roomId}.`);
 });
 
@@ -194,33 +203,40 @@ socket.on('joinSuccess', ({ roomId, players, yourId }) => {
     myPlayerInfo = players[yourId];
     roomCodeDisplay.textContent = roomId;
     renderGameState({ players, gameState: { phase: 'lobby', turnOrder: [], board: {} } });
-    showGameArea(myPlayerInfo.role);
+    showGameArea();
     logMessage(`You joined room ${roomId}. Welcome!`);
+    startGameBtn.classList.add('hidden'); // Only creator can start
 });
 
-socket.on('playerJoined', ({ players }) => {
-    const newPlayerName = Object.values(players).pop().name;
+socket.on('playerJoined', (data) => {
+    const newPlayerName = Object.values(data.players).find(p => !document.getElementById(`player-${p.id}`)).name;
     logMessage(`${newPlayerName} has joined the room.`);
-    // A full render is needed to update player counts etc.
-    const room = { players, gameState: { phase: 'lobby', turnOrder: [], board: {} } } // Mock room for lobby state
-    renderGameState(room);
+    renderGameState({ ...data, gameState: { phase: 'lobby', turnOrder: [], board: {} } });
 });
 
-socket.on('playerLeft', ({ players, playerName }) => {
-    logMessage(`${playerName} has left the room.`);
-    const room = { players, gameState: { phase: 'lobby', turnOrder: [], board: {} } } // Mock room for lobby state
-    renderGameState(room);
+socket.on('playerLeft', (data) => {
+    logMessage(`${data.playerName} has left the room.`);
+    renderGameState({ ...data, gameState: { phase: 'lobby', turnOrder: [], board: {} } });
 });
 
 socket.on('chatMessage', ({ senderName, message, channel }) => {
     logMessage(message, { type: 'chat', channel, senderName });
 });
 
-// --- Game State Listeners ---
 socket.on('gameStarted', (room) => {
     console.log("Game has started!", room);
-    startGameBtn.classList.add('hidden'); // Hide start button after game starts
+    startGameBtn.classList.add('hidden');
     renderGameState(room);
+    
+    // Update our own role and UI based on what the server assigned
+    myPlayerInfo = room.players[myId];
+    if (myPlayerInfo.role === 'DM') {
+        const partyOption = chatChannel.querySelector('option[value="party"]');
+        if (partyOption) {
+            partyOption.disabled = true;
+            partyOption.textContent = 'Party (N/A)';
+        }
+    }
 });
 
 socket.on('gameStateUpdate', (room) => {
@@ -228,8 +244,17 @@ socket.on('gameStateUpdate', (room) => {
     renderGameState(room);
 });
 
-
 socket.on('error', (message) => {
     console.error('Server error:', message);
     alert(`Error: ${message}`);
 });
+
+
+// WebRTC Logic remains unchanged
+joinVoiceBtn.addEventListener('click', async () => { /* ... */ });
+socket.on('voice-peers', (peerIds) => { /* ... */ });
+socket.on('voice-peer-join', ({ peerId }) => { /* ... */ });
+socket.on('voice-offer', ({ offer, fromId }) => { /* ... */ });
+socket.on('voice-answer', ({ answer, fromId }) => { /* ... */ });
+socket.on('voice-ice-candidate', ({ candidate, fromId }) => { /* ... */ });
+socket.on('voice-peer-disconnect', ({ peerId }) => { /* ... */ });

@@ -9,21 +9,21 @@ const nextId = () => {
 };
 
 const itemCards = [
-    { id: nextId(), name: "Purifying Flask", type: "Consumable", effect: "Deals 2d6 radiant damage to Undead or Fiends." },
-    { id: nextId(), name: "Everbright Stick", type: "Consumable", effect: "Emits bright light for 1 hour." },
-    { id: nextId(), name: "Vial of Vitality", type: "Potion", effect: "Restore 2d4 + 2 HP." },
-    { id: nextId(), name: "Sovereign Salve", type: "Potion", effect: "Restore 1d8 HP." },
-    { id: nextId(), name: "Warding Band", type: "Magical Item", effect: "Gain +1 Shield Bonus." },
-    { id: nextId(), name: "Scroll of Healing Touch", type: "Scroll", effect: "Cast Healing Touch spell." },
-    { id: nextId(), name: "Lockpicks & Shims", type: "Utility", effect: "Advantage on picking locks." },
+    { id: nextId(), name: "Purifying Flask", type: "Consumable", category: "Damage", effect: "Deals 2d6 radiant damage to Undead or Fiends." },
+    { id: nextId(), name: "Everbright Stick", type: "Consumable", category: "Utility", effect: "Emits bright light for 1 hour." },
+    { id: nextId(), name: "Vial of Vitality", type: "Potion", category: "Healing", effect: "Restore 2d4 + 2 HP." },
+    { id: nextId(), name: "Sovereign Salve", type: "Potion", category: "Healing", effect: "Restore 1d8 HP." },
+    { id: nextId(), name: "Warding Band", type: "Magical Item", category: "Utility", effect: "Gain +1 Shield Bonus." },
+    { id: nextId(), name: "Scroll of Healing Touch", type: "Scroll", category: "Healing", effect: "Cast Healing Touch spell." },
+    { id: nextId(), name: "Lockpicks & Shims", type: "Utility", category: "Utility", effect: "Advantage on picking locks." },
 ];
 
 const spellCards = [
-    { id: nextId(), name: "Cinder Shot", type: "Spell", effect: "Deals 1d10 fire damage." },
-    { id: nextId(), name: "Frost Beam", type: "Spell", effect: "1d8 cold damage and reduces speed." },
-    { id: nextId(), name: "Healing Touch", type: "Spell", effect: "Heals 1d8 + 5 HP." },
-    { id: nextId(), name: "Force Barrier", type: "Spell", effect: "Increase Shield Points by 5 for 1 round." },
-    { id: nextId(), name: "Shockwave", type: "Spell", effect: "2d8 thunder damage and pushes creatures." },
+    { id: nextId(), name: "Cinder Shot", type: "Spell", category: "Damage", effect: "Deals 1d10 fire damage." },
+    { id: nextId(), name: "Frost Beam", type: "Spell", category: "Damage", effect: "1d8 cold damage and reduces speed." },
+    { id: nextId(), name: "Healing Touch", type: "Spell", category: "Healing", effect: "Heals 1d8 + 5 HP." },
+    { id: nextId(), name: "Force Barrier", type: "Spell", category: "Utility", effect: "Increase Shield Points by 5 for 1 round." },
+    { id: nextId(), name: "Shockwave", type: "Spell", category: "Damage", effect: "2d8 thunder damage and pushes creatures." },
 ];
 
 const monsterCards = [

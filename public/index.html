@@ -36,6 +36,7 @@
                  <p class="text-slate-400">You are connected.</p>
             </div>
              <div class="flex items-center gap-4">
+                <button id="join-voice-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-lg">Join Voice Chat</button>
                 <button id="startGameBtn" class="hidden bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-2 px-4 rounded-lg">Start Game</button>
                 <div class="text-right">
                     <p class="text-sm text-slate-400">Room Code:</p>
@@ -85,6 +86,9 @@
             </div>
         </main>
     </div>
+
+    <!-- Container for remote audio streams -->
+    <div id="voice-chat-container"></div>
 
 
     <script src="/socket.io/socket.io.js"></script>
