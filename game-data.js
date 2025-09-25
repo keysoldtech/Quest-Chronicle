@@ -1,7 +1,7 @@
 // This file contains the game data, structured for the server.
 
 let lastId = 0;
-const nextId = () => { lastId++; return lastId.toString(); };
+const nextId = () => { lastId++; return `card-${lastId}`; };
 
 const classes = {
     Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3 },
@@ -13,27 +13,29 @@ const classes = {
 };
 
 const itemCards = [
-    { id: nextId(), name: "Purifying Flask", type: "Consumable", category: "Damage", effect: "Deals 2d6 radiant damage to Undead or Fiends." },
+    { id: nextId(), name: "Purifying Flask", type: "Consumable", category: "Damage", effect: "Deals 2d6 radiant damage to Undead or Fiends.", bonuses: { damage: 7 } },
     { id: nextId(), name: "Everbright Stick", type: "Consumable", category: "Utility", effect: "Emits bright light for 1 hour." },
     { id: nextId(), name: "Vial of Vitality", type: "Potion", category: "Healing", effect: "Restore 2d4 + 2 HP.", bonuses: { heal: 7 } },
     { id: nextId(), name: "Sovereign Salve", type: "Potion", category: "Healing", effect: "Restore 1d8 HP.", bonuses: { heal: 5 } },
+    { id: nextId(), name: "Combustion Flask", type: "Consumable", category: "Damage", effect: "Target takes 1d4 fire damage.", bonuses: { damage: 3 } },
     { id: nextId(), name: "Scroll of Healing Touch", type: "Scroll", category: "Healing", effect: "Cast Healing Touch spell." },
     { id: nextId(), name: "Lockpicks & Shims", type: "Utility", category: "Utility", effect: "Advantage on picking locks." },
 ];
 
 const spellCards = [
-    { id: nextId(), name: "Cinder Shot", type: "Spell", category: "Damage", effect: "Deals 1d10 fire damage." },
-    { id: nextId(), name: "Frost Beam", type: "Spell", category: "Damage", effect: "1d8 cold damage and reduces speed." },
+    { id: nextId(), name: "Cinder Shot", type: "Spell", category: "Damage", effect: "Deals 1d10 fire damage.", bonuses: { damage: 6 } },
+    { id: nextId(), name: "Frost Beam", type: "Spell", category: "Damage", effect: "1d8 cold damage and reduces speed.", bonuses: { damage: 5 } },
     { id: nextId(), name: "Healing Touch", type: "Spell", category: "Healing", effect: "Heals 1d8 + 5 HP.", bonuses: { heal: 10 } },
     { id: nextId(), name: "Force Barrier", type: "Spell", category: "Utility", effect: "Increase Shield Points by 5 for 1 round." },
-    { id: nextId(), name: "Shockwave", type: "Spell", category: "Damage", effect: "2d8 thunder damage and pushes creatures." },
+    { id: nextId(), name: "Shockwave", type: "Spell", category: "Damage", effect: "2d8 thunder damage and pushes creatures.", bonuses: { damage: 9 } },
 ];
 
 const monsterCards = [
-    { id: nextId(), name: "Pestie Prowler", type: "Monster", hp: 7, attack: "+3", damage: "1d6 piercing", special: "Sneaky Escape." },
-    { id: nextId(), name: "Grotto Weaver", type: "Monster", hp: 10, attack: "+4", damage: "1d6 piercing", special: "Web Shot." },
-    { id: nextId(), name: "Bone Archer", type: "Monster", hp: 18, attack: "+3", damage: "1d8 piercing", special: "Bone Resilience." },
-    { id: nextId(), name: "Caustic Sludge", type: "Monster", hp: 24, attack: "+3", damage: "1d8 acid", special: "Armor corrosion." },
+    { id: nextId(), name: "Pestie Prowler", type: "Monster", maxHp: 7, attack: "+3", damage: "1d6 piercing", special: "Sneaky Escape." },
+    { id: nextId(), name: "Grotto Weaver", type: "Monster", maxHp: 10, attack: "+4", damage: "1d6 piercing", special: "Web Shot." },
+    { id: nextId(), name: "Bone Archer", type: "Monster", maxHp: 18, attack: "+3", damage: "1d8 piercing", special: "Bone Resilience." },
+    { id: nextId(), name: "Caustic Sludge", type: "Monster", maxHp: 24, attack: "+3", damage: "1d8 acid", special: "Armor corrosion." },
+    { id: nextId(), name: "Shadowmaw Alpha", type: "Monster", maxHp: 34, attack: "+5", damage: "2d6+2 piercing", special: "Pack Tactics." },
 ];
 
 const weaponCards = [

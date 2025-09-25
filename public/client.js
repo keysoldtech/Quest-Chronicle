@@ -8,6 +8,7 @@ let myId = '';
 let currentRoomState = {};
 let localStream;
 const peerConnections = {};
+let selectedTargetId = null; // For combat targeting
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -37,8 +38,6 @@ const joinVoiceBtn = document.getElementById('join-voice-btn');
 const voiceChatContainer = document.getElementById('voice-chat-container');
 const gameModeSelector = document.getElementById('game-mode-selector');
 const dmControls = document.getElementById('dm-controls');
-const drawMonsterBtn = document.getElementById('drawMonsterBtn');
-const drawDiscoveryBtn = document.getElementById('drawDiscoveryBtn');
 const worldEventBtn = document.getElementById('worldEventBtn');
 const worldEventsContainer = document.getElementById('world-events-container');
 const classSelectionDiv = document.getElementById('class-selection');
@@ -46,6 +45,8 @@ const classButtonsDiv = document.getElementById('class-buttons');
 const playerStatsContainer = document.getElementById('player-stats-container');
 const playerStatsDiv = document.getElementById('player-stats');
 const equippedItemsDiv = document.getElementById('equipped-items');
+const advancedCardChoiceDiv = document.getElementById('advanced-card-choice');
+const advancedChoiceButtonsDiv = document.getElementById('advanced-choice-buttons');
 
 
 // --- Helper Functions ---
@@ -68,11 +69,17 @@ function logMessage(message, options = {}) {
 }
 
 function createCardElement(card, actions = {}) {
-    const { isPlayable = false, isEquippable = false, canPlayDamage = true } = actions;
+    const { isPlayable = false, isEquippable = false, isTargetable = false } = actions;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
 
+    if (card.type === 'Monster') {
+        cardDiv.dataset.monsterId = card.id;
+        if(isTargetable) cardDiv.classList.add('targetable');
+        if(selectedTargetId === card.id) cardDiv.classList.add('selected-target');
+    }
+    
     let typeInfo = card.type;
     if (card.category && card.category !== 'General') typeInfo += ` / ${card.category}`;
     else if (card.type === 'World Event' && card.tags) typeInfo = card.tags;
@@ -83,6 +90,11 @@ function createCardElement(card, actions = {}) {
             `<div class="card-bonus">${key.charAt(0).toUpperCase() + key.slice(1)}: ${value > 0 ? '+' : ''}${value}</div>`
         ).join('');
     }
+    
+    let monsterStatsHTML = '';
+    if(card.type === 'Monster') {
+        monsterStatsHTML = `<div class="card-bonus">HP: ${card.currentHp} / ${card.maxHp}</div>`;
+    }
 
     cardDiv.innerHTML = `
         <div class="card-content">
@@ -91,6 +103,7 @@ function createCardElement(card, actions = {}) {
         </div>
         <div class="card-footer">
             ${bonusesHTML}
+            ${monsterStatsHTML}
             <p class="card-type">${typeInfo}</p>
         </div>
     `;
@@ -98,14 +111,18 @@ function createCardElement(card, actions = {}) {
     const actionContainer = document.createElement('div');
     actionContainer.className = 'card-actions';
 
-    // Combat logic check for showing the play button
-    const canPlayThisCard = isPlayable && ((card.category !== 'Damage' && card.category !== 'Attack') || canPlayDamage);
-
-    if (canPlayThisCard) {
+    if (isPlayable) {
         const playBtn = document.createElement('button');
         playBtn.textContent = 'Play';
         playBtn.className = 'fantasy-button-xs fantasy-button-primary';
-        playBtn.onclick = () => socket.emit('playCard', { cardId: card.id });
+        playBtn.onclick = () => {
+            if ((card.category === 'Damage' || card.category === 'Attack') && !selectedTargetId) {
+                alert("You must select a monster to target with this card!");
+                return;
+            }
+            socket.emit('playCard', { cardId: card.id, targetId: selectedTargetId });
+            selectedTargetId = null; // Reset target after playing
+        };
         actionContainer.appendChild(playBtn);
     }
     if (isEquippable) {
@@ -150,37 +167,58 @@ function renderGameState(room) {
     if (!myPlayerInfo) return;
 
     renderPlayerList(players, gameState);
-
-    // Lobby Phase: Class Selection
-    if (gameState.phase === 'lobby' && myPlayerInfo.role !== 'DM') {
-        classSelectionDiv.classList.remove('hidden');
+    
+    // --- Phase-specific UI rendering ---
+    const isMyTurn = gameState.turnOrder?.[gameState.currentPlayerIndex] === myId;
+    const isDm = myPlayerInfo.role === 'DM';
+    const canPlayDamage = gameState.board.monsters.length > 0;
+    
+    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || isDm);
+    advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || isDm);
+    playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
+    endTurnBtn.classList.toggle('hidden', !isMyTurn);
+    dmControls.classList.toggle('hidden', !isDm || gameState.phase === 'lobby');
+    
+    // --- Lobby Phase ---
+    if (gameState.phase === 'lobby' && !isDm) {
         if (classButtonsDiv.children.length === 0) {
             ['Warrior', 'Mage', 'Rogue', 'Cleric', 'Ranger', 'Barbarian'].forEach(className => {
                 const btn = document.createElement('button');
                 btn.textContent = className;
-                btn.dataset.class = className;
                 btn.className = 'fantasy-button';
-                btn.onclick = () => {
-                    socket.emit('chooseClass', { classId: className });
-                    document.querySelectorAll('#class-buttons button').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                };
+                btn.onclick = () => { socket.emit('chooseClass', { classId: className }); };
                 classButtonsDiv.appendChild(btn);
             });
         }
-    } else {
-        classSelectionDiv.classList.add('hidden');
-    }
-
-    // World Event Setup Phase
-    if (gameState.phase === 'world_event_setup') {
-        turnIndicator.textContent = "Waiting for DM to create a World Event...";
-        endTurnBtn.classList.add('hidden');
+        document.querySelectorAll('#class-buttons button').forEach(b => b.classList.toggle('active', b.textContent === myPlayerInfo.class));
     }
     
-    // Active Game Phase
+    // --- Advanced Setup Phase ---
+    if (gameState.phase === 'advanced_setup_choice' && !isDm) {
+        turnIndicator.textContent = "Choose your starting card type...";
+        if (advancedChoiceButtonsDiv.children.length === 0) {
+            ['Weapon', 'Armor', 'Spell'].forEach(cardType => {
+                const btn = document.createElement('button');
+                btn.textContent = cardType;
+                btn.className = 'fantasy-button';
+                btn.onclick = () => { socket.emit('advancedCardChoice', { cardType }); advancedCardChoiceDiv.classList.add('hidden'); };
+                advancedChoiceButtonsDiv.appendChild(btn);
+            });
+        }
+    }
+    
+    // --- World Event Setup Phase ---
+    if (gameState.phase === 'world_event_setup') {
+        turnIndicator.textContent = "Waiting for DM to create a World Event...";
+        worldEventBtn.disabled = !isDm || !myPlayerInfo.hand.some(c => c.type === 'World Event');
+    }
+    
+    // --- Active Game Phase ---
     if (gameState.phase === 'active') {
-        playerStatsContainer.classList.remove('hidden');
+        const currentPlayer = players[gameState.turnOrder[gameState.currentPlayerIndex]];
+        turnIndicator.textContent = `Current Turn: ${currentPlayer?.name || 'Unknown'}`;
+        if (isMyTurn) turnIndicator.textContent += " (Your Turn!)";
+        
         const { stats } = myPlayerInfo;
         playerStatsDiv.innerHTML = `
             <span>HP:</span> <span class="stat-value">${stats.currentHp} / ${stats.maxHp}</span>
@@ -188,34 +226,18 @@ function renderGameState(room) {
             <span>Shield Bonus:</span> <span class="stat-value">${stats.shieldBonus > 0 ? '+' : ''}${stats.shieldBonus}</span>
             <span>Action Points:</span> <span class="stat-value">${stats.ap}</span>
         `;
-        
-        const currentPlayer = players[gameState.turnOrder[gameState.currentPlayerIndex]];
-        turnIndicator.textContent = `Current Turn: ${currentPlayer?.name || 'Unknown'}`;
-        endTurnBtn.classList.toggle('hidden', currentPlayer?.id !== myId);
-        if (currentPlayer?.id === myId) turnIndicator.textContent += " (Your Turn!)";
-    }
-    
-    // DM Controls Visibility
-    if (myPlayerInfo.role === 'DM') {
-        dmControls.classList.remove('hidden');
-        worldEventBtn.textContent = (gameState.gameMode === 'Beginner') ? 'Start World Event Seq.' : 'Draw World Events';
-        worldEventBtn.disabled = (gameState.gameMode === 'Beginner') && gameState.worldEvents.sequenceActive;
-        worldEventBtn.dataset.action = (gameState.gameMode === 'Beginner') ? 'startWorldEventSequence' : 'drawWorldEvents';
-    } else {
-        dmControls.classList.add('hidden');
     }
 
-    // Render Hand & Equipment
+    // --- Render Hand & Equipment ---
     playerHandDiv.innerHTML = '';
     equippedItemsDiv.innerHTML = '';
-    const canPlayDamage = gameState.board.monsters.length > 0;
-    const isMyTurn = gameState.turnOrder?.[gameState.currentPlayerIndex] === myId;
-
+    const holdingDamageCard = myPlayerInfo.hand?.some(c => c.category === 'Damage' || c.category === 'Attack');
+    
     if (myPlayerInfo.hand) {
         myPlayerInfo.hand.forEach(card => {
             const isEquippable = card.type === 'Weapon' || card.type === 'Armor';
-            const isPlayable = isMyTurn && !isEquippable;
-            playerHandDiv.appendChild(createCardElement(card, { isPlayable, isEquippable, canPlayDamage }));
+            const isPlayable = isMyTurn && ((card.category !== 'Damage' && card.category !== 'Attack') || canPlayDamage);
+            playerHandDiv.appendChild(createCardElement(card, { isPlayable, isEquippable }));
         });
     }
     if (myPlayerInfo.equipment) {
@@ -224,10 +246,18 @@ function renderGameState(room) {
         });
     }
     
-    // Render Board & World Events
+    // --- Render Board & World Events ---
     gameBoardDiv.innerHTML = '';
-    [...(gameState.board.monsters || []), ...(gameState.board.playedCards || [])].forEach(card => {
-        gameBoardDiv.appendChild(createCardElement(card, {}));
+    (gameState.board.monsters || []).forEach(monster => {
+        const isTargetable = isMyTurn && holdingDamageCard;
+        const monsterCard = createCardElement(monster, { isTargetable });
+        if(isTargetable) {
+            monsterCard.onclick = () => {
+                selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
+                renderGameState(currentRoomState); // Re-render to show selection change
+            };
+        }
+        gameBoardDiv.appendChild(monsterCard);
     });
     
     worldEventsContainer.innerHTML = '';
@@ -268,7 +298,6 @@ gameModeSelector.addEventListener('change', (e) => {
     document.querySelectorAll('#game-mode-selector span').forEach(span => span.parentElement.classList.remove('active'));
     document.querySelector('input[name="gameMode"]:checked').parentElement.classList.add('active');
 });
-// Set initial active state for radio buttons
 document.querySelector('input[name="gameMode"]:checked').parentElement.classList.add('active');
 
 
@@ -276,13 +305,7 @@ document.querySelector('input[name="gameMode"]:checked').parentElement.classList
 chatForm.addEventListener('submit', (e) => { e.preventDefault(); const msg=chatInput.value.trim(); if (msg) { socket.emit('sendMessage', { channel: chatChannel.value, message: msg }); chatInput.value = ''; } });
 startGameBtn.addEventListener('click', () => socket.emit('startGame', { gameMode: document.querySelector('input[name="gameMode"]:checked').value }));
 endTurnBtn.addEventListener('click', () => socket.emit('endTurn'));
-drawMonsterBtn.addEventListener('click', () => socket.emit('gmAction', { action: 'drawMonster' }));
-worldEventBtn.addEventListener('click', (e) => { if (e.target.dataset.action) socket.emit('gmAction', { action: e.target.dataset.action }); });
-drawDiscoveryBtn.addEventListener('click', () => {
-    const humanExplorers = Object.values(currentRoomState.players).filter(p => p.role === 'Explorer' && !p.isNpc);
-    if (humanExplorers.length > 0) socket.emit('gmAction', { action: 'drawDiscovery', targetPlayerId: humanExplorers[0].id });
-    else logMessage('No human players to give a discovery card to.');
-});
+worldEventBtn.addEventListener('click', () => socket.emit('gmAction', { action: 'startWorldEventSequence' }));
 
 // --- Socket.IO Event Handlers ---
 socket.on('roomCreated', (room) => {
@@ -306,7 +329,7 @@ socket.on('playerListUpdate', (room) => {
     const oldPlayerCount = currentRoomState.players ? Object.keys(currentRoomState.players).length : 0;
     const newPlayerCount = room.players ? Object.keys(room.players).length : 0;
     if (newPlayerCount > oldPlayerCount) {
-        const newPlayer = Object.values(room.players).find(p => !currentRoomState.players[p.id]);
+        const newPlayer = Object.values(room.players).find(p => !currentRoomState.players || !currentRoomState.players[p.id]);
         if(newPlayer) logMessage(`${newPlayer.name} has joined the room.`);
     }
     renderGameState(room);
@@ -323,7 +346,6 @@ socket.on('gameStarted', (room) => {
     console.log("Game has started!", room);
     startGameBtn.classList.add('hidden');
     gameModeSelector.style.display = 'none';
-    classSelectionDiv.classList.add('hidden');
     renderGameState(room);
 });
 

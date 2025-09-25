@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[j]];
+        [array[i], array[j]] = [array[j], array[i]];
     }
 }
 
@@ -50,11 +50,13 @@ class GameManager {
             gameState: {
                 phase: 'lobby',
                 gameMode: null,
-                itemDeck: [], spellDeck: [], monsterDeck: [], weaponDeck: [], armorDeck: [], worldEventDeck: [],
+                decks: { item: [], spell: [], monster: [], weapon: [], armor: [], worldEvent: [] },
                 turnOrder: [],
                 currentPlayerIndex: -1,
-                board: { monsters: [], playedCards: [] },
-                worldEvents: { currentSequence: [], sequenceActive: false }
+                board: { monsters: [] },
+                worldEvents: { currentSequence: [], sequenceActive: false },
+                monstersDefeatedSinceLastTurn: false,
+                advancedChoicesPending: []
             }
         };
         this.rooms[roomId] = newRoom;
@@ -85,7 +87,6 @@ class GameManager {
     calculatePlayerStats(playerId, room) {
         const player = room.players[playerId];
         if (!player || !player.class) {
-             // Set default stats if no class is selected yet
             player.stats = { maxHp: 20, currentHp: 20, damageBonus: 0, shieldBonus: 0, ap: 2 };
             return;
         }
@@ -93,7 +94,6 @@ class GameManager {
         const classData = gameData.classes[player.class];
         if (!classData) return;
 
-        // Start with base class stats
         let stats = {
             maxHp: classData.baseHp,
             damageBonus: classData.baseDamageBonus,
@@ -101,23 +101,20 @@ class GameManager {
             ap: classData.baseAp,
         };
 
-        // Apply equipment bonuses
         for (const slot in player.equipment) {
             const item = player.equipment[slot];
             if (item && item.bonuses) {
                 stats.shieldBonus += item.bonuses.shield || 0;
                 stats.ap += item.bonuses.ap || 0;
-                // Note: Weapon damage bonus is often handled at time of attack, but we could add it here if needed.
             }
         }
         
         const oldMaxHp = player.stats.maxHp;
         player.stats = { ...stats, currentHp: player.stats.currentHp || stats.maxHp };
         
-        // Adjust current HP based on new Max HP
         if (player.stats.maxHp !== oldMaxHp) {
             player.stats.currentHp = Math.min(player.stats.currentHp, player.stats.maxHp);
-            if(oldMaxHp === 0) player.stats.currentHp = player.stats.maxHp; // First time setup
+            if(oldMaxHp === 0) player.stats.currentHp = player.stats.maxHp;
         }
     }
 
@@ -149,19 +146,47 @@ class GameManager {
         if (cardIndex === -1) return null;
 
         const itemToEquip = player.hand[cardIndex];
-        const itemType = itemToEquip.type.toLowerCase(); // 'weapon' or 'armor'
+        const itemType = itemToEquip.type.toLowerCase();
 
         if (itemType === 'weapon' || itemType === 'armor') {
-            // Unequip current item in that slot, if any
             if (player.equipment[itemType]) {
                 player.hand.push(player.equipment[itemType]);
             }
-            // Equip new item
             player.equipment[itemType] = player.hand.splice(cardIndex, 1)[0];
             this.calculatePlayerStats(socketId, room);
             return room;
         }
         return null;
+    }
+    
+    handleAdvancedCardChoice(roomId, playerId, cardType) {
+        const room = this.rooms[roomId];
+        const player = room.players[playerId];
+        if (!room || !player || room.gameState.phase !== 'advanced_setup_choice') return null;
+        
+        const deckName = cardType.toLowerCase();
+        if (room.gameState.decks[deckName] && room.gameState.decks[deckName].length > 0) {
+            player.hand.push(room.gameState.decks[deckName].pop());
+            const choiceIndex = room.gameState.advancedChoicesPending.indexOf(playerId);
+            if (choiceIndex > -1) {
+                room.gameState.advancedChoicesPending.splice(choiceIndex, 1);
+            }
+            // If all choices are made, proceed
+            if (room.gameState.advancedChoicesPending.length === 0) {
+                this.transitionToWorldEventSetup(room);
+            }
+            return room;
+        }
+        return null;
+    }
+
+    transitionToWorldEventSetup(room) {
+        room.gameState.phase = 'world_event_setup';
+        const dm = Object.values(room.players).find(p => p.role === 'DM');
+        if (dm && dm.isNpc) {
+            // BUG FIX: Trigger NPC DM's first action immediately
+            setTimeout(() => this.executeNpcTurn(room.id, dm.id), 1500);
+        }
     }
 
     removePlayer(socket) {
@@ -193,7 +218,6 @@ class GameManager {
         
         room.gameState.gameMode = gameMode;
         
-        // --- Role & NPC Assignment ---
         const humanPlayerIds = Object.keys(room.players).filter(id => !room.players[id].isNpc);
         if (humanPlayerIds.length === 5) {
             shuffle(humanPlayerIds);
@@ -210,55 +234,56 @@ class GameManager {
             }
         }
 
-        // --- Class Assignment ---
         const classIds = Object.keys(gameData.classes);
         Object.values(room.players).forEach(player => {
             if(player.role === 'Explorer' && !player.class) {
                 player.class = classIds[Math.floor(Math.random() * classIds.length)];
             }
-            this.calculatePlayerStats(player.id, room); // Initial stat calculation
+            this.calculatePlayerStats(player.id, room);
         });
 
-        // --- Deck Initialization ---
-        ['itemDeck', 'spellDeck', 'monsterDeck', 'weaponDeck', 'armorDeck', 'worldEventDeck'].forEach(deck => {
-            room.gameState[deck] = [...gameData[deck.replace('Deck', 'Cards')]];
-            shuffle(room.gameState[deck]);
-        });
+        room.gameState.decks = {
+            item: [...gameData.itemCards], spell: [...gameData.spellCards], monster: [...gameData.monsterCards],
+            weapon: [...gameData.weaponCards], armor: [...gameData.armorCards], worldEvent: [...gameData.worldEventCards]
+        };
+        Object.values(room.gameState.decks).forEach(deck => shuffle(deck));
         
         const explorerIds = Object.keys(room.players).filter(id => room.players[id].role === 'Explorer');
         const dmId = Object.keys(room.players).find(id => room.players[id].role === 'DM');
 
-        // --- Starting Hand & Equipment Logic by Game Mode ---
         if (gameMode === 'Beginner') {
             explorerIds.forEach(id => {
                 const player = room.players[id];
-                const weapon = room.gameState.weaponDeck.pop();
-                const armor = room.gameState.armorDeck.pop();
+                const weapon = room.gameState.decks.weapon.pop();
+                const armor = room.gameState.decks.armor.pop();
                 if(weapon) player.hand.push(weapon);
                 if(armor) player.hand.push(armor);
-                if(room.gameState.spellDeck.length > 0) player.hand.push(room.gameState.spellDeck.pop());
+                if(room.gameState.decks.spell.length > 0) player.hand.push(room.gameState.decks.spell.pop());
                 
-                // Auto-equip for beginner mode
                 if (weapon) this.equipItem(id, weapon.id);
                 if (armor) this.equipItem(id, armor.id);
             });
+            this.transitionToWorldEventSetup(room);
         } else if (gameMode === 'Advanced') {
-            explorerIds.forEach(id => {
-                 if(room.gameState.itemDeck.length > 0) room.players[id].hand.push(room.gameState.itemDeck.pop());
-            });
+            room.gameState.phase = 'advanced_setup_choice';
+            room.gameState.advancedChoicesPending = explorerIds.filter(id => !room.players[id].isNpc);
+            if (room.gameState.advancedChoicesPending.length === 0) { // All explorers are NPCs
+                 explorerIds.forEach(id => {
+                     if(room.gameState.decks.item.length > 0) room.players[id].hand.push(room.gameState.decks.item.pop());
+                 });
+                 this.transitionToWorldEventSetup(room);
+            }
         }
         
         for (let i = 0; i < 5; i++) {
-            if (room.gameState.monsterDeck.length > 0) room.players[dmId].hand.push(room.gameState.monsterDeck.pop());
+            if (room.gameState.decks.monster.length > 0) room.players[dmId].hand.push(room.gameState.decks.monster.pop());
         }
 
-        // Final stat calculation after potential auto-equips
         Object.keys(room.players).forEach(id => this.calculatePlayerStats(id, room));
 
         room.gameState.turnOrder = explorerIds;
         shuffle(room.gameState.turnOrder);
-        room.gameState.currentPlayerIndex = -1; // No one's turn yet
-        room.gameState.phase = 'world_event_setup'; // NEW PHASE: Wait for DM to act
+        room.gameState.currentPlayerIndex = -1;
 
         return room;
     }
@@ -272,8 +297,16 @@ class GameManager {
         
         room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
         
+        // After a full round, trigger NPC DM's turn.
+        if (room.gameState.currentPlayerIndex === 0) {
+            const dm = Object.values(room.players).find(p => p.role === 'DM');
+            if (dm && dm.isNpc) {
+                setTimeout(() => this.executeNpcTurn(room.id, dm.id), 2000);
+            }
+        }
+        
         const nextPlayerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
-        if (room.players[nextPlayerId].isNpc) {
+        if (room.players[nextPlayerId]?.isNpc) {
             setTimeout(() => this.executeNpcTurn(room.id, nextPlayerId), 2000);
         }
         return room;
@@ -284,118 +317,117 @@ class GameManager {
         const npc = room.players[npcId];
         if (!room || !npc || !npc.isNpc) return;
 
-        let message = `${npc.name} is thinking...`;
-        let actionTaken = false;
+        let message = '';
+        let broadcastRoom = true;
 
-        if (npc.role === 'Explorer') {
+        if (npc.role === 'DM') {
+            // ENHANCED NPC DM LOGIC
+            const boardIsEmpty = room.gameState.board.monsters.length === 0;
+
+            if (room.gameState.phase === 'world_event_setup') {
+                const eventCard = npc.hand.find(c => c.type === 'World Event') || room.gameState.decks.worldEvent.pop();
+                if (eventCard) {
+                    this.playCard(roomId, npcId, eventCard.id, null);
+                    message = `The NPC DM begins the story with a world event: ${eventCard.name}!`;
+                }
+            } else if (room.gameState.monstersDefeatedSinceLastTurn) {
+                const eventCard = npc.hand.find(c => c.type === 'World Event') || room.gameState.decks.worldEvent.pop();
+                if (eventCard) {
+                    this.playCard(roomId, npcId, eventCard.id, null);
+                    message = `With the threat gone, the world shifts... The DM plays a new event: ${eventCard.name}.`;
+                    room.gameState.monstersDefeatedSinceLastTurn = false;
+                }
+            } else if (boardIsEmpty) {
+                let monsterCard = npc.hand.find(c => c.type === 'Monster');
+                if (!monsterCard && room.gameState.decks.monster.length > 0) {
+                    monsterCard = room.gameState.decks.monster.pop();
+                    npc.hand.push(monsterCard);
+                }
+                if (monsterCard) {
+                    this.playCard(roomId, npcId, monsterCard.id, null);
+                    message = `A new challenger appears! The NPC DM summons a ${monsterCard.name}!`;
+                }
+            } else { // Board has monsters, no one was defeated
+                if (room.gameState.decks.monster.length > 0) {
+                    npc.hand.push(room.gameState.decks.monster.pop());
+                    message = `The NPC DM prepares for what's to come...`;
+                }
+            }
+        } else if (npc.role === 'Explorer') {
             const canPlayDamage = room.gameState.board.monsters.length > 0;
             const needsHealing = npc.stats.currentHp < (npc.stats.maxHp / 2);
             let cardToPlay = needsHealing ? npc.hand.find(c => c.category === 'Healing') : null;
-            if (!cardToPlay && canPlayDamage) cardToPlay = npc.hand.find(c => c.category === 'Damage');
+            let targetId = null;
+            if (!cardToPlay && canPlayDamage) {
+                cardToPlay = npc.hand.find(c => c.category === 'Damage');
+                if(cardToPlay) {
+                    const monsters = room.gameState.board.monsters;
+                    targetId = monsters[Math.floor(Math.random() * monsters.length)].id;
+                }
+            }
             
             if (cardToPlay) {
-                this.playCard(roomId, npcId, cardToPlay.id); // This will pass the damage check
-                actionTaken = true;
-                message = `${npc.name} played ${cardToPlay.name}.`;
+                const { error } = this.playCard(roomId, npcId, cardToPlay.id, targetId);
+                if (!error) message = `${npc.name} played ${cardToPlay.name}.`;
+                else message = `${npc.name} considers their options...`;
+            } else {
+                 message = `${npc.name} ends their turn.`;
             }
-        } else if (npc.role === 'DM') {
-            const monsterCard = npc.hand.find(c => c.type === 'Monster');
-            if (monsterCard) {
-                this.playCard(roomId, npcId, monsterCard.id);
-                actionTaken = true;
-                message = `The NPC DM plays a ${monsterCard.name}!`;
-            }
-        }
-        
-        if (!actionTaken) message = `${npc.name} ends their turn.`;
-        io.to(room.id).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
-        
-        if (npc.role === 'Explorer') {
+            
             const updatedRoom = this.endTurn(roomId, npcId);
             if(updatedRoom) io.to(roomId).emit('gameStateUpdate', updatedRoom);
+            broadcastRoom = false; // endTurn already broadcasts
         }
+        
+        if (message) io.to(room.id).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
+        if(broadcastRoom) io.to(roomId).emit('gameStateUpdate', room);
     }
     
-    playCard(roomId, playerId, cardId) {
+    playCard(roomId, playerId, cardId, targetId) {
         const room = this.rooms[roomId];
         const player = room.players[playerId];
         if (!room || !player) return { error: "Invalid action." };
         
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
-        if (cardIndex === -1) return { error: "Card not found in hand." };
+        // Allow playing from deck if card isn't in hand (for NPC DM)
+        const card = cardIndex > -1 ? player.hand[cardIndex] : (player.isNpc ? {id: cardId, ...gameData.worldEventCards.find(c => c.id === cardId)} : null);
+        if (!card) return { error: "Card not found." };
             
-        const card = player.hand[cardIndex];
-
-        // NEW RULE: Combat Logic Check
         if ((card.category === 'Damage' || card.category === 'Attack') && room.gameState.board.monsters.length === 0) {
             return { error: "You can only play Damage cards when monsters are on the board." };
         }
-
-        player.hand.splice(cardIndex, 1)[0]; // Remove card from hand
         
-        if(card.category === 'Healing') {
-            const healAmount = (card.bonuses && card.bonuses.heal) ? card.bonuses.heal : 5;
-            player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+        if (cardIndex > -1) player.hand.splice(cardIndex, 1); // Remove card from hand if it was there
+
+        if (card.type === 'World Event') {
+            room.gameState.worldEvents.currentSequence = [card];
+             if (room.gameState.phase === 'world_event_setup') {
+                room.gameState.phase = 'active';
+                room.gameState.currentPlayerIndex = 0;
+                const firstPlayer = room.players[room.gameState.turnOrder[0]];
+                if (firstPlayer.isNpc) {
+                    setTimeout(() => this.executeNpcTurn(room.id, firstPlayer.id), 2000);
+                }
+            }
+        } else if (card.category === 'Damage') {
+            const monster = room.gameState.board.monsters.find(m => m.id === targetId);
+            if (monster) {
+                const damageAmount = (card.bonuses?.damage || 0) + (player.stats.damageBonus || 0);
+                monster.currentHp -= damageAmount;
+                io.to(roomId).emit('chatMessage', { senderName: 'Combat', message: `${player.name} hits ${monster.name} for ${damageAmount} damage!`, channel: 'game' });
+                if (monster.currentHp <= 0) {
+                    room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== targetId);
+                    room.gameState.monstersDefeatedSinceLastTurn = true;
+                    io.to(roomId).emit('chatMessage', { senderName: 'Combat', message: `${monster.name} has been defeated!`, channel: 'game' });
+                }
+            }
         } else if (card.type === 'Monster') {
-            room.gameState.board.monsters.push(card);
-        } else {
-            room.gameState.board.playedCards.push(card);
+            const monsterData = { ...card, currentHp: card.maxHp };
+            room.gameState.board.monsters.push(monsterData);
         }
+        
         this.calculatePlayerStats(playerId, room);
         return { room };
-    }
-
-    // --- GM Action Functions ---
-    drawMonsterForDm(roomId, dmId) {
-        const room = this.rooms[roomId];
-        if(room && room.players[dmId]?.role === 'DM' && room.gameState.monsterDeck.length > 0) {
-            const card = room.gameState.monsterDeck.pop();
-            room.players[dmId].hand.push(card);
-            return { room, card };
-        }
-        return null;
-    }
-    
-    drawDiscoveryForPlayer(roomId, playerId) {
-        const room = this.rooms[roomId];
-        if(room && room.players[playerId] && room.gameState.itemDeck.length > 0) {
-            const card = room.gameState.itemDeck.pop();
-            room.players[playerId].hand.push(card);
-            return { room, card };
-        }
-        return null;
-    }
-    
-    startWorldEventSequence(roomId) {
-        const room = this.rooms[roomId];
-        if(room && !room.gameState.worldEvents.sequenceActive) {
-            // NEW RULE: Start game loop after first world event
-            if (room.gameState.phase === 'world_event_setup') {
-                room.gameState.phase = 'active';
-                room.gameState.currentPlayerIndex = 0;
-            }
-            room.gameState.worldEvents.currentSequence = [];
-            for(let i=0; i<3; i++) if(room.gameState.worldEventDeck.length > 0) room.gameState.worldEvents.currentSequence.push(room.gameState.worldEventDeck.pop());
-            room.gameState.worldEvents.sequenceActive = true;
-            return room;
-        }
-        return null;
-    }
-    
-    drawWorldEventsForDm(roomId) {
-        const room = this.rooms[roomId];
-        if(room) {
-            // NEW RULE: Start game loop after first world event
-            if (room.gameState.phase === 'world_event_setup') {
-                room.gameState.phase = 'active';
-                room.gameState.currentPlayerIndex = 0;
-            }
-            room.gameState.worldEvents.currentSequence = [];
-            for(let i=0; i<3; i++) if(room.gameState.worldEventDeck.length > 0) room.gameState.worldEvents.currentSequence.push(room.gameState.worldEventDeck.pop());
-            room.gameState.worldEvents.sequenceActive = true;
-            return room;
-        }
-        return null;
     }
 }
 
@@ -453,7 +485,7 @@ io.on('connection', (socket) => {
         }
     });
     
-    socket.on('startGame', ({ gameMode }) => {
+    socket.on('startGame', ({ gameMode, choices }) => {
         const result = gameManager.getPlayer(socket.id);
         if (result && (result.player.role === 'DM' || Object.keys(result.room.players).length === 1)) {
             const room = gameManager.startGame(result.room.id, gameMode);
@@ -464,16 +496,22 @@ io.on('connection', (socket) => {
         }
     });
     
-    socket.on('playCard', ({ cardId }) => {
+    socket.on('advancedCardChoice', ({ cardType }) => {
         const result = gameManager.getPlayer(socket.id);
         if (result) {
-            const { room: updatedRoom, error } = gameManager.playCard(result.room.id, socket.id, cardId);
+            const updatedRoom = gameManager.handleAdvancedCardChoice(result.room.id, socket.id, cardType);
+            if (updatedRoom) io.to(updatedRoom.id).emit('gameStateUpdate', updatedRoom);
+        }
+    });
+    
+    socket.on('playCard', ({ cardId, targetId }) => {
+        const result = gameManager.getPlayer(socket.id);
+        if (result) {
+            const { room: updatedRoom, error } = gameManager.playCard(result.room.id, socket.id, cardId, targetId);
             if (error) {
                 socket.emit('actionError', error);
             } else if(updatedRoom) {
                 io.to(updatedRoom.id).emit('gameStateUpdate', updatedRoom);
-                 const card = updatedRoom.gameState.board.monsters.find(c => c.id === cardId) || updatedRoom.gameState.board.playedCards.find(c => c.id === cardId);
-                io.to(updatedRoom.id).emit('chatMessage', { senderName: 'System', message: `${result.player.name} played ${card?.name || 'a card'}.`, channel: 'game' });
             }
         }
     });
@@ -492,28 +530,18 @@ io.on('connection', (socket) => {
     socket.on('gmAction', ({ action, targetPlayerId }) => {
         const result = gameManager.getPlayer(socket.id);
         if(!result || result.player.role !== 'DM') return;
-        let updatedRoom, card, player;
-        switch(action) {
-            case 'drawMonster':
-                ({ room: updatedRoom, card } = gameManager.drawMonsterForDm(result.room.id, socket.id) || {});
-                if(updatedRoom) io.to(socket.id).emit('chatMessage', { senderName: 'System', message: `You drew monster: ${card.name}.`, channel: 'game' });
-                break;
-            case 'drawDiscovery':
-                player = result.room.players[targetPlayerId];
-                if(!player) return;
-                ({ room: updatedRoom, card } = gameManager.drawDiscoveryForPlayer(result.room.id, targetPlayerId) || {});
-                if(updatedRoom) io.to(result.room.id).emit('chatMessage', { senderName: 'System', message: `${player.name} discovered an item: ${card.name}!`, channel: 'game' });
-                break;
-            case 'startWorldEventSequence':
-                updatedRoom = gameManager.startWorldEventSequence(result.room.id);
-                if(updatedRoom) io.to(result.room.id).emit('chatMessage', { senderName: 'System', message: `A world event sequence has begun!`, channel: 'game' });
-                break;
-            case 'drawWorldEvents':
-                 updatedRoom = gameManager.drawWorldEventsForDm(result.room.id);
-                 if(updatedRoom) io.to(result.room.id).emit('chatMessage', { senderName: 'System', message: `The GM has drawn new world events.`, channel: 'game' });
-                 break;
+        
+        let room;
+        if (action === 'startWorldEventSequence' || action === 'drawWorldEvents') {
+            const eventCard = result.player.hand.find(c => c.type === 'World Event');
+            if (eventCard) {
+                const { room: updatedRoom } = gameManager.playCard(result.room.id, socket.id, eventCard.id);
+                room = updatedRoom;
+            } else {
+                socket.emit('actionError', "You have no World Event cards to play!");
+            }
         }
-        if (updatedRoom) io.to(result.room.id).emit('gameStateUpdate', updatedRoom);
+        if (room) io.to(result.room.id).emit('gameStateUpdate', room);
     });
 
     socket.on('disconnect', () => {
