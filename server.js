@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[j], array[i]];
+        [array[i], array[j]] = [array[j], array[i]];
     }
 }
 
@@ -273,12 +273,20 @@ class GameManager {
         }
 
         const classIds = Object.keys(gameData.classes);
+        const explorerIds = [];
         Object.values(room.players).forEach(player => {
-            if(player.role === 'Explorer' && !player.class) {
-                player.class = classIds[Math.floor(Math.random() * classIds.length)];
+            if (player.role === 'Explorer') {
+                if (!player.class) {
+                    player.class = classIds[Math.floor(Math.random() * classIds.length)];
+                }
+                explorerIds.push(player.id);
             }
             this.calculatePlayerStats(player.id, room);
         });
+        
+        shuffle(explorerIds);
+        room.gameState.turnOrder = explorerIds;
+        room.gameState.currentPlayerIndex = -1; // -1 indicates pre-game or DM's turn
 
         room.gameState.decks = {
             item: [...gameData.itemCards], spell: [...gameData.spellCards], monster: [...gameData.monsterCards],
@@ -299,10 +307,10 @@ class GameManager {
             this.transitionToWorldEventSetup(room);
         } else if (gameMode === 'Advanced') {
             room.gameState.phase = 'advanced_setup_choice';
-            const explorerIds = Object.keys(room.players).filter(id => room.players[id].role === 'Explorer');
-            room.gameState.advancedChoicesPending = explorerIds.filter(id => !room.players[id].isNpc);
+            const currentExplorerIds = Object.keys(room.players).filter(id => room.players[id].role === 'Explorer');
+            room.gameState.advancedChoicesPending = currentExplorerIds.filter(id => !room.players[id].isNpc);
             if (room.gameState.advancedChoicesPending.length === 0) { // All explorers are NPCs
-                 explorerIds.forEach(id => {
+                 currentExplorerIds.forEach(id => {
                      if(room.gameState.decks.item.length > 0) room.players[id].hand.push(room.gameState.decks.item.pop());
                  });
                  this.transitionToWorldEventSetup(room);
@@ -508,7 +516,8 @@ class GameManager {
         const player = room.players[playerId];
         const combatState = room.gameState.combatState;
 
-        const isPlayerTurn = !combatState.isActive || combatState.turnOrder[combatState.currentTurnIndex] === playerId;
+        const isPlayerTurn = !combatState.isActive ? room.gameState.turnOrder[room.gameState.currentPlayerIndex] === playerId : combatState.turnOrder[combatState.currentTurnIndex] === playerId;
+
         if (!isPlayerTurn) return { error: "It's not your turn!" };
         if (player.statusEffects.some(e => e.name === 'Stunned')) return { error: "You are stunned and cannot act!" };
 
@@ -537,11 +546,11 @@ class GameManager {
                  }
                 break;
             case 'briefRespite':
-                if (combatState.isActive) return { error: "Cannot rest during combat." };
+                if (combatState.isActive) { player.currentAp += apCost; return { error: "Cannot rest during combat." }; }
                 this.briefRespite(roomId, playerId);
                 break;
             case 'fullRest':
-                if (combatState.isActive) return { error: "Cannot rest during combat." };
+                if (combatState.isActive) { player.currentAp += apCost; return { error: "Cannot rest during combat." }; }
                 this.fullRest(roomId, playerId);
                 break;
             case 'skillChallenge':
@@ -668,11 +677,32 @@ class GameManager {
         const room = this.rooms[roomId];
         if (!room) return;
 
-        if(room.gameState.combatState.isActive) {
-            if(room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] !== playerId) return;
+        if (room.gameState.combatState.isActive) {
+            if (room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] !== playerId) return;
             this.nextTurn(roomId);
         } else {
+            if (!room.gameState.turnOrder || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== playerId) return;
+
             io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${room.players[playerId].name} ended their turn.`, channel: 'game' });
+            
+            const nextIndex = room.gameState.currentPlayerIndex + 1;
+
+            if (nextIndex >= room.gameState.turnOrder.length) {
+                // Round is over, DM's turn
+                room.gameState.currentPlayerIndex = -1; // Indicate DM's turn
+                io.to(roomId).emit('gameStateUpdate', room);
+
+                const dm = Object.values(room.players).find(p => p.role === 'DM');
+                if (dm && dm.isNpc) {
+                    setTimeout(() => this.executeNpcTurn(room.id, dm.id), 1500);
+                }
+            } else {
+                // Next player's turn
+                room.gameState.currentPlayerIndex = nextIndex;
+                const nextPlayer = room.players[room.gameState.turnOrder[nextIndex]];
+                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `It is now ${nextPlayer.name}'s turn.`, channel: 'game' });
+                io.to(roomId).emit('gameStateUpdate', room);
+            }
         }
         return room;
     }
@@ -681,36 +711,45 @@ class GameManager {
         const room = this.rooms[roomId];
         const combatState = room.gameState.combatState;
         
-        if(combatState.isActive) {
+        if (combatState.isActive) {
             const combatant = this.getCombatant(room, npcId);
             if (!combatant) { this.nextTurn(roomId); return; }
 
-            if(combatant.role === 'Explorer') { // NPC Explorer
+            if (combatant.role === 'Explorer') { // NPC Explorer
                 const livingMonsters = room.gameState.board.monsters;
-                if(livingMonsters.length > 0) {
+                if (livingMonsters.length > 0) {
                     const target = livingMonsters[Math.floor(Math.random() * livingMonsters.length)];
                     const dialogue = this.getRandomDialogue('explorer', 'attack');
-                    if(dialogue) io.to(roomId).emit('chatMessage', { senderName: combatant.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
-                    this.resolveAttack(roomId, npcId, target.id, combatant.equipment.weapon || {effect: { dice: '1d4' }});
+                    if (dialogue) io.to(roomId).emit('chatMessage', { senderName: combatant.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                    this.resolveAttack(roomId, npcId, target.id, combatant.equipment.weapon || { effect: { dice: '1d4' } });
                 }
             } else { // Monster
                 const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
-                if(livingExplorers.length > 0) {
-                    livingExplorers.sort((a,b) => a.stats.currentHp - b.stats.currentHp);
+                if (livingExplorers.length > 0) {
+                    livingExplorers.sort((a, b) => a.stats.currentHp - b.stats.currentHp);
                     const target = livingExplorers[0];
                     this.resolveAttack(roomId, npcId, target.id, combatant);
                 }
             }
-            this.nextTurn(roomId);
+            setTimeout(() => this.nextTurn(roomId), 1000); // Add a small delay before next turn in combat
             return;
         }
 
         const npc = room.players[npcId];
         if (!room || !npc || !npc.isNpc) return;
+
         if (npc.role === 'DM') {
             if (room.gameState.phase === 'world_event_setup') {
                 const eventCard = room.gameState.decks.worldEvent.pop();
-                if (eventCard) this.playCard(roomId, npcId, eventCard.id, null);
+                if (eventCard) {
+                    this.playCard(roomId, npcId, eventCard.id, null);
+                    // After the world event is set, it's the first explorer's turn.
+                    room.gameState.currentPlayerIndex = 0;
+                    const firstPlayer = room.players[room.gameState.turnOrder[0]];
+                    if (firstPlayer) {
+                        io.to(roomId).emit('chatMessage', { senderName: 'System', message: `The stage is set. It is now ${firstPlayer.name}'s turn.`, channel: 'game' });
+                    }
+                }
             } else if (room.gameState.board.monsters.length === 0) {
                 let monsterCard = room.gameState.decks.monster.pop();
                 if (monsterCard) this.playCard(roomId, npcId, monsterCard.id, null);
@@ -831,7 +870,7 @@ io.on('connection', (socket) => {
     socket.on('playCard', ({ cardId, targetId }) => {
         const result = gameManager.getPlayer(socket.id);
         if (result) {
-            const { error } = gameManager.playCard(result.room.id, socket.id, cardId, targetId);
+            const { error } = gameManager.playCard(result.room.id, socket.id, cardId, targetId) || {};
             if (error) socket.emit('actionError', error);
         }
     });
@@ -839,7 +878,7 @@ io.on('connection', (socket) => {
     socket.on('playerAction', (actionData) => {
         const result = gameManager.getPlayer(socket.id);
         if (result) {
-            const { error } = gameManager.handlePlayerAction(result.room.id, socket.id, actionData);
+            const { error } = gameManager.handlePlayerAction(result.room.id, socket.id, actionData) || {};
             if(error) socket.emit('actionError', error);
         }
     });

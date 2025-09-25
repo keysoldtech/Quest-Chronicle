@@ -286,6 +286,7 @@ body.fantasy-bg {
 
 /* --- LEFT PANEL COMPONENTS --- */
 .player-list {
+    list-style: none;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -543,4 +544,124 @@ body.fantasy-bg {
     justify-content: flex-end;
     gap: 1rem;
     margin-top: 1rem;
+}
+
+/* --- RESPONSIVE DESIGN FOR MOBILE --- */
+@media (max-width: 800px) {
+    body.fantasy-bg {
+        /* Allow scrolling on mobile */
+        display: block;
+        min-height: auto;
+    }
+
+    /* --- General Layout --- */
+    .game-area {
+        height: auto;
+        min-height: 100vh; /* Ensure it still fills the screen */
+        padding: 0.5rem;
+    }
+
+    .game-main {
+        grid-template-columns: 1fr; /* Single column layout */
+    }
+
+    .left-panel {
+        order: 2; /* Move left panel (chat, etc.) below the game board on mobile */
+        overflow-y: visible; /* Don't need internal scroll for the whole panel */
+    }
+
+    .right-panel {
+        order: 1;
+        overflow: visible;
+    }
+    
+    .world-events-section,
+    .game-board-section,
+    .player-hand-section {
+        height: auto; /* Remove fixed percentage heights */
+        min-height: 200px; /* Give them some base size */
+    }
+    
+    .player-hand-section {
+        min-height: 250px;
+    }
+
+    /* --- Header --- */
+    .game-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+    .header-controls {
+        flex-wrap: wrap;
+        width: 100%;
+        justify-content: space-between;
+    }
+    .room-code-display {
+        text-align: left;
+    }
+    .room-code-display p:last-child {
+        font-size: 1.5rem;
+    }
+
+    /* --- Lobby --- */
+    .lobby-container {
+        width: 95%;
+        padding: 1rem;
+        border-width: 5px;
+        margin: 1rem auto;
+    }
+    .title-font {
+        font-size: 2.5rem;
+    }
+    .join-group {
+        flex-direction: column;
+    }
+
+    /* --- Cards --- */
+    .card {
+        width: 120px;
+        height: 180px;
+        padding: 0.5rem;
+        border-width: 3px;
+    }
+    .card-title {
+        font-size: 0.9rem;
+    }
+    .card-effect {
+        font-size: 0.7rem;
+    }
+    .card-type, .card-bonus {
+        font-size: 0.65rem;
+    }
+    .fantasy-button-xs {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.6rem;
+    }
+    .card-container-row {
+        padding-bottom: 0.75rem; /* Add some padding for scrollbar visibility */
+    }
+
+    /* --- UI Elements & Text --- */
+    .header-font {
+        font-size: 1.5rem;
+    }
+    .fantasy-button, .fantasy-button-primary, .fantasy-button-secondary {
+        padding: 0.6rem 1.2rem;
+    }
+    .player-hand-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .player-turn-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Modal */
+    .modal-content {
+        width: 95%;
+        padding: 1rem;
+    }
 }
