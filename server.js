@@ -86,6 +86,7 @@ class GameManager {
 
     joinRoom(socket, roomId, playerName) {
         const room = this.rooms[roomId];
+        // FIX: Ensure the room player count is correctly checked against the max of 5.
         if (room && Object.keys(room.players).length < 5) {
             room.players[socket.id] = this.createPlayerObject(socket.id, playerName);
             console.log(`[GameManager] ${playerName} (${socket.id}) joined room ${roomId}.`);
@@ -715,23 +716,41 @@ class GameManager {
             const combatant = this.getCombatant(room, npcId);
             if (!combatant) { this.nextTurn(roomId); return; }
 
-            if (combatant.role === 'Explorer') { // NPC Explorer
-                const livingMonsters = room.gameState.board.monsters;
-                if (livingMonsters.length > 0) {
-                    const target = livingMonsters[Math.floor(Math.random() * livingMonsters.length)];
-                    const dialogue = this.getRandomDialogue('explorer', 'attack');
+            if (combatant.role === 'Explorer') { // NPC Explorer AI
+                const isInjured = combatant.stats.currentHp / combatant.stats.maxHp < 0.5;
+                const healingCard = combatant.hand.find(c => c.effect?.type === 'heal');
+
+                if (isInjured && healingCard) {
+                    // HEAL ACTION: If injured and has a healing card, use it.
+                    const dialogue = this.getRandomDialogue('explorer', 'heal');
                     if (dialogue) io.to(roomId).emit('chatMessage', { senderName: combatant.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
-                    this.resolveAttack(roomId, npcId, target.id, combatant.equipment.weapon || { effect: { dice: '1d4' } });
+                    
+                    this.resolveCardEffect(roomId, npcId, healingCard, npcId); // Target self
+                    combatant.hand = combatant.hand.filter(c => c.id !== healingCard.id); // Remove used card
+                    io.to(roomId).emit('gameStateUpdate', room);
+                } else {
+                    // ATTACK ACTION: If not healing, attack the weakest monster.
+                    const livingMonsters = [...room.gameState.board.monsters];
+                    if (livingMonsters.length > 0) {
+                        livingMonsters.sort((a, b) => a.currentHp - b.currentHp); // Find weakest
+                        const target = livingMonsters[0];
+
+                        const dialogue = this.getRandomDialogue('explorer', 'attack');
+                        if (dialogue) io.to(roomId).emit('chatMessage', { senderName: combatant.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                        
+                        // Use equipped weapon, or a default 1d4 attack if none
+                        this.resolveAttack(roomId, npcId, target.id, combatant.equipment.weapon || { effect: { dice: '1d4' } });
+                    }
                 }
-            } else { // Monster
+            } else { // Monster AI
                 const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
                 if (livingExplorers.length > 0) {
-                    livingExplorers.sort((a, b) => a.stats.currentHp - b.stats.currentHp);
+                    livingExplorers.sort((a, b) => a.stats.currentHp - b.stats.currentHp); // Target weakest
                     const target = livingExplorers[0];
                     this.resolveAttack(roomId, npcId, target.id, combatant);
                 }
             }
-            setTimeout(() => this.nextTurn(roomId), 1000); // Add a small delay before next turn in combat
+            setTimeout(() => this.nextTurn(roomId), 1500); // Pass turn after a delay
             return;
         }
 
@@ -739,12 +758,15 @@ class GameManager {
         if (!room || !npc || !npc.isNpc) return;
 
         if (npc.role === 'DM') {
+            // If it's the very start of the game, the DM's first action is to summon a monster.
             if (room.gameState.phase === 'world_event_setup') {
-                const eventCard = room.gameState.decks.worldEvent.pop();
-                if (eventCard) {
-                    this.playCard(roomId, npcId, eventCard.id, null);
+                const monsterCard = room.gameState.decks.monster.pop();
+                if (monsterCard) {
+                    this.playCard(roomId, npcId, monsterCard.id, null); // This will initiate combat
                 }
+                room.gameState.phase = 'active'; // The game is now officially active
             } else if (room.gameState.board.monsters.length === 0) {
+                // If not the first turn, but the board is empty, summon another monster.
                 let monsterCard = room.gameState.decks.monster.pop();
                 if (monsterCard) {
                     this.playCard(roomId, npcId, monsterCard.id, null);
@@ -754,7 +776,7 @@ class GameManager {
                 }
             }
 
-            // After the DM's turn actions are complete, if combat hasn't started, pass to the first player.
+            // After the DM's action, if combat hasn't started (e.g., no monsters left in deck), pass to the first player.
             if (!room.gameState.combatState.isActive) {
                 room.gameState.currentPlayerIndex = 0;
                 const firstPlayer = room.players[room.gameState.turnOrder[0]];
