@@ -4,124 +4,127 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quest & Chronicle - Multiplayer Prototype</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=MedievalSharp&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
 </head>
-<body class="bg-slate-900 text-slate-100 flex items-center justify-center min-h-screen font-sans">
+<body class="fantasy-bg">
 
     <!-- Lobby Screen: Visible on page load -->
-    <div id="lobby" class="w-full max-w-md p-8 bg-slate-800 rounded-lg shadow-2xl border border-slate-700">
-        <h1 class="text-4xl font-bold text-center mb-2 text-sky-300">Quest & Chronicle</h1>
-        <p class="text-center text-slate-400 mb-6">Multiplayer Prototype</p>
+    <div id="lobby" class="lobby-container">
+        <h1 class="title-font">Quest & Chronicle</h1>
+        <p class="subtitle-font">Multiplayer Prototype</p>
         
-        <div class="mb-4">
-            <label for="playerName" class="block text-sm font-medium text-slate-300 mb-2">Player Name</label>
-            <input type="text" id="playerName" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500" placeholder="e.g., Elara the Brave">
+        <div class="input-group">
+            <label for="playerName">Player Name</label>
+            <input type="text" id="playerName" class="fantasy-input" placeholder="e.g., Elara the Brave">
         </div>
         
-        <div id="game-mode-selector" class="mb-6">
-            <label class="block text-sm font-medium text-slate-300 mb-2">Game Mode</label>
-            <div class="flex gap-4 bg-slate-700 p-1 rounded-md">
-                <label class="flex-1 text-center cursor-pointer">
+        <div id="game-mode-selector" class="input-group">
+            <label>Game Mode</label>
+            <div class="radio-group">
+                <label class="radio-label">
                     <input type="radio" name="gameMode" value="Beginner" class="sr-only" checked>
-                    <span class="block w-full px-4 py-2 rounded-md transition-colors bg-sky-600 text-white">Beginner</span>
+                    <span>Beginner</span>
                 </label>
-                <label class="flex-1 text-center cursor-pointer">
+                <label class="radio-label">
                     <input type="radio" name="gameMode" value="Advanced" class="sr-only">
-                    <span class="block w-full px-4 py-2 rounded-md transition-colors bg-slate-600 text-slate-300">Advanced</span>
+                    <span>Advanced</span>
                 </label>
             </div>
         </div>
 
-        <div class="flex flex-col gap-4">
-            <button id="createRoomBtn" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200">Create New Room</button>
-            
-            <div class="flex items-center gap-4">
-                <input type="text" id="roomIdInput" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="Enter Room Code">
-                <button id="joinRoomBtn" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-200 whitespace-nowrap">Join Room</button>
+        <div class="button-group">
+            <button id="createRoomBtn" class="fantasy-button-primary">Create New Room</button>
+            <div class="join-group">
+                <input type="text" id="roomIdInput" class="fantasy-input" placeholder="Enter Room Code">
+                <button id="joinRoomBtn" class="fantasy-button-secondary">Join Room</button>
             </div>
         </div>
     </div>
 
     <!-- Game Area: Hidden until a room is joined -->
-    <div id="game-area" class="hidden w-full h-screen p-4 md:p-8 flex flex-col gap-4">
-        <header class="flex justify-between items-center p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div id="game-area" class="game-area hidden">
+        <header class="game-header">
             <div>
-                 <p id="turn-indicator" class="text-lg font-bold text-yellow-300">Waiting for DM to start the game...</p>
-                 <p class="text-slate-400">You are connected.</p>
+                 <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
+                 <p>You are connected.</p>
             </div>
-             <div class="flex items-center gap-4">
-                <div id="dm-controls" class="hidden flex items-center gap-2">
-                     <button id="drawMonsterBtn" class="bg-red-800 hover:bg-red-700 text-white font-bold py-2 px-3 text-sm rounded-lg">Draw Monster</button>
-                     <button id="drawDiscoveryBtn" class="bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-3 text-sm rounded-lg">Draw Discovery</button>
-                     <button id="worldEventBtn" class="bg-purple-700 hover:bg-purple-600 text-white font-bold py-2 px-3 text-sm rounded-lg">Start World Event Seq.</button>
+             <div class="header-controls">
+                <div id="dm-controls" class="dm-controls hidden">
+                     <button id="drawMonsterBtn" class="fantasy-button-sm fantasy-button-danger">Draw Monster</button>
+                     <button id="drawDiscoveryBtn" class="fantasy-button-sm fantasy-button-success">Draw Discovery</button>
+                     <button id="worldEventBtn" class="fantasy-button-sm fantasy-button-special">Start World Event</button>
                 </div>
-                <button id="join-voice-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-lg">Join Voice Chat</button>
-                <button id="startGameBtn" class="hidden bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-2 px-4 rounded-lg">Start Game</button>
-                <div class="text-right">
-                    <p class="text-sm text-slate-400">Room Code:</p>
-                    <p id="room-code" class="text-2xl font-bold tracking-widest bg-slate-700 px-3 py-1 rounded-md">----</p>
+                <button id="join-voice-btn" class="fantasy-button-sm fantasy-button-success">Join Voice</button>
+                <button id="startGameBtn" class="fantasy-button-primary hidden">Start Game</button>
+                <div class="room-code-display">
+                    <p>Room Code:</p>
+                    <p id="room-code">----</p>
                 </div>
             </div>
         </header>
 
-        <main class="flex-grow grid grid-cols-1 lg:grid-cols-4 gap-4 overflow-hidden">
+        <main class="game-main">
             <!-- Left Column: Player List, Class Selection, Stats & Chat -->
-            <aside class="lg:col-span-1 bg-slate-800/50 rounded-lg border border-slate-700 p-4 flex flex-col gap-4">
-                <div>
-                    <h2 class="text-xl font-semibold mb-2 text-slate-300 border-b border-slate-600 pb-2">Players</h2>
-                    <ul id="player-list" class="space-y-2 mt-2"></ul>
+            <aside class="left-panel">
+                <div class="panel-box">
+                    <h2 class="header-font">Players</h2>
+                    <ul id="player-list" class="player-list"></ul>
                 </div>
-                <!-- Class Selection (Lobby) -->
-                <div id="class-selection" class="hidden">
-                    <h2 class="text-xl font-semibold mb-2 text-slate-300 border-b border-slate-600 pb-2">Choose Your Class</h2>
-                    <div id="class-buttons" class="grid grid-cols-2 gap-2 mt-2">
+
+                <div id="class-selection" class="panel-box hidden">
+                    <h2 class="header-font">Choose Your Class</h2>
+                    <div id="class-buttons" class="class-buttons">
                         <!-- Class buttons will be generated here -->
                     </div>
                 </div>
-                 <!-- Player Stats (In-Game) -->
-                <div id="player-stats-container" class="hidden">
-                     <h2 class="text-xl font-semibold mb-2 text-slate-300 border-b border-slate-600 pb-2">Your Stats</h2>
-                     <div id="player-stats" class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
+
+                <div id="player-stats-container" class="panel-box hidden">
+                     <h2 class="header-font">Your Stats</h2>
+                     <div id="player-stats" class="player-stats">
                          <!-- Stats will be rendered here -->
                      </div>
                 </div>
-                 <div class="flex-grow flex flex-col min-h-0">
-                    <h2 class="text-xl font-semibold mb-2 text-slate-300 border-b border-slate-600 pb-2">Chat & Log</h2>
-                    <div id="chat-log" class="flex-grow overflow-y-auto text-sm space-y-2 pr-2 my-2"></div>
-                    <form id="chat-form" class="flex items-center gap-2 border-t border-slate-600 pt-2">
-                        <select id="chat-channel" class="bg-slate-700 border border-slate-600 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-sky-500">
+                
+                 <div class="panel-box chat-box">
+                    <h2 class="header-font">Chat & Log</h2>
+                    <div id="chat-log" class="chat-log"></div>
+                    <form id="chat-form" class="chat-form">
+                        <select id="chat-channel" class="fantasy-select">
                             <option value="game">Game</option>
                             <option value="party">Party</option>
                         </select>
-                        <input type="text" id="chat-input" class="flex-grow px-3 py-2 bg-slate-700 border border-slate-600 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-500" placeholder="Type..." autocomplete="off">
-                        <button type="submit" class="bg-sky-600 hover:bg-sky-500 text-white font-bold py-2 px-3 rounded-lg">Send</button>
+                        <input type="text" id="chat-input" class="fantasy-input" placeholder="Type..." autocomplete="off">
+                        <button type="submit" class="fantasy-button-sm fantasy-button-primary">Send</button>
                     </form>
                 </div>
             </aside>
 
             <!-- Right Column: Game Board & Player Hand -->
-            <div class="lg:col-span-3 flex flex-col gap-4 overflow-hidden">
-                <div class="h-1/4 bg-slate-800/30 rounded-lg border border-slate-700 p-4">
-                     <h2 class="text-xl font-semibold mb-2 text-slate-300">World Events</h2>
-                     <div id="world-events-container" class="flex flex-wrap gap-4"></div>
+            <div class="right-panel">
+                <div class="world-events-section">
+                     <h2 class="header-font">World Events</h2>
+                     <div id="world-events-container" class="card-container-row"></div>
                 </div>
-                <div id="game-board" class="flex-grow bg-slate-800/30 rounded-lg border border-slate-700 p-4">
-                    <h2 class="text-xl font-semibold mb-4 text-slate-300">Game Board</h2>
-                    <div id="board-cards" class="flex flex-wrap gap-4"></div>
+                <div id="game-board" class="game-board-section">
+                    <h2 class="header-font">Game Board</h2>
+                    <div id="board-cards" class="card-container-row"></div>
                 </div>
-                <div class="h-2/5 bg-slate-800/50 rounded-lg border border-slate-700 p-4 flex flex-col">
-                    <div class="flex justify-between items-center mb-2">
-                        <h2 class="text-xl font-semibold text-slate-300">Your Hand</h2>
-                        <button id="endTurnBtn" class="hidden bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-lg">End Turn</button>
+                <div class="player-hand-section">
+                    <div class="player-hand-header">
+                        <h2 class="header-font">Your Hand & Equipment</h2>
+                        <button id="endTurnBtn" class="fantasy-button-danger hidden">End Turn</button>
                     </div>
-                     <!-- Equipped Items -->
-                    <div id="equipped-items-container" class="mb-2">
-                        <h3 class="text-sm font-semibold text-slate-400 mb-1">Equipped</h3>
-                        <div id="equipped-items" class="flex items-center gap-2">
+                    
+                    <div id="equipped-items-container" class="equipped-items-container">
+                        <h3 class="sub-header-font">Equipped</h3>
+                        <div id="equipped-items" class="card-container-row">
                             <!-- Equipped items will be rendered here -->
                         </div>
                     </div>
-                    <div id="player-hand" class="flex-grow flex items-center gap-4 overflow-x-auto pb-2 border-t border-slate-700 pt-2"></div>
+                    <div id="player-hand" class="player-hand-container card-container-row"></div>
                 </div>
             </div>
         </main>

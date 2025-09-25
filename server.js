@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+        [array[i], array[j]] = [array[j], array[j]];
     }
 }
 
@@ -107,6 +107,7 @@ class GameManager {
             if (item && item.bonuses) {
                 stats.shieldBonus += item.bonuses.shield || 0;
                 stats.ap += item.bonuses.ap || 0;
+                // Note: Weapon damage bonus is often handled at time of attack, but we could add it here if needed.
             }
         }
         
@@ -256,13 +257,9 @@ class GameManager {
 
         room.gameState.turnOrder = explorerIds;
         shuffle(room.gameState.turnOrder);
-        room.gameState.currentPlayerIndex = 0;
-        room.gameState.phase = 'active';
+        room.gameState.currentPlayerIndex = -1; // No one's turn yet
+        room.gameState.phase = 'world_event_setup'; // NEW PHASE: Wait for DM to act
 
-        const firstPlayer = room.players[room.gameState.turnOrder[0]];
-        if (firstPlayer.isNpc) {
-            setTimeout(() => this.executeNpcTurn(room.id, firstPlayer.id), 2000);
-        }
         return room;
     }
     
@@ -291,12 +288,13 @@ class GameManager {
         let actionTaken = false;
 
         if (npc.role === 'Explorer') {
+            const canPlayDamage = room.gameState.board.monsters.length > 0;
             const needsHealing = npc.stats.currentHp < (npc.stats.maxHp / 2);
             let cardToPlay = needsHealing ? npc.hand.find(c => c.category === 'Healing') : null;
-            if (!cardToPlay) cardToPlay = npc.hand.find(c => c.category === 'Damage');
+            if (!cardToPlay && canPlayDamage) cardToPlay = npc.hand.find(c => c.category === 'Damage');
             
             if (cardToPlay) {
-                this.playCard(roomId, npcId, cardToPlay.id);
+                this.playCard(roomId, npcId, cardToPlay.id); // This will pass the damage check
                 actionTaken = true;
                 message = `${npc.name} played ${cardToPlay.name}.`;
             }
@@ -321,24 +319,30 @@ class GameManager {
     playCard(roomId, playerId, cardId) {
         const room = this.rooms[roomId];
         const player = room.players[playerId];
-        if (!room || !player) return null;
+        if (!room || !player) return { error: "Invalid action." };
         
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
-        if (cardIndex > -1) {
-            const card = player.hand.splice(cardIndex, 1)[0];
+        if (cardIndex === -1) return { error: "Card not found in hand." };
             
-            if(card.category === 'Healing') {
-                const healAmount = (card.bonuses && card.bonuses.heal) ? card.bonuses.heal : 5;
-                player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
-            } else if (card.type === 'Monster') {
-                room.gameState.board.monsters.push(card);
-            } else {
-                room.gameState.board.playedCards.push(card);
-            }
-            this.calculatePlayerStats(playerId, room);
-            return room;
+        const card = player.hand[cardIndex];
+
+        // NEW RULE: Combat Logic Check
+        if ((card.category === 'Damage' || card.category === 'Attack') && room.gameState.board.monsters.length === 0) {
+            return { error: "You can only play Damage cards when monsters are on the board." };
         }
-        return null;
+
+        player.hand.splice(cardIndex, 1)[0]; // Remove card from hand
+        
+        if(card.category === 'Healing') {
+            const healAmount = (card.bonuses && card.bonuses.heal) ? card.bonuses.heal : 5;
+            player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+        } else if (card.type === 'Monster') {
+            room.gameState.board.monsters.push(card);
+        } else {
+            room.gameState.board.playedCards.push(card);
+        }
+        this.calculatePlayerStats(playerId, room);
+        return { room };
     }
 
     // --- GM Action Functions ---
@@ -365,6 +369,11 @@ class GameManager {
     startWorldEventSequence(roomId) {
         const room = this.rooms[roomId];
         if(room && !room.gameState.worldEvents.sequenceActive) {
+            // NEW RULE: Start game loop after first world event
+            if (room.gameState.phase === 'world_event_setup') {
+                room.gameState.phase = 'active';
+                room.gameState.currentPlayerIndex = 0;
+            }
             room.gameState.worldEvents.currentSequence = [];
             for(let i=0; i<3; i++) if(room.gameState.worldEventDeck.length > 0) room.gameState.worldEvents.currentSequence.push(room.gameState.worldEventDeck.pop());
             room.gameState.worldEvents.sequenceActive = true;
@@ -376,6 +385,11 @@ class GameManager {
     drawWorldEventsForDm(roomId) {
         const room = this.rooms[roomId];
         if(room) {
+            // NEW RULE: Start game loop after first world event
+            if (room.gameState.phase === 'world_event_setup') {
+                room.gameState.phase = 'active';
+                room.gameState.currentPlayerIndex = 0;
+            }
             room.gameState.worldEvents.currentSequence = [];
             for(let i=0; i<3; i++) if(room.gameState.worldEventDeck.length > 0) room.gameState.worldEvents.currentSequence.push(room.gameState.worldEventDeck.pop());
             room.gameState.worldEvents.sequenceActive = true;
@@ -405,7 +419,7 @@ io.on('connection', (socket) => {
             socket.emit('joinSuccess', room);
             io.to(room.id).emit('playerListUpdate', room);
         } else {
-            socket.emit('error', 'Room not found or is full.');
+            socket.emit('actionError', 'Room not found or is full.');
         }
     });
 
@@ -453,10 +467,13 @@ io.on('connection', (socket) => {
     socket.on('playCard', ({ cardId }) => {
         const result = gameManager.getPlayer(socket.id);
         if (result) {
-            const updatedRoom = gameManager.playCard(result.room.id, socket.id, cardId);
-            if(updatedRoom) {
+            const { room: updatedRoom, error } = gameManager.playCard(result.room.id, socket.id, cardId);
+            if (error) {
+                socket.emit('actionError', error);
+            } else if(updatedRoom) {
                 io.to(updatedRoom.id).emit('gameStateUpdate', updatedRoom);
-                io.to(updatedRoom.id).emit('chatMessage', { senderName: 'System', message: `${result.player.name} played a card.`, channel: 'game' });
+                 const card = updatedRoom.gameState.board.monsters.find(c => c.id === cardId) || updatedRoom.gameState.board.playedCards.find(c => c.id === cardId);
+                io.to(updatedRoom.id).emit('chatMessage', { senderName: 'System', message: `${result.player.name} played ${card?.name || 'a card'}.`, channel: 'game' });
             }
         }
     });

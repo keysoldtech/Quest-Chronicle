@@ -1,0 +1,452 @@
+/* --- GLOBAL STYLES & TYPOGRAPHY --- */
+:root {
+    --font-title: 'MedievalSharp', cursive;
+    --font-body: 'Lato', sans-serif;
+    
+    --color-bg: #2a241f;
+    --color-parchment: #f4e9d8;
+    --color-parchment-dark: #d1c4aF;
+    --color-text-dark: #3a322d;
+    --color-border: #5c4b3f;
+    --color-border-light: #8e7a6b;
+    --color-primary: #8a0303;
+    --color-primary-hover: #a80a0a;
+    --color-secondary: #4a5c43;
+    --color-secondary-hover: #6a7c63;
+    --color-special: #a67c00;
+    --color-special-hover: #c49a1a;
+    --color-danger: #7a2f00;
+    --color-danger-hover: #9c4f10;
+    --color-success: #3e6b27;
+    --color-success-hover: #5e8b47;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body.fantasy-bg {
+    font-family: var(--font-body);
+    background-color: var(--color-bg);
+    background-image: url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%233a322d" fill-opacity="0.1"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+    color: var(--color-text-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.sr-only { /* For screen-reader only elements */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* --- FONT STYLES --- */
+.title-font {
+    font-family: var(--font-title);
+    font-size: 3rem;
+    color: var(--color-primary);
+    text-align: center;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+}
+.subtitle-font {
+    text-align: center;
+    color: var(--color-text-dark);
+    opacity: 0.8;
+    margin-bottom: 1.5rem;
+}
+.header-font {
+    font-family: var(--font-title);
+    font-size: 1.75rem;
+    border-bottom: 2px solid var(--color-border-light);
+    padding-bottom: 0.25rem;
+    margin-bottom: 0.75rem;
+    color: var(--color-primary);
+}
+.sub-header-font {
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: var(--color-text-dark);
+    opacity: 0.9;
+}
+.turn-indicator-font {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--color-special);
+}
+
+
+/* --- LOBBY & FORMS --- */
+.lobby-container {
+    width: 100%;
+    max-width: 450px;
+    padding: 2rem;
+    background-color: var(--color-parchment);
+    border: 10px solid var(--color-border);
+    border-image: url('data:image/svg+xml;charset=utf-8,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><style>path{fill:rgb(92, 75, 63)}</style><path d="M0 0h100v20H0zM0 80h100v20H0zM80 0h20v100H80zM0 0h20v100H0z"/></svg>') 20 stretch;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+.input-group {
+    margin-bottom: 1.25rem;
+}
+.input-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+.fantasy-input, .fantasy-select {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: var(--color-parchment-dark);
+    border: 2px solid var(--color-border);
+    border-radius: 4px;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--color-text-dark);
+    transition: all 0.2s ease;
+}
+.fantasy-input:focus, .fantasy-select:focus {
+    outline: none;
+    border-color: var(--color-special);
+    box-shadow: 0 0 10px rgba(166, 124, 0, 0.5);
+}
+
+.button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.join-group {
+    display: flex;
+    gap: 0.5rem;
+}
+.join-group .fantasy-input {
+    flex-grow: 1;
+}
+
+.fantasy-button,
+.fantasy-button-primary,
+.fantasy-button-secondary,
+.fantasy-button-sm,
+.fantasy-button-xs {
+    padding: 0.75rem 1.5rem;
+    border: 2px solid var(--color-text-dark);
+    border-radius: 5px;
+    font-family: var(--font-body);
+    font-weight: bold;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.2), 0 2px 5px rgba(0,0,0,0.3);
+    transition: all 0.1s ease-in-out;
+}
+.fantasy-button:active,
+.fantasy-button-primary:active,
+.fantasy-button-secondary:active,
+.fantasy-button-sm:active,
+.fantasy-button-xs:active {
+    transform: translateY(2px);
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.2), 0 0 2px rgba(0,0,0,0.3);
+}
+.fantasy-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.fantasy-button-primary { background-color: var(--color-primary); color: var(--color-parchment); }
+.fantasy-button-primary:hover { background-color: var(--color-primary-hover); }
+
+.fantasy-button-secondary { background-color: var(--color-secondary); color: var(--color-parchment); }
+.fantasy-button-secondary:hover { background-color: var(--color-secondary-hover); }
+
+.fantasy-button-danger { background-color: var(--color-danger); color: var(--color-parchment); }
+.fantasy-button-danger:hover { background-color: var(--color-danger-hover); }
+
+.fantasy-button-success { background-color: var(--color-success); color: var(--color-parchment); }
+.fantasy-button-success:hover { background-color: var(--color-success-hover); }
+
+.fantasy-button-special { background-color: var(--color-special); color: var(--color-text-dark); }
+.fantasy-button-special:hover { background-color: var(--color-special-hover); }
+
+.fantasy-button-sm { padding: 0.5rem 1rem; font-size: 0.8rem; }
+.fantasy-button-xs { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
+
+/* Radio Button Group */
+.radio-group {
+    display: flex;
+    gap: 0.25rem;
+    background-color: var(--color-parchment-dark);
+    border: 2px solid var(--color-border);
+    padding: 0.25rem;
+    border-radius: 6px;
+}
+.radio-label {
+    flex: 1;
+    text-align: center;
+    cursor: pointer;
+}
+.radio-label span {
+    display: block;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+.radio-label.active span {
+    background-color: var(--color-secondary);
+    color: var(--color-parchment);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* --- GAME AREA LAYOUT --- */
+.game-area {
+    width: 100%;
+    height: 100vh;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.game-header {
+    background-color: rgba(42, 36, 31, 0.7);
+    border: 4px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--color-parchment);
+}
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.dm-controls {
+    display: flex;
+    gap: 0.5rem;
+}
+.room-code-display {
+    text-align: right;
+}
+.room-code-display p:first-child {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+.room-code-display p:last-child {
+    font-family: var(--font-title);
+    font-size: 2rem;
+    background-color: rgba(0,0,0,0.3);
+    padding: 0.25rem 0.75rem;
+    border-radius: 5px;
+}
+.game-main {
+    flex-grow: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1rem;
+    overflow: hidden;
+}
+.left-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+}
+.right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow: hidden;
+}
+
+.panel-box {
+    background-color: var(--color-parchment);
+    border: 4px solid var(--color-border-light);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+/* --- LEFT PANEL COMPONENTS --- */
+.player-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.player-list-item {
+    background-color: var(--color-parchment-dark);
+    border: 2px solid var(--color-border);
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+.player-list-item.active {
+    border-color: var(--color-special);
+    box-shadow: 0 0 10px var(--color-special);
+    transform: scale(1.02);
+}
+.player-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+}
+.npc-tag { font-size: 0.75rem; color: #666; }
+.player-class { font-size: 0.8rem; color: #444; font-weight: normal; }
+.player-role { font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 10px; color: var(--color-parchment); }
+.player-role.dm { background-color: var(--color-special); }
+.player-role.explorer { background-color: var(--color-secondary); }
+.player-hp { font-size: 0.8rem; color: var(--color-success); font-weight: bold; }
+
+.class-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+.class-buttons .fantasy-button {
+    padding: 0.5rem;
+    background-color: var(--color-parchment-dark);
+    border-color: var(--color-border);
+    color: var(--color-text-dark);
+}
+.class-buttons .fantasy-button.active {
+    background-color: var(--color-secondary);
+    color: var(--color-parchment);
+}
+
+.player-stats {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 1rem;
+    font-size: 0.9rem;
+}
+.player-stats span { color: var(--color-text-dark); opacity: 0.8; }
+.player-stats .stat-value { font-weight: bold; opacity: 1; }
+
+.chat-box {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+}
+.chat-log {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+    margin: 0.5rem 0;
+}
+.chat-form {
+    display: flex;
+    gap: 0.5rem;
+    border-top: 2px solid var(--color-border-light);
+    padding-top: 0.75rem;
+}
+.chat-form .fantasy-input { flex-grow: 1; padding: 0.5rem; }
+.chat-form .fantasy-select { padding: 0.5rem; }
+
+.chat-message { font-size: 0.85rem; line-height: 1.4; }
+.chat-message.system { color: var(--color-danger); font-style: italic; }
+.chat-message .channel { font-weight: bold; margin-right: 0.25rem; }
+.chat-message .channel.party { color: var(--color-secondary); }
+.chat-message .channel.game { color: var(--color-primary); }
+.chat-message .sender { font-weight: bold; }
+.chat-message .sender.self { color: var(--color-text-dark); }
+.chat-message .sender.other { color: #555; }
+
+/* --- RIGHT PANEL COMPONENTS --- */
+.world-events-section { height: 25%; }
+.game-board-section { flex-grow: 1; }
+.player-hand-section { height: 40%; }
+
+.world-events-section,
+.game-board-section,
+.player-hand-section {
+    background-color: rgba(42, 36, 31, 0.5);
+    border: 4px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+.card-container-row {
+    flex-grow: 1;
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding: 0.5rem;
+}
+.player-hand-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.equipped-items-container {
+    border-bottom: 2px solid var(--color-border-light);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* --- CARD STYLING --- */
+.card {
+    width: 160px;
+    height: 240px;
+    background-color: var(--color-parchment);
+    border: 4px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 3px 3px 8px rgba(0,0,0,0.4);
+    flex-shrink: 0;
+    position: relative;
+    user-select: none;
+}
+.card-title {
+    font-family: var(--font-title);
+    font-size: 1.1rem;
+    color: var(--color-primary);
+}
+.card-effect {
+    font-size: 0.8rem;
+    line-height: 1.3;
+    margin-top: 0.5rem;
+}
+.card-footer {
+    border-top: 2px solid var(--color-border-light);
+    padding-top: 0.5rem;
+}
+.card-bonus {
+    font-size: 0.8rem;
+    color: var(--color-success);
+    font-weight: bold;
+}
+.card-type {
+    font-size: 0.75rem;
+    color: var(--color-text-dark);
+    opacity: 0.7;
+    font-style: italic;
+    margin-top: 0.25rem;
+}
+.card-actions {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}

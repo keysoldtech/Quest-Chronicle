@@ -52,64 +52,66 @@ const equippedItemsDiv = document.getElementById('equipped-items');
 function logMessage(message, options = {}) {
     const { type = 'system', channel, senderName } = options;
     const p = document.createElement('p');
+    p.classList.add('chat-message');
     if (type === 'system') {
-        p.className = 'text-yellow-400 italic';
-        p.textContent = `[System] ${message}`;
+        p.classList.add('system');
+        p.innerHTML = `<span>[System]</span> ${message}`;
     } else if (type === 'chat') {
         const isSelf = senderName === myPlayerInfo.name;
         const channelTag = channel === 'party' ? '[Party]' : '[Game]';
-        const channelColor = channel === 'party' ? 'text-teal-300' : 'text-sky-300';
-        const senderColor = isSelf ? 'text-white font-bold' : 'text-slate-300';
-        p.innerHTML = `<span class="${channelColor} font-semibold">${channelTag}</span> <span class="${senderColor}">${senderName}:</span> <span class="text-slate-200">${message}</span>`;
+        const channelClass = channel === 'party' ? 'party' : 'game';
+        const senderClass = isSelf ? 'self' : 'other';
+        p.innerHTML = `<span class="channel ${channelClass}">${channelTag}</span> <span class="sender ${senderClass}">${senderName}:</span> <span class="message">${message}</span>`;
     }
     chatLog.appendChild(p);
     chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 function createCardElement(card, actions = {}) {
-    const { isPlayable = false, isEquippable = false } = actions;
+    const { isPlayable = false, isEquippable = false, canPlayDamage = true } = actions;
     const cardDiv = document.createElement('div');
-    let cardClasses = 'w-40 h-60 bg-slate-700 rounded-lg p-3 flex flex-col justify-between border-2 border-slate-600 transition-all duration-200 flex-shrink-0 relative';
-    
-    cardDiv.className = cardClasses;
+    cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
 
     let typeInfo = card.type;
     if (card.category && card.category !== 'General') typeInfo += ` / ${card.category}`;
     else if (card.type === 'World Event' && card.tags) typeInfo = card.tags;
-
+    
     let bonusesHTML = '';
     if (card.bonuses) {
         bonusesHTML = Object.entries(card.bonuses).map(([key, value]) => 
-            `<div class="text-xs text-amber-300">${key.charAt(0).toUpperCase() + key.slice(1)}: ${value > 0 ? '+' : ''}${value}</div>`
+            `<div class="card-bonus">${key.charAt(0).toUpperCase() + key.slice(1)}: ${value > 0 ? '+' : ''}${value}</div>`
         ).join('');
     }
 
     cardDiv.innerHTML = `
-        <div>
-            <h3 class="font-bold text-sm text-sky-200">${card.name}</h3>
-            <p class="text-xs text-slate-300 mt-1">${card.effect || card.outcome || ''}</p>
+        <div class="card-content">
+            <h3 class="card-title">${card.name}</h3>
+            <p class="card-effect">${card.effect || card.outcome || ''}</p>
         </div>
-        <div>
+        <div class="card-footer">
             ${bonusesHTML}
-            <p class="text-xs text-slate-500 italic mt-2">${typeInfo}</p>
+            <p class="card-type">${typeInfo}</p>
         </div>
     `;
     
     const actionContainer = document.createElement('div');
-    actionContainer.className = 'absolute bottom-2 right-2 flex flex-col gap-1';
+    actionContainer.className = 'card-actions';
 
-    if (isPlayable) {
+    // Combat logic check for showing the play button
+    const canPlayThisCard = isPlayable && ((card.category !== 'Damage' && card.category !== 'Attack') || canPlayDamage);
+
+    if (canPlayThisCard) {
         const playBtn = document.createElement('button');
         playBtn.textContent = 'Play';
-        playBtn.className = 'px-2 py-1 text-xs bg-sky-600 hover:bg-sky-500 rounded';
+        playBtn.className = 'fantasy-button-xs fantasy-button-primary';
         playBtn.onclick = () => socket.emit('playCard', { cardId: card.id });
         actionContainer.appendChild(playBtn);
     }
     if (isEquippable) {
         const equipBtn = document.createElement('button');
         equipBtn.textContent = 'Equip';
-        equipBtn.className = 'px-2 py-1 text-xs bg-green-600 hover:bg-green-500 rounded';
+        equipBtn.className = 'fantasy-button-xs fantasy-button-success';
         equipBtn.onclick = () => socket.emit('equipItem', { cardId: card.id });
         actionContainer.appendChild(equipBtn);
     }
@@ -124,18 +126,18 @@ function renderPlayerList(players, gameState) {
         const isCurrentTurn = player.id === currentPlayerId;
         const li = document.createElement('li');
         li.id = `player-${player.id}`;
-        li.className = `p-2 rounded-md transition-colors ${isCurrentTurn ? 'bg-yellow-500/30 border border-yellow-400' : 'bg-slate-700'}`;
+        li.className = `player-list-item ${isCurrentTurn ? 'active' : ''}`;
         
-        const npcTag = player.isNpc ? '<span class="text-xs text-slate-400">[NPC]</span> ' : '';
-        const roleColor = player.role === 'DM' ? 'text-yellow-300' : 'text-sky-300';
-        const classText = player.class ? `<span class="text-xs text-slate-400"> - ${player.class}</span>` : '';
+        const npcTag = player.isNpc ? '<span class="npc-tag">[NPC]</span> ' : '';
+        const roleClass = player.role === 'DM' ? 'dm' : 'explorer';
+        const classText = player.class ? `<span class="player-class"> - ${player.class}</span>` : '';
 
         li.innerHTML = `
-            <div class="flex items-center justify-between">
-                <span class="${isCurrentTurn ? 'font-bold text-yellow-200' : ''}">${npcTag}${player.name}${classText}</span>
-                <span class="text-xs font-semibold ${roleColor} bg-slate-800 px-2 py-1 rounded-full">${player.role}</span>
+            <div class="player-info">
+                <span>${npcTag}${player.name}${classText}</span>
+                <span class="player-role ${roleClass}">${player.role}</span>
             </div>
-            <div class="text-xs text-green-400 mt-1">HP: ${player.stats.currentHp || '?'} / ${player.stats.maxHp || '?'}</div>
+            <div class="player-hp">HP: ${player.stats.currentHp || '?'} / ${player.stats.maxHp || '?'}</div>
         `;
         playerList.appendChild(li);
     });
@@ -149,19 +151,19 @@ function renderGameState(room) {
 
     renderPlayerList(players, gameState);
 
-    // --- Lobby Phase: Class Selection ---
+    // Lobby Phase: Class Selection
     if (gameState.phase === 'lobby' && myPlayerInfo.role !== 'DM') {
         classSelectionDiv.classList.remove('hidden');
-        if (classButtonsDiv.children.length === 0) { // Populate once
+        if (classButtonsDiv.children.length === 0) {
             ['Warrior', 'Mage', 'Rogue', 'Cleric', 'Ranger', 'Barbarian'].forEach(className => {
                 const btn = document.createElement('button');
                 btn.textContent = className;
                 btn.dataset.class = className;
-                btn.className = 'px-2 py-2 bg-slate-600 hover:bg-sky-500 rounded transition-colors text-sm';
+                btn.className = 'fantasy-button';
                 btn.onclick = () => {
                     socket.emit('chooseClass', { classId: className });
-                    document.querySelectorAll('#class-buttons button').forEach(b => b.classList.remove('bg-sky-600'));
-                    btn.classList.add('bg-sky-600');
+                    document.querySelectorAll('#class-buttons button').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
                 };
                 classButtonsDiv.appendChild(btn);
             });
@@ -170,39 +172,50 @@ function renderGameState(room) {
         classSelectionDiv.classList.add('hidden');
     }
 
-    // --- Active Game Phase ---
+    // World Event Setup Phase
+    if (gameState.phase === 'world_event_setup') {
+        turnIndicator.textContent = "Waiting for DM to create a World Event...";
+        endTurnBtn.classList.add('hidden');
+    }
+    
+    // Active Game Phase
     if (gameState.phase === 'active') {
         playerStatsContainer.classList.remove('hidden');
         const { stats } = myPlayerInfo;
         playerStatsDiv.innerHTML = `
-            <span class="text-slate-400">HP:</span> <span class="text-green-400 font-semibold">${stats.currentHp} / ${stats.maxHp}</span>
-            <span class="text-slate-400">Damage Bonus:</span> <span class="font-semibold">${stats.damageBonus > 0 ? '+' : ''}${stats.damageBonus}</span>
-            <span class="text-slate-400">Shield Bonus:</span> <span class="font-semibold">${stats.shieldBonus > 0 ? '+' : ''}${stats.shieldBonus}</span>
-            <span class="text-slate-400">Action Points:</span> <span class="font-semibold">${stats.ap}</span>
+            <span>HP:</span> <span class="stat-value">${stats.currentHp} / ${stats.maxHp}</span>
+            <span>Damage Bonus:</span> <span class="stat-value">${stats.damageBonus > 0 ? '+' : ''}${stats.damageBonus}</span>
+            <span>Shield Bonus:</span> <span class="stat-value">${stats.shieldBonus > 0 ? '+' : ''}${stats.shieldBonus}</span>
+            <span>Action Points:</span> <span class="stat-value">${stats.ap}</span>
         `;
         
         const currentPlayer = players[gameState.turnOrder[gameState.currentPlayerIndex]];
         turnIndicator.textContent = `Current Turn: ${currentPlayer?.name || 'Unknown'}`;
         endTurnBtn.classList.toggle('hidden', currentPlayer?.id !== myId);
         if (currentPlayer?.id === myId) turnIndicator.textContent += " (Your Turn!)";
-        
-        if (myPlayerInfo.role === 'DM') {
-            dmControls.classList.remove('hidden');
-            worldEventBtn.textContent = (gameState.gameMode === 'Beginner') ? 'Start World Event Seq.' : 'Draw World Events';
-            worldEventBtn.disabled = (gameState.gameMode === 'Beginner') && gameState.worldEvents.sequenceActive;
-            worldEventBtn.dataset.action = (gameState.gameMode === 'Beginner') ? 'startWorldEventSequence' : 'drawWorldEvents';
-        } else {
-            dmControls.classList.add('hidden');
-        }
+    }
+    
+    // DM Controls Visibility
+    if (myPlayerInfo.role === 'DM') {
+        dmControls.classList.remove('hidden');
+        worldEventBtn.textContent = (gameState.gameMode === 'Beginner') ? 'Start World Event Seq.' : 'Draw World Events';
+        worldEventBtn.disabled = (gameState.gameMode === 'Beginner') && gameState.worldEvents.sequenceActive;
+        worldEventBtn.dataset.action = (gameState.gameMode === 'Beginner') ? 'startWorldEventSequence' : 'drawWorldEvents';
+    } else {
+        dmControls.classList.add('hidden');
     }
 
-    // --- Render Hand & Equipment ---
+    // Render Hand & Equipment
     playerHandDiv.innerHTML = '';
     equippedItemsDiv.innerHTML = '';
+    const canPlayDamage = gameState.board.monsters.length > 0;
+    const isMyTurn = gameState.turnOrder?.[gameState.currentPlayerIndex] === myId;
+
     if (myPlayerInfo.hand) {
         myPlayerInfo.hand.forEach(card => {
             const isEquippable = card.type === 'Weapon' || card.type === 'Armor';
-            playerHandDiv.appendChild(createCardElement(card, { isPlayable: !isEquippable, isEquippable }));
+            const isPlayable = isMyTurn && !isEquippable;
+            playerHandDiv.appendChild(createCardElement(card, { isPlayable, isEquippable, canPlayDamage }));
         });
     }
     if (myPlayerInfo.equipment) {
@@ -211,7 +224,7 @@ function renderGameState(room) {
         });
     }
     
-    // --- Render Board & World Events ---
+    // Render Board & World Events
     gameBoardDiv.innerHTML = '';
     [...(gameState.board.monsters || []), ...(gameState.board.playedCards || [])].forEach(card => {
         gameBoardDiv.appendChild(createCardElement(card, {}));
@@ -252,10 +265,12 @@ joinRoomBtn.addEventListener('click', () => {
 });
 
 gameModeSelector.addEventListener('change', (e) => {
-    document.querySelectorAll('#game-mode-selector span').forEach(span => span.classList.remove('bg-sky-600', 'text-white', 'bg-slate-600', 'text-slate-300'));
-    document.querySelector('input[name="gameMode"]:checked').nextElementSibling.classList.add('bg-sky-600', 'text-white');
-    document.querySelector('input[name="gameMode"]:not(:checked)').nextElementSibling.classList.add('bg-slate-600', 'text-slate-300');
+    document.querySelectorAll('#game-mode-selector span').forEach(span => span.parentElement.classList.remove('active'));
+    document.querySelector('input[name="gameMode"]:checked').parentElement.classList.add('active');
 });
+// Set initial active state for radio buttons
+document.querySelector('input[name="gameMode"]:checked').parentElement.classList.add('active');
+
 
 // --- Game Event Listeners ---
 chatForm.addEventListener('submit', (e) => { e.preventDefault(); const msg=chatInput.value.trim(); if (msg) { socket.emit('sendMessage', { channel: chatChannel.value, message: msg }); chatInput.value = ''; } });
@@ -317,7 +332,10 @@ socket.on('gameStateUpdate', (room) => {
     renderGameState(room);
 });
 
-socket.on('error', (message) => { alert(`Error: ${message}`); });
+socket.on('actionError', (message) => { 
+    alert(`Action Failed: ${message}`);
+    logMessage(message, { type: 'system' });
+});
 
 
 // --- WebRTC Logic ---
