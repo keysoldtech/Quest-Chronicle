@@ -743,16 +743,25 @@ class GameManager {
                 const eventCard = room.gameState.decks.worldEvent.pop();
                 if (eventCard) {
                     this.playCard(roomId, npcId, eventCard.id, null);
-                    // After the world event is set, it's the first explorer's turn.
-                    room.gameState.currentPlayerIndex = 0;
-                    const firstPlayer = room.players[room.gameState.turnOrder[0]];
-                    if (firstPlayer) {
-                        io.to(roomId).emit('chatMessage', { senderName: 'System', message: `The stage is set. It is now ${firstPlayer.name}'s turn.`, channel: 'game' });
-                    }
                 }
             } else if (room.gameState.board.monsters.length === 0) {
                 let monsterCard = room.gameState.decks.monster.pop();
-                if (monsterCard) this.playCard(roomId, npcId, monsterCard.id, null);
+                if (monsterCard) {
+                    this.playCard(roomId, npcId, monsterCard.id, null);
+                } else {
+                    const dialogue = this.getRandomDialogue('dm', 'environment');
+                    if(dialogue) io.to(roomId).emit('chatMessage', { senderName: npc.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                }
+            }
+
+            // After the DM's turn actions are complete, if combat hasn't started, pass to the first player.
+            if (!room.gameState.combatState.isActive) {
+                room.gameState.currentPlayerIndex = 0;
+                const firstPlayer = room.players[room.gameState.turnOrder[0]];
+                if (firstPlayer) {
+                    const message = `It is now ${firstPlayer.name}'s turn.`;
+                    io.to(roomId).emit('chatMessage', { senderName: 'System', message: message, channel: 'game' });
+                }
             }
         }
         io.to(roomId).emit('gameStateUpdate', room);

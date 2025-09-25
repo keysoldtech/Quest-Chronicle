@@ -251,13 +251,23 @@ function renderGameState(room) {
     
     // --- Active Game & Turn Indicator ---
     if (gameState.phase !== 'lobby' && gameState.phase !== 'advanced_setup_choice') {
-        const turnTakerId = isCombat ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] : 'N/A';
+        let turnTakerId = null;
+        // Determine the current turn taker based on game phase (combat vs. exploration)
+        if (isCombat) {
+            turnTakerId = gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex];
+        } else if (gameState.currentPlayerIndex > -1 && gameState.turnOrder[gameState.currentPlayerIndex]) {
+            // Non-combat turn order is based on the main turnOrder array
+            turnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
+        }
+
         const turnTaker = players[turnTakerId] || gameState.board.monsters.find(m => m.id === turnTakerId);
+        
         if (turnTaker) {
             turnIndicator.textContent = `Current Turn: ${turnTaker.name}`;
             if(isMyTurn) turnIndicator.textContent += " (Your Turn!)";
         } else {
-            turnIndicator.textContent = "Waiting for DM...";
+            // If no turnTaker is identified, it's the DM's turn to act
+            turnIndicator.textContent = "Waiting on DM...";
         }
     }
 
