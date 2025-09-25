@@ -140,6 +140,20 @@
             </div>
         </main>
     </div>
+    
+    <!-- Narrative Input Modal -->
+    <div id="narrative-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="header-font">Describe Your Action</h2>
+            <p id="narrative-prompt">How do you use [Card Name]?</p>
+            <textarea id="narrative-input" class="fantasy-input" rows="3" placeholder="e.g., I chant the arcane words and a bolt of fire erupts from my hands..."></textarea>
+            <div class="modal-actions">
+                <button id="narrative-cancel-btn" class="fantasy-button-secondary">Cancel</button>
+                <button id="narrative-confirm-btn" class="fantasy-button-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Container for remote audio streams -->
     <div id="voice-chat-container"></div>

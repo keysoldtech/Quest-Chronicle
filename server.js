@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+        [array[i], array[j]] = [array[j], array[j], array[i]];
     }
 }
 
@@ -111,6 +111,14 @@ class GameManager {
         return total + modifier;
     }
     
+    getRandomDialogue(category, subcategory) {
+        const phrases = gameData.npcDialogue?.[category]?.[subcategory];
+        if (phrases && phrases.length > 0) {
+            return phrases[Math.floor(Math.random() * phrases.length)];
+        }
+        return '';
+    }
+
     calculatePlayerStats(playerId, room) {
         const player = room.players[playerId];
         if (!player || !player.class) {
@@ -169,22 +177,23 @@ class GameManager {
         return null;
     }
 
-    equipItem(socketId, cardId) {
+    equipItem(socketId, cardId, isSetup = false) {
         const result = this.getPlayer(socketId);
         if (!result) return null;
         const { player, room } = result;
 
-        const cardIndex = player.hand.findIndex(c => c.id === cardId);
-        if (cardIndex === -1) return null;
+        const card = isSetup ? { id: cardId, ...gameData.weaponCards.find(c => c.id === cardId) || gameData.armorCards.find(c => c.id === cardId) } : player.hand.find(c => c.id === cardId);
+        const cardIndex = isSetup ? -1 : player.hand.findIndex(c => c.id === cardId);
+        if (!card) return null;
 
-        const itemToEquip = player.hand[cardIndex];
-        const itemType = itemToEquip.type.toLowerCase();
+        const itemType = card.type.toLowerCase();
 
         if (itemType === 'weapon' || itemType === 'armor') {
-            if (player.equipment[itemType]) {
+            if (player.equipment[itemType] && !isSetup) {
                 player.hand.push(player.equipment[itemType]);
             }
-            player.equipment[itemType] = player.hand.splice(cardIndex, 1)[0];
+            player.equipment[itemType] = card;
+            if(!isSetup) player.hand.splice(cardIndex, 1);
             this.calculatePlayerStats(socketId, room);
             return room;
         }
@@ -283,8 +292,8 @@ class GameManager {
              Object.values(room.players).filter(p => p.role === 'Explorer').forEach(p => {
                 const weapon = room.gameState.decks.weapon.pop();
                 const armor = room.gameState.decks.armor.pop();
-                if(weapon) this.equipItem(p.id, weapon.id, true); // Equip directly
-                if(armor) this.equipItem(p.id, armor.id, true); // Equip directly
+                if(weapon) this.equipItem(p.id, weapon.id, true);
+                if(armor) this.equipItem(p.id, armor.id, true);
                 if(room.gameState.decks.spell.length > 0) p.hand.push(room.gameState.decks.spell.pop());
             });
             this.transitionToWorldEventSetup(room);
@@ -354,7 +363,6 @@ class GameManager {
             return;
         }
 
-        // Process start-of-turn effects (e.g., poison)
         this.processTurnEffects(roomId, currentId, 'start');
 
         combatant.currentAp = combatant.stats?.ap || combatant.ap;
@@ -372,11 +380,9 @@ class GameManager {
         const combatState = room.gameState.combatState;
         if (!combatState.isActive) return;
 
-        // Process end-of-turn effects for the current combatant
         const currentId = combatState.turnOrder[combatState.currentTurnIndex];
         this.processTurnEffects(roomId, currentId, 'end');
 
-        // Check for combat end conditions
         const explorersAlive = Object.values(room.players).some(p => p.role === 'Explorer' && p.stats.currentHp > 0 && p.lifeCount > 0);
         const monstersAlive = room.gameState.board.monsters.length > 0;
         
@@ -406,8 +412,7 @@ class GameManager {
         let attackBonus = attacker.stats?.damageBonus || attacker.attackBonus || 0;
         let rollModifier = 0;
         
-        // Apply modifiers from status effects
-        attacker.statusEffects.forEach(effect => {
+        (attacker.statusEffects || []).forEach(effect => {
             const def = gameData.statusEffectDefinitions[effect.name];
             if (def?.rollModifier) rollModifier += def.rollModifier;
         });
@@ -421,15 +426,15 @@ class GameManager {
             return;
         }
         
-        const totalRoll = roll + attackBonus + rollModifier;
         const requiredRoll = target.stats?.shieldBonus ? (10 + target.stats.shieldBonus) : target.requiredRollToHit;
+        const totalRoll = roll + attackBonus + rollModifier;
 
         if (totalRoll >= requiredRoll || roll === 20) {
             const effect = weaponOrSpell.effect;
             let damageDice = effect?.dice || '1d4';
             let damage = this.rollDice(damageDice);
 
-            if (roll === 20) { // Critical Hit
+            if (roll === 20) { 
                 damage += this.rollDice(damageDice); 
                 message = `${attacker.name} lands a CRITICAL HIT on ${target.name} for ${damage} damage!`;
             } else {
@@ -438,7 +443,6 @@ class GameManager {
 
             this.applyDamage(roomId, targetId, damage);
 
-            // Apply status effect from the attack, if any
             if (effect?.status) {
                 this.applyStatusEffect(roomId, targetId, effect.status, effect.duration);
                 message += ` ${target.name} is now ${effect.status}!`;
@@ -456,6 +460,10 @@ class GameManager {
         if(!target) return;
         
         if (target.role) { // It's a player
+            if (target.isNpc) { // NPC Explorer reaction
+                const dialogue = this.getRandomDialogue('explorer', 'onHit');
+                if (dialogue) io.to(roomId).emit('chatMessage', { senderName: target.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+            }
             const wasDown = target.stats.currentHp <= 0;
             target.stats.currentHp -= damageAmount;
 
@@ -473,6 +481,11 @@ class GameManager {
         } else { // It's a monster
             target.currentHp -= damageAmount;
             if (target.currentHp <= 0) {
+                const dm = Object.values(room.players).find(p => p.role === 'DM');
+                const dialogue = this.getRandomDialogue('dm', 'monsterDefeated');
+                if (dm && dialogue) {
+                    io.to(roomId).emit('chatMessage', { senderName: dm.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                }
                 room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== targetId);
                 room.gameState.combatState.turnOrder = room.gameState.combatState.turnOrder.filter(id => id !== targetId);
                 delete room.gameState.combatState.participants[targetId];
@@ -484,13 +497,13 @@ class GameManager {
     applyHealing(roomId, targetId, healAmount) {
         const room = this.rooms[roomId];
         const target = this.getCombatant(room, targetId);
-        if (!target || !target.role) return; // Can only heal players for now
+        if (!target || !target.role) return; 
 
         target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healAmount);
         io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${target.name} is healed for ${healAmount} HP.`, channel: 'game' });
     }
 
-    handlePlayerAction(roomId, playerId, { action, targetId, cardId, options }) {
+    handlePlayerAction(roomId, playerId, { action, targetId, cardId, options, narrative }) {
         const room = this.rooms[roomId];
         const player = room.players[playerId];
         const combatState = room.gameState.combatState;
@@ -505,6 +518,10 @@ class GameManager {
         if (player.currentAp < apCost) return { error: "Not enough Action Points!" };
         player.currentAp -= apCost;
         
+        if (narrative) {
+            io.to(roomId).emit('chatMessage', { senderName: player.name, message: `"${narrative}"`, channel: 'game', isNarrative: true });
+        }
+
         switch(action) {
             case 'attack':
                 const weapon = player.equipment.weapon;
@@ -515,7 +532,6 @@ class GameManager {
             case 'useItem':
                  if (!card) { player.currentAp += apCost; return { error: "Card not found in hand." }; }
                  this.resolveCardEffect(roomId, playerId, card, targetId);
-                 // Consumable items are removed from hand
                  if (card.type === 'Consumable' || card.type === 'Potion' || card.type === 'Scroll' || card.type === 'Spell') {
                      player.hand = player.hand.filter(c => c.id !== cardId);
                  }
@@ -542,7 +558,9 @@ class GameManager {
 
     resolveCardEffect(roomId, playerId, card, targetId) {
         if (!card.effect) return;
-        const { type, dice, status, duration, target, value } = card.effect;
+        const { type, dice, status, duration, target } = card.effect;
+        const room = this.rooms[roomId];
+        const player = room.players[playerId];
         
         let actualTargetId = targetId;
         if (target === 'self') actualTargetId = playerId;
@@ -552,12 +570,16 @@ class GameManager {
                 this.resolveAttack(roomId, playerId, actualTargetId, card);
                 break;
             case 'heal':
+                if (player.isNpc) {
+                    const dialogue = this.getRandomDialogue('explorer', 'heal');
+                    if(dialogue) io.to(roomId).emit('chatMessage', { senderName: player.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                }
                 const healing = this.rollDice(dice);
                 this.applyHealing(roomId, actualTargetId, healing);
                 break;
             case 'status':
                 this.applyStatusEffect(roomId, actualTargetId, status, duration);
-                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${card.name} inflicts ${status} on ${this.getCombatant(this.rooms[roomId], actualTargetId).name}!`, channel: 'game' });
+                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${card.name} inflicts ${status} on ${this.getCombatant(room, actualTargetId).name}!`, channel: 'game' });
                 break;
         }
     }
@@ -577,10 +599,9 @@ class GameManager {
 
     fullRest(roomId, playerId) {
         const player = this.rooms[roomId].players[playerId];
-        const classData = gameData.classes[player.class];
         player.stats.currentHp = player.stats.maxHp;
         player.healthDice.current = player.healthDice.max;
-        player.statusEffects = player.statusEffects.filter(e => e.duration === 'permanent'); // Clear temporary effects
+        player.statusEffects = player.statusEffects.filter(e => e.duration === 'permanent'); 
         io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} takes a full rest and is fully recovered.`, channel: 'game' });
     }
 
@@ -612,9 +633,7 @@ class GameManager {
     
     applyStatusEffect(roomId, targetId, statusName, duration) {
         const target = this.getCombatant(this.rooms[roomId], targetId);
-        if (!target) return;
-        // Prevent stacking the same effect
-        if (target.statusEffects.some(e => e.name === statusName)) return;
+        if (!target || target.statusEffects.some(e => e.name === statusName)) return;
         target.statusEffects.push({ name: statusName, duration });
     }
     
@@ -623,7 +642,7 @@ class GameManager {
         const combatant = this.getCombatant(room, combatantId);
         if (!combatant) return;
 
-        combatant.statusEffects.forEach(effect => {
+        (combatant.statusEffects || []).forEach(effect => {
             const def = gameData.statusEffectDefinitions[effect.name];
             if (def && def.trigger === phase) {
                 if (def.damage) {
@@ -635,7 +654,7 @@ class GameManager {
         });
 
         if (phase === 'end') {
-            combatant.statusEffects = combatant.statusEffects.map(effect => {
+            combatant.statusEffects = (combatant.statusEffects || []).map(effect => {
                 if (typeof effect.duration === 'number') {
                     effect.duration--;
                 }
@@ -653,7 +672,6 @@ class GameManager {
             if(room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] !== playerId) return;
             this.nextTurn(roomId);
         } else {
-            // Placeholder for non-combat turn progression
             io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${room.players[playerId].name} ended their turn.`, channel: 'game' });
         }
         return room;
@@ -664,14 +682,24 @@ class GameManager {
         const combatState = room.gameState.combatState;
         
         if(combatState.isActive) {
-            const monster = room.gameState.board.monsters.find(m => m.id === npcId);
-            if (!monster) { this.nextTurn(roomId); return; }
+            const combatant = this.getCombatant(room, npcId);
+            if (!combatant) { this.nextTurn(roomId); return; }
 
-            const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
-            if(livingExplorers.length > 0) {
-                livingExplorers.sort((a,b) => a.stats.currentHp - b.stats.currentHp);
-                const target = livingExplorers[0];
-                this.resolveAttack(roomId, npcId, target.id, monster);
+            if(combatant.role === 'Explorer') { // NPC Explorer
+                const livingMonsters = room.gameState.board.monsters;
+                if(livingMonsters.length > 0) {
+                    const target = livingMonsters[Math.floor(Math.random() * livingMonsters.length)];
+                    const dialogue = this.getRandomDialogue('explorer', 'attack');
+                    if(dialogue) io.to(roomId).emit('chatMessage', { senderName: combatant.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                    this.resolveAttack(roomId, npcId, target.id, combatant.equipment.weapon || {effect: { dice: '1d4' }});
+                }
+            } else { // Monster
+                const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
+                if(livingExplorers.length > 0) {
+                    livingExplorers.sort((a,b) => a.stats.currentHp - b.stats.currentHp);
+                    const target = livingExplorers[0];
+                    this.resolveAttack(roomId, npcId, target.id, combatant);
+                }
             }
             this.nextTurn(roomId);
             return;
@@ -679,23 +707,15 @@ class GameManager {
 
         const npc = room.players[npcId];
         if (!room || !npc || !npc.isNpc) return;
-        let message = '';
         if (npc.role === 'DM') {
             if (room.gameState.phase === 'world_event_setup') {
                 const eventCard = room.gameState.decks.worldEvent.pop();
-                if (eventCard) {
-                    this.playCard(roomId, npcId, eventCard.id, null);
-                    message = `The NPC DM begins the story with a world event: ${eventCard.name}!`;
-                }
+                if (eventCard) this.playCard(roomId, npcId, eventCard.id, null);
             } else if (room.gameState.board.monsters.length === 0) {
                 let monsterCard = room.gameState.decks.monster.pop();
-                if (monsterCard) {
-                    this.playCard(roomId, npcId, monsterCard.id, null);
-                    message = `A new challenger appears! The NPC DM summons a ${monsterCard.name}!`;
-                }
+                if (monsterCard) this.playCard(roomId, npcId, monsterCard.id, null);
             }
         }
-        if (message) io.to(room.id).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
         io.to(roomId).emit('gameStateUpdate', room);
     }
     
@@ -705,12 +725,20 @@ class GameManager {
         if (!room || !player) return { error: "Invalid action." };
         
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
-        const card = cardIndex > -1 ? player.hand[cardIndex] : (player.isNpc ? {id: cardId, ...Object.values(gameData).flat().find(c => c.id === cardId)} : null);
+        const allCards = [...gameData.itemCards, ...gameData.spellCards, ...gameData.monsterCards, ...gameData.worldEventCards];
+        const card = cardIndex > -1 ? player.hand[cardIndex] : (player.isNpc ? {id: cardId, ...allCards.find(c => c.id === cardId)} : null);
         if (!card) return { error: "Card not found." };
+        
+        let dialogue = '';
+        if (player.isNpc && player.role === 'DM') {
+            if (card.type === 'Monster') dialogue = this.getRandomDialogue('dm', 'playMonster');
+            else if (card.type === 'World Event') dialogue = this.getRandomDialogue('dm', 'worldEvent');
+            if(dialogue) io.to(roomId).emit('chatMessage', { senderName: player.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+        }
         
         if (card.type === 'Monster') {
             if (cardIndex > -1) player.hand.splice(cardIndex, 1);
-            const monsterData = { ...card, currentHp: card.maxHp, id: `${card.id}-${Math.random()}`, statusEffects: [] }; // Ensure unique ID and add status array
+            const monsterData = { ...card, currentHp: card.maxHp, id: `${card.id}-${Math.random()}`, statusEffects: [] };
             room.gameState.board.monsters.push(monsterData);
             io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} summons a ${monsterData.name}!`, channel: 'game' });
             if (!room.gameState.combatState.isActive) {
@@ -722,7 +750,7 @@ class GameManager {
              if (room.gameState.phase === 'world_event_setup') {
                 room.gameState.phase = 'active';
             }
-        } else { // It's a playable item or spell, handled by handlePlayerAction
+        } else { 
              const action = card.type === 'Spell' ? 'castSpell' : 'useItem';
              return this.handlePlayerAction(roomId, playerId, { action, targetId, cardId });
         }

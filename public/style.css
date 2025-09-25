@@ -123,6 +123,10 @@ body.fantasy-bg {
     border-color: var(--color-special);
     box-shadow: 0 0 10px rgba(166, 124, 0, 0.5);
 }
+#narrative-input {
+    resize: vertical;
+    margin-bottom: 1rem;
+}
 
 .button-group {
     display: flex;
@@ -365,6 +369,15 @@ body.fantasy-bg {
 .chat-message .sender { font-weight: bold; }
 .chat-message .sender.self { color: var(--color-text-dark); }
 .chat-message .sender.other { color: #555; }
+.chat-message.narrative {
+    color: var(--color-text-dark);
+    font-style: italic;
+    background-color: rgba(92, 75, 63, 0.1);
+    padding: 0.25rem;
+    border-left: 3px solid var(--color-border-light);
+    margin: 0.2rem 0;
+}
+
 
 /* --- RIGHT PANEL COMPONENTS --- */
 .world-events-section { height: 25%; }
@@ -499,4 +512,35 @@ body.fantasy-bg {
     border-radius: 8px;
     margin-right: 0.25rem;
 }
-```
+
+/* --- MODAL STYLES --- */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.modal-content {
+    background-color: var(--color-parchment);
+    padding: 2rem;
+    border: 10px solid var(--color-border);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+}
+#narrative-prompt {
+    margin-bottom: 1rem;
+    font-style: italic;
+}
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1rem;
+}

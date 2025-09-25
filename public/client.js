@@ -9,6 +9,7 @@ let currentRoomState = {};
 let localStream;
 const peerConnections = {};
 let selectedTargetId = null; // For combat targeting
+let pendingActionData = null; // For narrative modal
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -48,25 +49,48 @@ const equippedItemsDiv = document.getElementById('equipped-items');
 const advancedCardChoiceDiv = document.getElementById('advanced-card-choice');
 const advancedChoiceButtonsDiv = document.getElementById('advanced-choice-buttons');
 const playerActionsContainer = document.getElementById('player-actions-container');
+const narrativeModal = document.getElementById('narrative-modal');
+const narrativePrompt = document.getElementById('narrative-prompt');
+const narrativeInput = document.getElementById('narrative-input');
+const narrativeCancelBtn = document.getElementById('narrative-cancel-btn');
+const narrativeConfirmBtn = document.getElementById('narrative-confirm-btn');
 
 
 // --- Helper Functions ---
 function logMessage(message, options = {}) {
-    const { type = 'system', channel, senderName } = options;
+    const { type = 'system', channel, senderName, isNarrative = false } = options;
     const p = document.createElement('p');
     p.classList.add('chat-message');
     if (type === 'system') {
         p.classList.add('system');
         p.innerHTML = `<span>[System]</span> ${message}`;
     } else if (type === 'chat') {
-        const isSelf = senderName === myPlayerInfo.name;
-        const channelTag = channel === 'party' ? '[Party]' : '[Game]';
-        const channelClass = channel === 'party' ? 'party' : 'game';
-        const senderClass = isSelf ? 'self' : 'other';
-        p.innerHTML = `<span class="channel ${channelClass}">${channelTag}</span> <span class="sender ${senderClass}">${senderName}:</span> <span class="message">${message}</span>`;
+        if (isNarrative) {
+             p.classList.add('narrative');
+             p.innerHTML = `<strong>${senderName}:</strong> ${message}`;
+        } else {
+            const isSelf = senderName === myPlayerInfo.name;
+            const channelTag = channel === 'party' ? '[Party]' : '[Game]';
+            const channelClass = channel === 'party' ? 'party' : 'game';
+            const senderClass = isSelf ? 'self' : 'other';
+            p.innerHTML = `<span class="channel ${channelClass}">${channelTag}</span> <span class="sender ${senderClass}">${senderName}:</span> <span class="message">${message}</span>`;
+        }
     }
     chatLog.appendChild(p);
     chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function openNarrativeModal(actionData, cardName) {
+    pendingActionData = actionData;
+    narrativePrompt.textContent = `How do you use ${cardName}?`;
+    narrativeInput.value = '';
+    narrativeModal.classList.remove('hidden');
+    narrativeInput.focus();
+}
+
+function closeNarrativeModal() {
+    pendingActionData = null;
+    narrativeModal.classList.add('hidden');
 }
 
 function createCardElement(card, actions = {}) {
@@ -131,8 +155,8 @@ function createCardElement(card, actions = {}) {
                 return;
             }
             const action = card.type === 'Spell' ? 'castSpell' : 'useItem';
-            socket.emit('playerAction', { action, cardId: card.id, targetId: selectedTargetId });
-            selectedTargetId = null; // Reset target after playing
+            openNarrativeModal({ action, cardId: card.id, targetId: selectedTargetId }, card.name);
+            selectedTargetId = null; // Reset target after opening modal
         };
         actionContainer.appendChild(playBtn);
     }
@@ -346,6 +370,15 @@ worldEventBtn.addEventListener('click', () => {
         alert("You don't have a World Event card to play!");
     }
 });
+narrativeConfirmBtn.addEventListener('click', () => {
+    if (pendingActionData) {
+        pendingActionData.narrative = narrativeInput.value.trim();
+        socket.emit('playerAction', pendingActionData);
+        closeNarrativeModal();
+    }
+});
+narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
+
 
 
 // --- Socket.IO Event Handlers ---
@@ -381,7 +414,7 @@ socket.on('playerLeft', ({ room }) => {
     renderGameState({ players: room.remainingPlayers, gameState: currentRoomState.gameState });
 });
 
-socket.on('chatMessage', ({ senderName, message, channel }) => logMessage(message, { type: 'chat', channel, senderName }));
+socket.on('chatMessage', ({ senderName, message, channel, isNarrative }) => logMessage(message, { type: 'chat', channel, senderName, isNarrative }));
 
 socket.on('gameStarted', (room) => {
     console.log("Game has started!", room);
