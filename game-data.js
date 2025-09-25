@@ -1,19 +1,22 @@
-// This file contains a sample of the game data, structured for the server.
-// In a real application, this would be loaded from a database or CSV files.
+// This file contains the game data, structured for the server.
 
-// Simple ID generator for this sample data
 let lastId = 0;
-const nextId = () => {
-    lastId++;
-    return lastId;
+const nextId = () => { lastId++; return lastId.toString(); };
+
+const classes = {
+    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3 },
+    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2 },
+    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2 },
+    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2 },
+    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3 },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3 },
 };
 
 const itemCards = [
     { id: nextId(), name: "Purifying Flask", type: "Consumable", category: "Damage", effect: "Deals 2d6 radiant damage to Undead or Fiends." },
     { id: nextId(), name: "Everbright Stick", type: "Consumable", category: "Utility", effect: "Emits bright light for 1 hour." },
-    { id: nextId(), name: "Vial of Vitality", type: "Potion", category: "Healing", effect: "Restore 2d4 + 2 HP." },
-    { id: nextId(), name: "Sovereign Salve", type: "Potion", category: "Healing", effect: "Restore 1d8 HP." },
-    { id: nextId(), name: "Warding Band", type: "Magical Item", category: "Utility", effect: "Gain +1 Shield Bonus." },
+    { id: nextId(), name: "Vial of Vitality", type: "Potion", category: "Healing", effect: "Restore 2d4 + 2 HP.", bonuses: { heal: 7 } },
+    { id: nextId(), name: "Sovereign Salve", type: "Potion", category: "Healing", effect: "Restore 1d8 HP.", bonuses: { heal: 5 } },
     { id: nextId(), name: "Scroll of Healing Touch", type: "Scroll", category: "Healing", effect: "Cast Healing Touch spell." },
     { id: nextId(), name: "Lockpicks & Shims", type: "Utility", category: "Utility", effect: "Advantage on picking locks." },
 ];
@@ -21,7 +24,7 @@ const itemCards = [
 const spellCards = [
     { id: nextId(), name: "Cinder Shot", type: "Spell", category: "Damage", effect: "Deals 1d10 fire damage." },
     { id: nextId(), name: "Frost Beam", type: "Spell", category: "Damage", effect: "1d8 cold damage and reduces speed." },
-    { id: nextId(), name: "Healing Touch", type: "Spell", category: "Healing", effect: "Heals 1d8 + 5 HP." },
+    { id: nextId(), name: "Healing Touch", type: "Spell", category: "Healing", effect: "Heals 1d8 + 5 HP.", bonuses: { heal: 10 } },
     { id: nextId(), name: "Force Barrier", type: "Spell", category: "Utility", effect: "Increase Shield Points by 5 for 1 round." },
     { id: nextId(), name: "Shockwave", type: "Spell", category: "Damage", effect: "2d8 thunder damage and pushes creatures." },
 ];
@@ -33,8 +36,32 @@ const monsterCards = [
     { id: nextId(), name: "Caustic Sludge", type: "Monster", hp: 24, attack: "+3", damage: "1d8 acid", special: "Armor corrosion." },
 ];
 
+const weaponCards = [
+    { id: nextId(), name: "Axechuck", type: "Weapon", category: "Damage", effect: "1d6 slashing, Thrown (20/60), Returning.", bonuses: { damage: 1 } },
+    { id: nextId(), name: "Balanced Steel", type: "Weapon", category: "Damage", effect: "1d8 slashing, Versatile (1d10).", bonuses: { damage: 2 } },
+    { id: nextId(), name: "Farstrike Bow", type: "Weapon", category: "Damage", effect: "1d8 piercing, Ammunition, Heavy, Two-Handed.", bonuses: { damage: 2 } },
+];
+
+const armorCards = [
+     { id: nextId(), name: "Hide Vest", type: "Armor", category: "Defense", effect: "+2 Shield Bonus, +1 AP Bonus.", bonuses: { shield: 2, ap: 1 } },
+     { id: nextId(), name: "Link Hauberk", type: "Armor", category: "Defense", effect: "+4 Shield Bonus.", bonuses: { shield: 4, ap: 0 } },
+     { id: nextId(), name: "Bastion Shield", type: "Armor", category: "Defense", effect: "+3 Shield Bonus, -1 AP Bonus.", bonuses: { shield: 3, ap: -1 } },
+     { id: nextId(), name: "Warding Band", type: "Armor", category: "Defense", effect: "Gain +1 Shield Bonus.", bonuses: { shield: 1, ap: 0 } },
+];
+
+const worldEventCards = [
+    { id: nextId(), name: "Crimson Orb", type: "World Event", tags: "Celestial, Magical", outcome: "Wisdom Save DC 12 or gain 1 level of exhaustion." },
+    { id: nextId(), name: "Ailment Cleansed", type: "World Event", tags: "Beneficial, Healing", outcome: "You are cured of one condition." },
+    { id: nextId(), name: "Arctic Squall", type: "World Event", tags: "Weather, Hazard", outcome: "Constitution Save DC 12 or gain one level of exhaustion." },
+    { id: nextId(), name: "Unforeseen Encounter", type: "World Event", tags: "Chance, Social", outcome: "Charisma Check DC 15. Success: new ally. Failure: new enemy." },
+];
+
 module.exports = {
+    classes,
     itemCards,
     spellCards,
-    monsterCards
+    monsterCards,
+    weaponCards,
+    armorCards,
+    worldEventCards
 };

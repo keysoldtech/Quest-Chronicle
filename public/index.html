@@ -11,11 +11,25 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="w-full max-w-md p-8 bg-slate-800 rounded-lg shadow-2xl border border-slate-700">
         <h1 class="text-4xl font-bold text-center mb-2 text-sky-300">Quest & Chronicle</h1>
-        <p class="text-center text-slate-400 mb-8">Multiplayer Prototype</p>
+        <p class="text-center text-slate-400 mb-6">Multiplayer Prototype</p>
         
-        <div class="mb-6">
+        <div class="mb-4">
             <label for="playerName" class="block text-sm font-medium text-slate-300 mb-2">Player Name</label>
             <input type="text" id="playerName" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500" placeholder="e.g., Elara the Brave">
+        </div>
+        
+        <div id="game-mode-selector" class="mb-6">
+            <label class="block text-sm font-medium text-slate-300 mb-2">Game Mode</label>
+            <div class="flex gap-4 bg-slate-700 p-1 rounded-md">
+                <label class="flex-1 text-center cursor-pointer">
+                    <input type="radio" name="gameMode" value="Beginner" class="sr-only" checked>
+                    <span class="block w-full px-4 py-2 rounded-md transition-colors bg-sky-600 text-white">Beginner</span>
+                </label>
+                <label class="flex-1 text-center cursor-pointer">
+                    <input type="radio" name="gameMode" value="Advanced" class="sr-only">
+                    <span class="block w-full px-4 py-2 rounded-md transition-colors bg-slate-600 text-slate-300">Advanced</span>
+                </label>
+            </div>
         </div>
 
         <div class="flex flex-col gap-4">
@@ -36,6 +50,11 @@
                  <p class="text-slate-400">You are connected.</p>
             </div>
              <div class="flex items-center gap-4">
+                <div id="dm-controls" class="hidden flex items-center gap-2">
+                     <button id="drawMonsterBtn" class="bg-red-800 hover:bg-red-700 text-white font-bold py-2 px-3 text-sm rounded-lg">Draw Monster</button>
+                     <button id="drawDiscoveryBtn" class="bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-3 text-sm rounded-lg">Draw Discovery</button>
+                     <button id="worldEventBtn" class="bg-purple-700 hover:bg-purple-600 text-white font-bold py-2 px-3 text-sm rounded-lg">Start World Event Seq.</button>
+                </div>
                 <button id="join-voice-btn" class="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-lg">Join Voice Chat</button>
                 <button id="startGameBtn" class="hidden bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold py-2 px-4 rounded-lg">Start Game</button>
                 <div class="text-right">
@@ -46,11 +65,25 @@
         </header>
 
         <main class="flex-grow grid grid-cols-1 lg:grid-cols-4 gap-4 overflow-hidden">
-            <!-- Left Column: Player List & Chat -->
+            <!-- Left Column: Player List, Class Selection, Stats & Chat -->
             <aside class="lg:col-span-1 bg-slate-800/50 rounded-lg border border-slate-700 p-4 flex flex-col gap-4">
                 <div>
                     <h2 class="text-xl font-semibold mb-2 text-slate-300 border-b border-slate-600 pb-2">Players</h2>
                     <ul id="player-list" class="space-y-2 mt-2"></ul>
+                </div>
+                <!-- Class Selection (Lobby) -->
+                <div id="class-selection" class="hidden">
+                    <h2 class="text-xl font-semibold mb-2 text-slate-300 border-b border-slate-600 pb-2">Choose Your Class</h2>
+                    <div id="class-buttons" class="grid grid-cols-2 gap-2 mt-2">
+                        <!-- Class buttons will be generated here -->
+                    </div>
+                </div>
+                 <!-- Player Stats (In-Game) -->
+                <div id="player-stats-container" class="hidden">
+                     <h2 class="text-xl font-semibold mb-2 text-slate-300 border-b border-slate-600 pb-2">Your Stats</h2>
+                     <div id="player-stats" class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm mt-2">
+                         <!-- Stats will be rendered here -->
+                     </div>
                 </div>
                  <div class="flex-grow flex flex-col min-h-0">
                     <h2 class="text-xl font-semibold mb-2 text-slate-300 border-b border-slate-600 pb-2">Chat & Log</h2>
@@ -68,20 +101,27 @@
 
             <!-- Right Column: Game Board & Player Hand -->
             <div class="lg:col-span-3 flex flex-col gap-4 overflow-hidden">
+                <div class="h-1/4 bg-slate-800/30 rounded-lg border border-slate-700 p-4">
+                     <h2 class="text-xl font-semibold mb-2 text-slate-300">World Events</h2>
+                     <div id="world-events-container" class="flex flex-wrap gap-4"></div>
+                </div>
                 <div id="game-board" class="flex-grow bg-slate-800/30 rounded-lg border border-slate-700 p-4">
                     <h2 class="text-xl font-semibold mb-4 text-slate-300">Game Board</h2>
-                    <div id="board-cards" class="flex flex-wrap gap-4">
-                         <!-- Cards on the board will be rendered here -->
-                    </div>
+                    <div id="board-cards" class="flex flex-wrap gap-4"></div>
                 </div>
-                <div class="h-1/3 bg-slate-800/50 rounded-lg border border-slate-700 p-4 flex flex-col">
+                <div class="h-2/5 bg-slate-800/50 rounded-lg border border-slate-700 p-4 flex flex-col">
                     <div class="flex justify-between items-center mb-2">
                         <h2 class="text-xl font-semibold text-slate-300">Your Hand</h2>
                         <button id="endTurnBtn" class="hidden bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-lg">End Turn</button>
                     </div>
-                    <div id="player-hand" class="flex-grow flex items-center gap-4 overflow-x-auto pb-2">
-                        <!-- Player's cards will be rendered here -->
+                     <!-- Equipped Items -->
+                    <div id="equipped-items-container" class="mb-2">
+                        <h3 class="text-sm font-semibold text-slate-400 mb-1">Equipped</h3>
+                        <div id="equipped-items" class="flex items-center gap-2">
+                            <!-- Equipped items will be rendered here -->
+                        </div>
                     </div>
+                    <div id="player-hand" class="flex-grow flex items-center gap-4 overflow-x-auto pb-2 border-t border-slate-700 pt-2"></div>
                 </div>
             </div>
         </main>
@@ -89,7 +129,6 @@
 
     <!-- Container for remote audio streams -->
     <div id="voice-chat-container"></div>
-
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>
