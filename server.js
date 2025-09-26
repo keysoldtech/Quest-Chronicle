@@ -126,16 +126,30 @@ class GameManager {
     
         room.gameState.gameMode = gameMode;
         
-        // Assign roles: one DM, rest Explorers
         const players = Object.values(room.players);
-        const dm = players[Math.floor(Math.random() * players.length)];
-        dm.role = 'DM';
-        players.forEach(p => {
-            if (p.id !== dm.id) p.role = 'Explorer';
-        });
 
-        // Setup turn order (DM first, then explorers)
-        room.gameState.turnOrder = [dm.id, ...players.filter(p => p.id !== dm.id).map(p => p.id)];
+        if (players.length === 1) {
+            // Single Player: The player is an Explorer, create an NPC DM.
+            const player = players[0];
+            player.role = 'Explorer';
+
+            const dmNpc = this.createPlayerObject('npc-dm', 'Dungeon Master');
+            dmNpc.role = 'DM';
+            dmNpc.isNpc = true;
+            room.players[dmNpc.id] = dmNpc;
+            
+            room.gameState.turnOrder = [dmNpc.id, player.id];
+
+        } else {
+            // Multiplayer: Assign one human player as DM.
+            const dm = players[Math.floor(Math.random() * players.length)];
+            dm.role = 'DM';
+            players.forEach(p => {
+                if (p.id !== dm.id) p.role = 'Explorer';
+            });
+            // Setup turn order (DM first, then explorers)
+            room.gameState.turnOrder = [dm.id, ...players.filter(p => p.id !== dm.id && p.role === 'Explorer').map(p => p.id)];
+        }
         
         // Prepare Decks
         const createDeck = (cardArray) => cardArray.map(c => ({...c, id: this.generateUniqueCardId() }));
@@ -272,6 +286,33 @@ class GameManager {
         const room = this.rooms[roomId];
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
         if (!player) return;
+
+        // If it's an automated DM's turn (in single player), take action and pass turn.
+        if (player.isNpc && player.role === 'DM') {
+            // On the first turn, play a monster to start the game
+            if (room.gameState.turnCount === 1) {
+                const monsterCard = room.gameState.decks.monster.pop();
+                if (monsterCard) {
+                    monsterCard.currentHp = monsterCard.maxHp;
+                    room.gameState.board.monsters.push(monsterCard);
+                    this.sendMessageToRoom(room.id, {
+                        channel: 'game',
+                        senderName: 'Dungeon Master',
+                        message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
+                        isNarrative: true
+                    });
+                }
+            }
+            
+            this.emitGameState(roomId); // Show the new state
+            
+            // Pass the turn after a short delay to simulate a real turn
+            setTimeout(() => {
+                room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
+                this.startTurn(roomId);
+            }, 1500);
+            return; // Halt further execution for the NPC turn
+        }
 
         player.stats = this.calculatePlayerStats(player);
         player.currentAp = player.stats.ap;
