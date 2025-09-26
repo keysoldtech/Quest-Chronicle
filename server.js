@@ -745,8 +745,7 @@ class GameManager {
         console.log(`[Game Flow] Executing NPC turn for ${npc.name} (${npc.role || 'Monster'}) in room ${roomId}. Combat: ${combatState.isActive}`);
         
         if (combatState.isActive) {
-            // --- MONSTER AI ---
-            // Monsters are identified by not having a 'role' property.
+            // --- MONSTER AI (Dedicated Block) ---
             if (!npc.role) {
                 console.log(`[NPC AI | Monster] Turn begins for: ${npc.name}.`);
                 const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0 && p.lifeCount > 0);
@@ -755,15 +754,21 @@ class GameManager {
                     const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
                     console.log(`[NPC AI | Monster] ${npc.name} is targeting: ${target.name}.`);
                     
-                    // The resolveAttack function logs the damage outcome internally
                     this.resolveAttack(roomId, npcId, target.id, npc);
                     
                     console.log(`[NPC AI | Monster] Attack action completed.`);
                 } else {
                     console.log(`[NPC AI | Monster] ${npc.name} has no valid targets to attack. Skipping action.`);
                 }
+
+                // FIX: Strictly end the monster's turn within its own logic block.
+                console.log(`[Game Flow] Monster turn for ${npc.name} is complete. Scheduling next turn.`);
+                setTimeout(() => {
+                    console.log(`[Game Flow] Calling nextTurn() for room ${roomId} after monster turn.`);
+                    this.nextTurn(roomId);
+                }, 1500);
             } 
-            // --- NPC EXPLORER AI ---
+            // --- NPC EXPLORER AI (Dedicated Block) ---
             else if (npc.role === 'Explorer') {
                 const isInjured = npc.stats.currentHp / npc.stats.maxHp < 0.5;
                 const healingCard = npc.hand.find(c => c.effect?.type === 'heal');
@@ -784,15 +789,15 @@ class GameManager {
                         this.resolveAttack(roomId, npcId, target.id, npc.equipment.weapon || { effect: { dice: '1d4' } });
                     }
                 }
+                
+                // End the explorer's turn within its own logic block for robustness.
+                console.log(`[Game Flow] NPC Explorer turn for ${npc.name} is complete. Scheduling next turn.`);
+                setTimeout(() => {
+                    console.log(`[Game Flow] Calling nextTurn() for room ${roomId} after explorer turn.`);
+                    this.nextTurn(roomId);
+                }, 1500);
             }
-            
-            // This is the crucial part: the turn always ends after an NPC action.
-            console.log(`[Game Flow] NPC action for ${npc.name} is complete. Scheduling next turn.`);
-            setTimeout(() => {
-                console.log(`[Game Flow] Calling nextTurn() for room ${roomId}.`);
-                this.nextTurn(roomId);
-            }, 1500);
-            return;
+            return; // Return after handling combat turn
         }
 
         // --- NON-COMBAT LOGIC ---
