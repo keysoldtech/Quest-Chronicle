@@ -323,19 +323,43 @@ class GameManager {
 
     handleNpcExplorerTurn(room, player) {
         setTimeout(() => {
-            // Simple AI: if there's a monster, attack it.
+            let actionTaken = false;
+    
+            // Action Priority 1: Attack
             const target = room.gameState.board.monsters[0];
             const weapon = player.equipment.weapon;
-    
             if (target && weapon && player.currentAp >= (weapon.apCost || 1)) {
                 const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
                 this.handleAttack(room, player, {
                     targetId: target.id,
                     narrative: narrative
                 });
+                actionTaken = true;
+            } 
+            // Action Priority 2: Guard if low on health
+            else if (player.stats.currentHp < player.stats.maxHp / 2 && player.currentAp >= gameData.actionCosts.guard) {
+                player.currentAp -= gameData.actionCosts.guard;
+                const guardBonus = player.equipment.armor?.guardBonus || 2;
+                player.stats.shieldHp += guardBonus;
+                this.sendMessageToRoom(room.id, { 
+                    channel: 'game', 
+                    type: 'system', 
+                    message: `${player.name} is wounded and takes a defensive stance, gaining ${guardBonus} Shield HP.` 
+                });
+                this.emitGameState(room.id);
+                actionTaken = true;
             }
     
-            // End the NPC's turn by advancing the turn order and starting the next turn
+            // If no action was taken, log a message
+            if (!actionTaken) {
+                 this.sendMessageToRoom(room.id, { 
+                    channel: 'game', 
+                    type: 'system', 
+                    message: `${player.name} considers their options and prepares for the next move.` 
+                });
+            }
+    
+            // Always end the turn after the action (or inaction)
             room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             if (room.gameState.currentPlayerIndex === 0) {
                 room.gameState.turnCount++;
@@ -352,21 +376,48 @@ class GameManager {
 
         // If it's an automated DM's turn (in single player), take action and pass turn.
         if (player.isNpc && player.role === 'DM') {
-            // On the first turn, play a monster to start the game
-            if (room.gameState.turnCount === 1) {
-                const monsterCard = room.gameState.decks.monster.pop();
-                if (monsterCard) {
-                    monsterCard.currentHp = monsterCard.maxHp;
-                    room.gameState.board.monsters.push(monsterCard);
-                    this.sendMessageToRoom(room.id, {
-                        channel: 'game',
-                        senderName: 'Dungeon Master',
-                        message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
-                        isNarrative: true
-                    });
+            // If there are no monsters on the board, the DM acts.
+            if (room.gameState.board.monsters.length === 0) {
+                // 25% chance to play a World Event if the deck has cards.
+                const roll = Math.random();
+                if (roll < 0.25 && room.gameState.decks.worldEvent.length > 0) {
+                    const worldEventCard = room.gameState.decks.worldEvent.pop();
+                    if (worldEventCard) {
+                        room.gameState.worldEvents.currentEvent = worldEventCard;
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game', senderName: 'Dungeon Master',
+                            message: gameData.npcDialogue.dm.worldEvent[Math.floor(Math.random() * gameData.npcDialogue.dm.worldEvent.length)],
+                            isNarrative: true
+                        });
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game', type: 'system',
+                            message: `A new World Event is active: ${worldEventCard.name}.`
+                        });
+                    }
+                } else {
+                    // Otherwise, play a monster.
+                    const monsterCard = room.gameState.decks.monster.pop();
+                    if (monsterCard) {
+                        monsterCard.currentHp = monsterCard.maxHp;
+                        room.gameState.board.monsters.push(monsterCard);
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game',
+                            senderName: 'Dungeon Master',
+                            message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
+                            isNarrative: true
+                        });
+                    }
                 }
+            } else {
+                 // If there are monsters, the DM's "action" is just narrative for now.
+                this.sendMessageToRoom(room.id, {
+                    channel: 'game',
+                    senderName: 'Dungeon Master',
+                    message: `The monsters continue their assault!`,
+                    isNarrative: true
+                });
             }
-            
+
             this.emitGameState(roomId); // Show the new state
             
             // Pass the turn after a short delay to simulate a real turn
@@ -441,18 +492,20 @@ class GameManager {
                     const oldHp = player.stats.currentHp;
                     player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
                     const actualHeal = player.stats.currentHp - oldHp;
-                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Brief Respite, healing for ${actualHeal} HP.` });
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Brief Respite, rolling 1d8 for ${healAmount} and healing for ${actualHeal} HP.` });
                 }
                 break;
             case 'fullRest':
                  if (player.currentAp >= gameData.actionCosts.fullRest && player.healthDice.current >= 2) {
                     player.currentAp -= gameData.actionCosts.fullRest;
                     player.healthDice.current -= 2;
-                    const healAmount = (Math.floor(Math.random() * 8) + 1) + (Math.floor(Math.random() * 8) + 1); // 2d8
+                    const healRoll1 = Math.floor(Math.random() * 8) + 1;
+                    const healRoll2 = Math.floor(Math.random() * 8) + 1;
+                    const healAmount = healRoll1 + healRoll2;
                     const oldHp = player.stats.currentHp;
                     player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
                     const actualHeal = player.stats.currentHp - oldHp;
-                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Full Rest, healing for ${actualHeal} HP.` });
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Full Rest, rolling 2d8 for ${healAmount} (${healRoll1}+${healRoll2}) and healing for ${actualHeal} HP.` });
                 }
                 break;
         }
