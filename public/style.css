@@ -132,6 +132,7 @@ body {
         "character-panel hand-panel hand-panel";
     gap: 1rem;
     padding: 1rem;
+    padding-bottom: 5rem; /* Creates a safe area for the fixed action bar */
 }
 .game-header { grid-area: header; display: flex; justify-content: space-between; align-items: center; background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem 1rem; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
 .players-panel { grid-area: players-panel; }

@@ -321,6 +321,30 @@ class GameManager {
         this.startTurn(roomId);
     }
 
+    handleNpcExplorerTurn(room, player) {
+        setTimeout(() => {
+            // Simple AI: if there's a monster, attack it.
+            const target = room.gameState.board.monsters[0];
+            const weapon = player.equipment.weapon;
+    
+            if (target && weapon && player.currentAp >= (weapon.apCost || 1)) {
+                const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
+                this.handleAttack(room, player, {
+                    targetId: target.id,
+                    narrative: narrative
+                });
+            }
+    
+            // End the NPC's turn by advancing the turn order and starting the next turn
+            room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
+            if (room.gameState.currentPlayerIndex === 0) {
+                room.gameState.turnCount++;
+            }
+            this.startTurn(room.id);
+    
+        }, 2000); // 2-second delay to simulate "thinking"
+    }
+
     startTurn(roomId) {
         const room = this.rooms[roomId];
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
@@ -350,7 +374,16 @@ class GameManager {
                 room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
                 this.startTurn(roomId);
             }, 1500);
-            return; // Halt further execution for the NPC turn
+            return; // Halt further execution for the NPC DM turn
+        }
+
+        // Handle NPC Explorer turn
+        if (player.isNpc && player.role === 'Explorer') {
+            player.stats = this.calculatePlayerStats(player);
+            player.currentAp = player.stats.ap;
+            this.emitGameState(roomId); // Update state before AI acts
+            this.handleNpcExplorerTurn(room, player);
+            return; // AI will handle ending the turn
         }
 
         player.stats = this.calculatePlayerStats(player);
@@ -432,7 +465,12 @@ class GameManager {
 
         player.currentAp -= (weapon.apCost || 1);
         
-        this.sendMessage({ id: player.id }, { channel: 'game', message: data.narrative, isNarrative: true });
+        this.sendMessageToRoom(room.id, {
+            senderName: player.name,
+            channel: 'game',
+            message: data.narrative,
+            isNarrative: true
+        });
 
         const d20Roll = Math.floor(Math.random() * 20) + 1;
         const totalRollToHit = d20Roll + player.stats.damageBonus; // Assuming damageBonus also applies to hit
