@@ -11,6 +11,7 @@ const peerConnections = {};
 let selectedTargetId = null; // For combat targeting
 let pendingActionData = null; // For narrative modal
 let isMyTurnPreviously = false; // For "Your Turn" popup
+let tempSelectedClassId = null; // For temporary class selection in lobby
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -56,6 +57,7 @@ const dmPlayMonsterBtn = document.getElementById('dm-play-monster-btn');
 const worldEventsContainer = document.getElementById('world-events-container');
 const classSelectionDiv = document.getElementById('class-selection');
 const classCardsContainer = document.getElementById('class-cards-container');
+const confirmClassBtn = document.getElementById('confirm-class-btn');
 const playerStatsContainer = document.getElementById('player-stats-container');
 const playerStatsDiv = document.getElementById('player-stats');
 const equippedItemsDiv = document.getElementById('equipped-items');
@@ -239,6 +241,7 @@ function renderGameState(room) {
     const isCombat = gameState.combatState.isActive;
     const isHost = myId === hostId;
     const isDM = myPlayerInfo.role === 'DM';
+    const hasConfirmedClass = !!myPlayerInfo.class;
     
     // Determine whose turn it is
     let currentTurnTakerId;
@@ -253,7 +256,7 @@ function renderGameState(room) {
     const isNpcDmTurn = currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc;
     const canPlayTargetedCard = gameState.board.monsters.length > 0;
     
-    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || !!myPlayerInfo.class);
+    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || hasConfirmedClass);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
     playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
     endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isHost && isNpcDmTurn)));
@@ -282,13 +285,13 @@ function renderGameState(room) {
     }
 
     // --- Lobby Phase ---
-    if (gameState.phase === 'lobby') {
+    if (gameState.phase === 'lobby' && !hasConfirmedClass) {
         if (classCardsContainer.children.length === 0) {
+            // Create cards once, without onclick handlers
             for (const [classId, data] of Object.entries(classData)) {
                 const card = document.createElement('div');
                 card.className = 'class-card';
                 card.dataset.classId = classId;
-                
                 card.innerHTML = `
                     <h3 class="class-card-title">${classId}</h3>
                     <p class="class-card-desc">${data.description}</p>
@@ -304,12 +307,27 @@ function renderGameState(room) {
                         ${data.abilities.map(ability => `<li>${ability}</li>`).join('')}
                     </ul>
                 `;
-
-                card.onclick = () => { socket.emit('chooseClass', { classId }); };
                 classCardsContainer.appendChild(card);
             }
         }
-        document.querySelectorAll('.class-card').forEach(c => c.classList.toggle('selected', c.dataset.classId === myPlayerInfo.class));
+
+        // Add/update event listeners and selection state every render
+        document.querySelectorAll('.class-card').forEach(card => {
+            const classId = card.dataset.classId;
+            card.classList.toggle('selected', classId === tempSelectedClassId);
+            card.onclick = () => {
+                tempSelectedClassId = classId;
+                renderGameState(currentRoomState); // Re-render to update selection visual
+            };
+        });
+
+        confirmClassBtn.classList.toggle('hidden', !tempSelectedClassId);
+        confirmClassBtn.disabled = false;
+        confirmClassBtn.textContent = 'Confirm Class';
+        
+    } else if (gameState.phase !== 'lobby' || hasConfirmedClass) {
+        // Reset temp selection when not in class selection phase
+        tempSelectedClassId = null;
     }
     
     // --- Advanced Setup Phase ---
@@ -455,6 +473,14 @@ endTurnBtn.addEventListener('click', () => {
 
 dmPlayMonsterBtn.addEventListener('click', () => {
     socket.emit('dmAction', { action: 'playMonster' });
+});
+
+confirmClassBtn.addEventListener('click', () => {
+    if (tempSelectedClassId) {
+        socket.emit('chooseClass', { classId: tempSelectedClassId });
+        confirmClassBtn.disabled = true;
+        confirmClassBtn.textContent = 'Confirmed!';
+    }
 });
 
 chatForm.addEventListener('submit', (e) => {
