@@ -232,7 +232,7 @@ body {
 .player-hand-header { display: flex; justify-content: space-between; align-items: center; }
 .player-hand-header .panel-header { margin-bottom: 0.5rem; border: none; }
 .player-turn-controls { display: flex; align-items: center; gap: 0.75rem; }
-.equipped-items-container { border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 0.75rem; }
+.equipped-items-container { border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 0.75rem; transition: box-shadow 0.3s ease; }
 
 /* CARD STYLING */
 .card {
@@ -330,3 +330,16 @@ body {
 .event-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 1001; text-align: center; color: var(--color-text-primary); }
 #event-card-selection .card { background: linear-gradient(145deg, var(--color-secondary), #555); cursor: pointer; }
 #event-card-selection .card:before { content: '?'; font-family: var(--font-title); font-size: 5rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,0.5); }
+
+.pulse-highlight {
+    animation: pulse-border 1.5s ease-out;
+    border-radius: 8px;
+}
+@keyframes pulse-border {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+    }
+    100% {
+        box-shadow: 0 0 0 12px rgba(255, 193, 7, 0);
+    }
+}

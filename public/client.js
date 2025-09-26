@@ -511,24 +511,31 @@ function renderGameState(room) {
     } else {
         [partyLootContainer, mobilePartyLootContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>');
     }
+    
     gameState.board.monsters.forEach(monster => {
-        const cardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
-        cardEl.addEventListener('click', () => {
-            if (isMyTurn) {
-                selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
-                pendingAbilityConfirmation = null;
-                renderGameState(currentRoomState);
+        const clickHandler = () => {
+            if (!isMyTurn) return;
+
+            // Step 2 of combat: only allow targeting after a weapon is selected.
+            if (!selectedWeaponId) {
+                logMessage("Select your equipped weapon before choosing a target.", { channel: 'game' });
+                const equippedContainer = get('equipped-items-container');
+                equippedContainer.classList.add('pulse-highlight');
+                setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
+                return;
             }
-        });
-        [gameBoardDiv, mobileBoardCards].forEach(c => c.appendChild(cardEl.cloneNode(true)));
-        // Re-add listener to the clone for mobile
-        mobileBoardCards.lastChild.addEventListener('click', () => {
-             if (isMyTurn) {
-                selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
-                pendingAbilityConfirmation = null;
-                renderGameState(currentRoomState);
-            }
-        });
+            
+            selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
+            renderGameState(currentRoomState);
+        };
+
+        const desktopCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
+        desktopCardEl.addEventListener('click', clickHandler);
+        gameBoardDiv.appendChild(desktopCardEl);
+        
+        const mobileCardEl = desktopCardEl.cloneNode(true);
+        mobileCardEl.addEventListener('click', clickHandler);
+        mobileBoardCards.appendChild(mobileCardEl);
     });
     
     // AP Modal Logic
@@ -647,12 +654,23 @@ chatForm.addEventListener('submit', (e) => {
 }));
 endTurnConfirmBtn.addEventListener('click', () => { socket.emit('endTurn'); endTurnConfirmModal.classList.add('hidden'); });
 endTurnCancelBtn.addEventListener('click', () => endTurnConfirmModal.classList.add('hidden'));
+
 narrativeConfirmBtn.addEventListener('click', () => {
     if (pendingActionData) {
         socket.emit('playerAction', { ...pendingActionData, narrative: narrativeInput.value });
+        
+        // After sending an attack, immediately reset the selections to prevent resubmission
+        // and to clean up the UI before the server responds.
+        if (pendingActionData.action === 'attack') {
+            selectedWeaponId = null;
+            selectedTargetId = null;
+        }
+
         closeNarrativeModal();
+        // A gameStateUpdate from the server will trigger the final re-render.
     }
 });
+
 narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
 rollDiceBtn.onclick = () => {
     socket.emit('rollForEvent');
