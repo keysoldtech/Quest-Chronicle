@@ -338,14 +338,14 @@ function renderGameState(room) {
     [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.classList.toggle('hidden', gameState.phase === 'lobby'));
     
     // Desktop specific
-    classSelectionDiv.classList.toggle('hidden', hasConfirmedClass || isDM);
+    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || isDM);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
     playerStatsContainer.classList.toggle('hidden', !hasConfirmedClass || isDM);
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
     
     // Mobile specific
-    mobileClassSelection.classList.toggle('hidden', hasConfirmedClass || isDM);
+    mobileClassSelection.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || isDM);
     mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || isDM);
     mobilePlayerEquipment.classList.toggle('hidden', !hasConfirmedClass || isDM);
 
@@ -395,7 +395,7 @@ function renderGameState(room) {
     }
 
     // --- Class Selection ---
-    if (!hasConfirmedClass && !isDM) {
+    if (gameState.phase === 'class_selection' && !hasConfirmedClass && !isDM) {
         [classCardsContainer, mobileClassCardsContainer].forEach(container => {
              if (container.children.length === 0) {
                 for (const [classId, data] of Object.entries(classData)) {
