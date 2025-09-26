@@ -29,7 +29,7 @@ const classData = {
     Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, description: "Wielder of arcane energies.", abilities: ["Arcane Recovery", "Spell Mastery"] },
     Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, description: "A peerless hunter and scout.", abilities: ["Favored Enemy", "Hunter's Mark"] },
     Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
-    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
 };
 
 
@@ -107,6 +107,8 @@ const mobileChatInput = get('mobile-chat-input');
 const mobileActionBar = get('mobile-action-bar');
 const mobileActionAttackBtn = get('mobile-action-attack-btn');
 const mobileActionGuardBtn = get('mobile-action-guard-btn');
+const mobileActionBriefRespiteBtn = get('mobile-action-brief-respite-btn');
+const mobileActionFullRestBtn = get('mobile-action-full-rest-btn');
 const mobileActionEndTurnBtn = get('mobile-action-end-turn-btn');
 
 
@@ -394,6 +396,8 @@ function renderGameState(room) {
         // Mobile
         mobileActionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
         mobileActionGuardBtn.disabled = myPlayerInfo.currentAp < 1;
+        mobileActionBriefRespiteBtn.disabled = myPlayerInfo.currentAp < 1 || myPlayerInfo.healthDice.current < 1;
+        mobileActionFullRestBtn.disabled = myPlayerInfo.currentAp < 2 || myPlayerInfo.healthDice.current < 2;
     }
 
 
@@ -633,6 +637,9 @@ joinRoomBtn.addEventListener('click', () => {
 [actionGuardBtn, mobileActionGuardBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
 actionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
 actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
+mobileActionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
+mobileActionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
+
 
 dmPlayMonsterBtn.addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
 

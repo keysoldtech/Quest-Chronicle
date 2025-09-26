@@ -15,7 +15,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.80</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.81</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -54,7 +54,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v3.80</p>
+                     <p class="build-number-font">v3.81</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -230,8 +230,10 @@
             </main>
 
             <div id="mobile-action-bar" class="fixed-action-bar hidden">
-                <button id="mobile-action-attack-btn" class="btn btn-danger hidden">Confirm Attack</button>
+                <button id="mobile-action-attack-btn" class="btn btn-danger btn-sm hidden">Attack</button>
                 <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard</button>
+                <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite</button>
+                <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest</button>
                 <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
             </div>
 
