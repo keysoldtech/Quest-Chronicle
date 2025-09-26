@@ -15,7 +15,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.66</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.68</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -54,13 +54,13 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v3.66</p>
+                     <p class="build-number-font">v3.68</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
                          <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                     </div>
-                    <button id="chat-toggle-btn" class="btn btn-sm btn-secondary">Chat</button>
+                    <button id="chat-toggle-btn" class="btn btn-sm btn-secondary">Chat & Log</button>
                     <button id="join-voice-btn" class="btn btn-sm btn-success">Join Voice</button>
                     <button id="leave-game-btn" class="btn btn-sm btn-danger hidden">Leave Game</button>
                     <button id="startGameBtn" class="btn btn-primary hidden">Start Game</button>
@@ -104,6 +104,7 @@
                 <div class="tab-buttons">
                     <button class="tab-btn active" data-tab="world-events-tab">World Events</button>
                     <button class="tab-btn" data-tab="party-loot-tab">Party Discoveries</button>
+                    <button class="tab-btn" data-tab="game-log-tab">Game Log</button>
                 </div>
                 <div id="world-events-tab" class="tab-content active">
                     <div id="world-events-container" class="card-container-row"></div>
@@ -111,17 +112,15 @@
                 <div id="party-loot-tab" class="tab-content">
                     <div id="party-loot-container" class="card-container-row"></div>
                 </div>
+                 <div id="game-log-tab" class="tab-content">
+                    <div id="game-log-content" class="log-content-area"></div>
+                </div>
             </aside>
 
             <footer class="hand-panel panel">
                  <div class="player-hand-header">
                     <h2 class="panel-header">Your Hand & Equipment</h2>
-                    <div class="player-turn-controls">
-                        <div id="player-actions-container" class="player-actions-container hidden"></div>
-                        <button id="confirm-attack-btn" class="btn btn-primary hidden">Confirm Attack</button>
-                        <button id="endTurnBtn" class="btn btn-primary hidden">End Turn</button>
-                    </div>
-                </div>
+                 </div>
                 <div class="hand-and-equipped-container">
                     <div id="equipped-items-container" class="equipped-items-container">
                         <h3 class="sub-header-font">Equipped</h3>
@@ -130,6 +129,14 @@
                     <div id="player-hand" class="player-hand-container card-container-row"></div>
                 </div>
             </footer>
+
+            <div id="fixed-action-bar" class="fixed-action-bar hidden">
+                <button id="action-attack-btn" class="btn btn-danger hidden">Confirm Attack</button>
+                <button id="action-guard-btn" class="btn btn-secondary">Guard (1 AP)</button>
+                <button id="action-brief-respite-btn" class="btn btn-secondary">Brief Respite (1 AP)</button>
+                <button id="action-full-rest-btn" class="btn btn-secondary">Full Rest (2 AP)</button>
+                <button id="action-end-turn-btn" class="btn btn-primary">End Turn</button>
+            </div>
         </div>
 
         <!-- ================= MOBILE LAYOUT ================= -->

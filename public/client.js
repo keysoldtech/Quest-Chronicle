@@ -51,7 +51,6 @@ const gameArea = get('game-area');
 const turnIndicator = get('turn-indicator');
 const turnCounter = get('turn-counter');
 const startGameBtn = get('startGameBtn');
-const endTurnBtn = get('endTurnBtn');
 const joinVoiceBtn = get('join-voice-btn');
 const dmControls = get('dm-controls');
 const dmPlayMonsterBtn = get('dm-play-monster-btn');
@@ -65,14 +64,21 @@ const playerStatsDiv = get('player-stats');
 const equippedItemsDiv = get('equipped-items');
 const advancedCardChoiceDiv = get('advanced-card-choice');
 const advancedChoiceButtonsDiv = get('advanced-choice-buttons');
-const playerActionsContainer = get('player-actions-container');
-const confirmAttackBtn = get('confirm-attack-btn');
 const playerHandDiv = get('player-hand');
 const gameBoardDiv = get('board-cards');
 const worldEventsContainer = get('world-events-container');
 const partyLootContainer = get('party-loot-container');
+const gameLogContent = get('game-log-content');
 const leaveGameBtn = get('leave-game-btn');
 const desktopTabButtons = document.querySelectorAll('.game-area-desktop .tab-btn');
+
+// Desktop Action Bar
+const fixedActionBar = get('fixed-action-bar');
+const actionAttackBtn = get('action-attack-btn');
+const actionGuardBtn = get('action-guard-btn');
+const actionBriefRespiteBtn = get('action-brief-respite-btn');
+const actionFullRestBtn = get('action-full-rest-btn');
+const actionEndTurnBtn = get('action-end-turn-btn');
 
 // Mobile
 const mobileTurnIndicator = get('mobile-turn-indicator');
@@ -159,6 +165,15 @@ function logMessage(message, options = {}) {
             p.innerHTML = `<span class="channel ${channelClass}">${channelTag}</span> <span class="sender ${senderClass}">${senderName}:</span> <span class="message">${message}</span>`;
         }
     }
+    
+    // Append to dedicated game log if it's a game/system/narrative message
+    if (type === 'system' || channel === 'game' || isNarrative) {
+        if (gameLogContent) {
+            gameLogContent.appendChild(p.cloneNode(true));
+            gameLogContent.scrollTop = gameLogContent.scrollHeight;
+        }
+    }
+
     chatLog.appendChild(p);
     chatLog.scrollTop = chatLog.scrollHeight;
 }
@@ -312,13 +327,14 @@ function renderGameState(room) {
     // --- Phase-specific UI rendering ---
     const isHost = myId === hostId;
     const isDM = myPlayerInfo.role === 'DM';
+    const isExplorer = myPlayerInfo.role === 'Explorer';
     const hasConfirmedClass = !!myPlayerInfo.class;
     const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
     const isMyTurn = currentTurnTakerId === myId;
     
     // --- Universal UI state ---
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby'));
-    [endTurnBtn, mobileEndTurnBtn].forEach(btn => btn.classList.toggle('hidden', !isMyTurn));
+    mobileEndTurnBtn.classList.toggle('hidden', !isMyTurn);
     [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.classList.toggle('hidden', gameState.phase === 'lobby'));
     
     // Desktop specific
@@ -326,7 +342,6 @@ function renderGameState(room) {
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
     playerStatsContainer.classList.toggle('hidden', !hasConfirmedClass || isDM);
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
-    playerActionsContainer.classList.toggle('hidden', !isMyTurn);
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
     
     // Mobile specific
@@ -334,10 +349,20 @@ function renderGameState(room) {
     mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || isDM);
     mobilePlayerEquipment.classList.toggle('hidden', !hasConfirmedClass || isDM);
 
+    // --- Action Bar ---
+    fixedActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer));
+    if(isMyTurn && isExplorer) {
+        const weapon = myPlayerInfo.equipment.weapon;
+        const hasEnoughApForAttack = weapon && myPlayerInfo.currentAp >= (weapon.apCost || 1);
+        actionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
+        
+        actionGuardBtn.disabled = myPlayerInfo.currentAp < 1;
+        actionBriefRespiteBtn.disabled = myPlayerInfo.currentAp < 1 || myPlayerInfo.healthDice.current < 1;
+        actionFullRestBtn.disabled = myPlayerInfo.currentAp < 2 || myPlayerInfo.healthDice.current < 2;
+    }
+    
+    mobileConfirmAttackBtn.classList.toggle('hidden', !(isMyTurn && selectedTargetId && selectedWeaponId));
 
-    const weapon = myPlayerInfo.equipment.weapon;
-    const hasEnoughAp = weapon && myPlayerInfo.currentAp >= (weapon.apCost || 1);
-    [confirmAttackBtn, mobileConfirmAttackBtn].forEach(btn => btn.classList.toggle('hidden', !(isMyTurn && selectedTargetId && selectedWeaponId && hasEnoughAp)));
 
     if (isMyTurn && !isMyTurnPreviously) {
         apModalShownThisTurn = false;
@@ -377,7 +402,17 @@ function renderGameState(room) {
                     const card = document.createElement('div');
                     card.className = 'class-card';
                     card.dataset.classId = classId;
-                    card.innerHTML = `<h3 class="class-card-title">${classId}</h3><p class="class-card-desc">${data.description}</p>`;
+                    card.innerHTML = `
+                        <h3 class="class-card-title">${classId}</h3>
+                        <p class="class-card-desc">${data.description}</p>
+                        <div class="class-card-stats">
+                            <span>HP:</span><span>${data.baseHp}</span>
+                            <span>AP:</span><span>${data.baseAp}</span>
+                            <span>DMG Bonus:</span><span>+${data.baseDamageBonus}</span>
+                            <span>SHIELD Bonus:</span><span>+${data.baseShieldBonus}</span>
+                            <span>Health Dice:</span><span>${data.healthDice}</span>
+                        </div>
+                    `;
                     container.appendChild(card);
                 }
             }
@@ -495,10 +530,6 @@ function renderGameState(room) {
             }
         });
     });
-
-    // --- Render Player Actions (Desktop Only for now) ---
-    playerActionsContainer.innerHTML = ''; 
-    if (isMyTurn) { /* ... same logic as before ... */ }
     
     // AP Modal Logic
     if (isMyTurn && myPlayerInfo.currentAp === 0 && !apModalShownThisTurn) {
@@ -542,15 +573,30 @@ joinRoomBtn.addEventListener('click', () => {
 }));
 
 // Turn Controls
-[endTurnBtn, mobileEndTurnBtn].forEach(btn => btn.addEventListener('click', () => endTurnConfirmModal.classList.remove('hidden')));
-[confirmAttackBtn, mobileConfirmAttackBtn].forEach(btn => btn.addEventListener('click', () => {
+actionEndTurnBtn.addEventListener('click', () => endTurnConfirmModal.classList.remove('hidden'));
+mobileEndTurnBtn.addEventListener('click', () => endTurnConfirmModal.classList.remove('hidden'));
+
+actionAttackBtn.addEventListener('click', () => {
     if (isMyTurnPreviously && selectedWeaponId && selectedTargetId) {
         const weapon = myPlayerInfo.equipment.weapon;
         if (weapon && weapon.id === selectedWeaponId) {
             openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
         }
     }
-}));
+});
+mobileConfirmAttackBtn.addEventListener('click', () => {
+    if (isMyTurnPreviously && selectedWeaponId && selectedTargetId) {
+        const weapon = myPlayerInfo.equipment.weapon;
+        if (weapon && weapon.id === selectedWeaponId) {
+            openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
+        }
+    }
+});
+
+actionGuardBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' }));
+actionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
+actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
+
 dmPlayMonsterBtn.addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
 
 // Navigation (Mobile & Desktop)
@@ -575,10 +621,8 @@ desktopTabButtons.forEach(button => {
 
         document.querySelectorAll('.game-area-desktop .tab-content').forEach(content => {
             content.classList.remove('active');
-            if (content.id === button.dataset.tab) {
-                content.classList.add('active');
-            }
         });
+        get(button.dataset.tab).classList.add('active');
     });
 });
 
