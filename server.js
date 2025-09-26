@@ -465,6 +465,8 @@ class GameManager {
                 message = `${attacker.name} hits ${target.name} for ${damage} damage.`;
             }
 
+            // FIX: Add server-side log for damage dealt
+            console.log(`[Combat] ${attacker.name} deals ${damage} damage to ${target.name}.`);
             this.applyDamage(roomId, targetId, damage);
 
             if (effect?.status) {
@@ -765,11 +767,16 @@ class GameManager {
                     }
                 }
             } else { // Monster AI
-                const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
+                // FIX: Implement Monster AI turn logic to prevent game from getting stuck.
+                console.log(`[NPC AI] Monster turn for: ${npc.name}`);
+                const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0 && p.lifeCount > 0);
+
                 if (livingExplorers.length > 0) {
-                    livingExplorers.sort((a, b) => a.stats.currentHp - b.stats.currentHp);
-                    const target = livingExplorers[0];
+                    const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
+                    console.log(`[NPC AI] ${npc.name} is targeting random player: ${target.name}`);
                     this.resolveAttack(roomId, npcId, target.id, npc);
+                } else {
+                    console.log(`[NPC AI] ${npc.name} has no valid targets to attack.`);
                 }
             }
             setTimeout(() => this.nextTurn(roomId), 1500);
