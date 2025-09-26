@@ -469,27 +469,22 @@ class GameManager {
     endTurn(socketId) {
         const room = this.getRoomBySocketId(socketId);
         if (!room) return;
-    
-        const isCombat = room.gameState.combatState.isActive;
-        const currentTurnTakerId = isCombat 
-            ? room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] 
-            : room.gameState.turnOrder[room.gameState.currentPlayerIndex];
-        
+
+        // Simplified: always use the main turn order. Combat turn order is not in use.
+        const currentTurnTakerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
         const currentTurnTaker = room.players[currentTurnTakerId];
-    
+
         // Allow the host to end the NPC DM's turn if it gets stuck
         if (currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc && socketId === room.hostId) {
             this.startNextTurn(room.id);
             return;
         }
-    
+
         if (socketId !== currentTurnTakerId) {
             console.log(`[GameManager] Action blocked: Not ${socketId}'s turn.`);
             return;
         }
-    
-        // The combat system is not fully implemented and its logic was causing a bug.
-        // Unify turn progression to always call startNextTurn.
+
         this.startNextTurn(room.id);
     }
     

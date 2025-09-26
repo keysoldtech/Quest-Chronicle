@@ -201,7 +201,7 @@ function createCardElement(card, actions = {}) {
 }
 
 function renderPlayerList(players, gameState) {
-    const currentPlayerId = gameState.combatState.isActive ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] : (gameState.turnOrder[gameState.currentPlayerIndex] || null);
+    const currentPlayerId = gameState.turnOrder[gameState.currentPlayerIndex] || null;
     playerList.innerHTML = ''; 
     Object.values(players).forEach(player => {
         const isCurrentTurn = player.id === currentPlayerId;
@@ -238,19 +238,12 @@ function renderGameState(room) {
     renderPlayerList(players, gameState);
     
     // --- Phase-specific UI rendering ---
-    const isCombat = gameState.combatState.isActive;
     const isHost = myId === hostId;
     const isDM = myPlayerInfo.role === 'DM';
     const hasConfirmedClass = !!myPlayerInfo.class;
     
     // Determine whose turn it is
-    let currentTurnTakerId;
-    if (isCombat && gameState.combatState.currentTurnIndex > -1) {
-        currentTurnTakerId = gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex];
-    } else if (!isCombat && gameState.currentPlayerIndex > -1) {
-        currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
-    }
-    
+    const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
     const currentTurnTaker = players[currentTurnTakerId];
     const isMyTurn = currentTurnTakerId === myId;
     const isNpcDmTurn = currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc;
@@ -347,7 +340,7 @@ function renderGameState(room) {
     // --- Active Game & Turn Indicator ---
     turnCounter.textContent = gameState.turnCount;
     if (gameState.phase !== 'lobby' && gameState.phase !== 'advanced_setup_choice') {
-        const turnTaker = players[currentTurnTakerId] || gameState.board.monsters.find(m => m.id === currentTurnTakerId);
+        const turnTaker = players[currentTurnTakerId];
         
         if (turnTaker) {
             if (turnTaker.role === 'DM') {
