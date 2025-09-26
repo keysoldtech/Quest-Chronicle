@@ -325,6 +325,7 @@ class GameManager {
         }
         
         for (let i = 0; i < 5; i++) {
+            if (room.gameState.decks.worldEvent.length > 0) room.players[dmId].hand.push(room.gameState.decks.worldEvent.pop());
             if (room.gameState.decks.monster.length > 0) room.players[dmId].hand.push(room.gameState.decks.monster.pop());
         }
 
@@ -385,7 +386,7 @@ class GameManager {
         io.to(roomId).emit('chatMessage', { senderName: 'System', message: `It's ${combatant.name}'s turn!`, channel: 'game' });
         io.to(roomId).emit('gameStateUpdate', room);
 
-        if (combatant.isNpc || combatant.statusEffects.some(e => e.name === 'Stunned')) {
+        if (combatant.isNpc || (combatant.role && combatant.role !== 'Explorer') || combatant.statusEffects.some(e => e.name === 'Stunned')) {
             setTimeout(() => this.executeNpcTurn(roomId, currentId), 2000);
         }
     }
@@ -415,6 +416,14 @@ class GameManager {
         room.gameState.combatState.isActive = false;
         const message = explorersWon ? "The monsters have been defeated! You are victorious!" : "The party has fallen. The darkness prevails.";
         io.to(roomId).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
+        
+        // After combat, it's the DM's turn to set the scene or start a new fight
+        room.gameState.currentPlayerIndex = -1; 
+        const dm = Object.values(room.players).find(p => p.role === 'DM');
+        if (dm && dm.isNpc) {
+            setTimeout(() => this.executeNpcTurn(room.id, dm.id), 1500);
+        }
+        
         io.to(roomId).emit('gameStateUpdate', room);
     }
 
@@ -726,27 +735,24 @@ class GameManager {
     executeNpcTurn(roomId, npcId) {
         const room = this.rooms[roomId];
         if (!room) return;
-        const npc = room.players[npcId];
-        if (!npc || !npc.isNpc) return;
+        const npc = this.getCombatant(room, npcId);
+        if (!npc || !(npc.isNpc || npc.role !== 'Explorer')) return;
 
         const combatState = room.gameState.combatState;
 
         // FIX: Add logging for NPC turn execution
-        console.log(`[Game Flow] Executing NPC turn for ${npc.name} (${npc.role}) in room ${roomId}. Combat: ${combatState.isActive}`);
+        console.log(`[Game Flow] Executing NPC turn for ${npc.name} (${npc.role || 'Monster'}) in room ${roomId}. Combat: ${combatState.isActive}`);
         
         if (combatState.isActive) {
-            const combatant = this.getCombatant(room, npcId);
-            if (!combatant) { this.nextTurn(roomId); return; }
-
-            if (combatant.role === 'Explorer') { // NPC Explorer AI
-                const isInjured = combatant.stats.currentHp / combatant.stats.maxHp < 0.5;
-                const healingCard = combatant.hand.find(c => c.effect?.type === 'heal');
+            if (npc.role === 'Explorer') { // NPC Explorer AI
+                const isInjured = npc.stats.currentHp / npc.stats.maxHp < 0.5;
+                const healingCard = npc.hand.find(c => c.effect?.type === 'heal');
 
                 if (isInjured && healingCard) {
                     const dialogue = this.getRandomDialogue('explorer', 'heal');
-                    if (dialogue) io.to(roomId).emit('chatMessage', { senderName: combatant.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                    if (dialogue) io.to(roomId).emit('chatMessage', { senderName: npc.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
                     this.resolveCardEffect(roomId, npcId, healingCard, npcId);
-                    combatant.hand = combatant.hand.filter(c => c.id !== healingCard.id);
+                    npc.hand = npc.hand.filter(c => c.id !== healingCard.id);
                     io.to(roomId).emit('gameStateUpdate', room);
                 } else {
                     const livingMonsters = [...room.gameState.board.monsters];
@@ -754,8 +760,8 @@ class GameManager {
                         livingMonsters.sort((a, b) => a.currentHp - b.currentHp);
                         const target = livingMonsters[0];
                         const dialogue = this.getRandomDialogue('explorer', 'attack');
-                        if (dialogue) io.to(roomId).emit('chatMessage', { senderName: combatant.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
-                        this.resolveAttack(roomId, npcId, target.id, combatant.equipment.weapon || { effect: { dice: '1d4' } });
+                        if (dialogue) io.to(roomId).emit('chatMessage', { senderName: npc.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                        this.resolveAttack(roomId, npcId, target.id, npc.equipment.weapon || { effect: { dice: '1d4' } });
                     }
                 }
             } else { // Monster AI
@@ -763,7 +769,7 @@ class GameManager {
                 if (livingExplorers.length > 0) {
                     livingExplorers.sort((a, b) => a.stats.currentHp - b.stats.currentHp);
                     const target = livingExplorers[0];
-                    this.resolveAttack(roomId, npcId, target.id, combatant);
+                    this.resolveAttack(roomId, npcId, target.id, npc);
                 }
             }
             setTimeout(() => this.nextTurn(roomId), 1500);
@@ -783,23 +789,61 @@ class GameManager {
         }
 
         if (npc.role === 'DM') {
-            if (room.gameState.phase === 'world_event_setup') {
-                const monsterCard = room.gameState.decks.monster.pop();
-                if (monsterCard) {
-                    this.playCard(roomId, npcId, monsterCard.id, null);
-                }
-                room.gameState.phase = 'active';
-            } else if (room.gameState.board.monsters.length === 0) {
-                let monsterCard = room.gameState.decks.monster.pop();
-                if (monsterCard) {
-                    this.playCard(roomId, npcId, monsterCard.id, null);
+            // FIX: Overhaul DM AI to be more proactive and ensure game progression.
+            console.log(`[NPC AI] Executing DM turn. Phase: ${room.gameState.phase}, Monsters on Board: ${room.gameState.board.monsters.length}`);
+            console.log(`[NPC AI] DM Hand:`, npc.hand.map(c => c.name).join(', '));
+
+            const monsterInHand = npc.hand.find(c => c.type === 'Monster');
+            const worldEventInHand = npc.hand.find(c => c.type === 'World Event');
+
+            const isFirstTurn = room.gameState.phase === 'world_event_setup';
+            const needsToPlayMonster = isFirstTurn || room.gameState.board.monsters.length === 0;
+
+            if (needsToPlayMonster) {
+                console.log('[NPC AI] DM needs to play a monster to start/continue combat.');
+                if (monsterInHand) {
+                    console.log(`[NPC AI] DM is playing monster from hand: ${monsterInHand.name}`);
+                    this.playCard(roomId, npcId, monsterInHand.id, null);
                 } else {
+                    console.log('[NPC AI] DM has no monster in hand. Drawing from deck...');
+                    const drawnMonster = room.gameState.decks.monster.pop();
+                    if (drawnMonster) {
+                        console.log(`[NPC AI] DM drew and is playing: ${drawnMonster.name}`);
+                        this.playCard(roomId, npcId, drawnMonster.id, null);
+                    } else {
+                        console.log('[NPC AI] DM ERROR: Monster deck is empty! Cannot start combat.');
+                        const dialogue = this.getRandomDialogue('dm', 'environment');
+                        io.to(roomId).emit('chatMessage', { senderName: npc.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                    }
+                }
+                if (isFirstTurn) {
+                    room.gameState.phase = 'active';
+                }
+            } else {
+                console.log('[NPC AI] DM is in active phase. Deciding action...');
+                const possibleActions = [];
+                if (monsterInHand) possibleActions.push('play_monster');
+                if (worldEventInHand) possibleActions.push('play_world_event');
+
+                if (possibleActions.length > 0) {
+                    const chosenAction = possibleActions[Math.floor(Math.random() * possibleActions.length)];
+                    
+                    if (chosenAction === 'play_monster') {
+                        console.log(`[NPC AI] DM chose to play another monster: ${monsterInHand.name}`);
+                        this.playCard(roomId, npcId, monsterInHand.id, null);
+                    } else if (chosenAction === 'play_world_event') {
+                        console.log(`[NPC AI] DM chose to play a world event: ${worldEventInHand.name}`);
+                        this.playCard(roomId, npcId, worldEventInHand.id, null);
+                    }
+                } else {
+                    console.log('[NPC AI] DM has no monster or world event cards to play. Delivering narrative.');
                     const dialogue = this.getRandomDialogue('dm', 'environment');
-                    if(dialogue) io.to(roomId).emit('chatMessage', { senderName: npc.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
+                    io.to(roomId).emit('chatMessage', { senderName: npc.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
                 }
             }
 
             if (!room.gameState.combatState.isActive) {
+                console.log('[NPC AI] DM turn complete, passing to first player.');
                 room.gameState.currentPlayerIndex = 0;
                 const firstPlayerId = room.gameState.turnOrder[0];
                 const firstPlayer = room.players[firstPlayerId];
@@ -812,9 +856,10 @@ class GameManager {
                         setTimeout(() => this.executeNpcTurn(roomId, firstPlayer.id), 1500);
                     }
                 }
+                 io.to(roomId).emit('gameStateUpdate', room);
             }
+            return;
         }
-        io.to(roomId).emit('gameStateUpdate', room);
     }
     
     playCard(roomId, playerId, cardId, targetId) {
