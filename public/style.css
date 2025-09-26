@@ -379,6 +379,24 @@ body.fantasy-bg {
     margin: 0.2rem 0;
 }
 
+.chat-message .damage-value {
+    color: var(--color-danger);
+    font-weight: bold;
+}
+.chat-message .heal-value {
+    color: var(--color-success);
+    font-weight: bold;
+}
+.chat-message .status-effect-log {
+    color: var(--color-special);
+    font-weight: bold;
+    font-style: italic;
+}
+.chat-message .stat-bonus {
+    color: var(--color-secondary);
+    font-weight: bold;
+}
+
 
 /* --- RIGHT PANEL COMPONENTS --- */
 /* FIX: Removed fixed percentage heights for a flexible layout */

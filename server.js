@@ -460,9 +460,9 @@ class GameManager {
 
             if (roll === 20) { 
                 damage += this.rollDice(damageDice); 
-                message = `${attacker.name} lands a CRITICAL HIT on ${target.name} for ${damage} damage!`;
+                message = `${attacker.name} lands a CRITICAL HIT on ${target.name} for <span class="damage-value">${damage}</span> damage!`;
             } else {
-                message = `${attacker.name} hits ${target.name} for ${damage} damage.`;
+                message = `${attacker.name}'s attack hits ${target.name} for <span class="damage-value">${damage}</span> damage.`;
             }
 
             // FIX: Add server-side log for damage dealt
@@ -471,7 +471,7 @@ class GameManager {
 
             if (effect?.status) {
                 this.applyStatusEffect(roomId, targetId, effect.status, effect.duration);
-                message += ` ${target.name} is now ${effect.status}!`;
+                message += ` ${target.name} is now <span class="status-effect-log">${effect.status}</span>!`;
             }
 
         } else {
@@ -523,10 +523,11 @@ class GameManager {
     applyHealing(roomId, targetId, healAmount) {
         const room = this.rooms[roomId];
         const target = this.getCombatant(room, targetId);
-        if (!target || !target.role) return; 
+        if (!target || !target.role) return 0;
 
+        const oldHp = target.stats.currentHp;
         target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healAmount);
-        io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${target.name} is healed for ${healAmount} HP.`, channel: 'game' });
+        return target.stats.currentHp - oldHp;
     }
 
     handlePlayerAction(roomId, playerId, { action, targetId, cardId, options, narrative }) {
@@ -602,11 +603,12 @@ class GameManager {
                     if(dialogue) io.to(roomId).emit('chatMessage', { senderName: player.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
                 }
                 const healing = this.rollDice(dice);
-                this.applyHealing(roomId, actualTargetId, healing);
+                const actualHeal = this.applyHealing(roomId, actualTargetId, healing);
+                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${card.name} heals ${this.getCombatant(room, actualTargetId).name} for <span class="heal-value">${actualHeal}</span> HP.`, channel: 'game' });
                 break;
             case 'status':
                 this.applyStatusEffect(roomId, actualTargetId, status, duration);
-                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${card.name} inflicts ${status} on ${this.getCombatant(room, actualTargetId).name}!`, channel: 'game' });
+                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${card.name} inflicts <span class="status-effect-log">${status}</span> on ${this.getCombatant(room, actualTargetId).name}!`, channel: 'game' });
                 break;
         }
     }
@@ -617,8 +619,8 @@ class GameManager {
         if (player.healthDice.current > 0) {
             player.healthDice.current--;
             const recovery = this.rollDice('1d6');
-            this.applyHealing(roomId, playerId, recovery);
-            io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} takes a brief respite, recovering ${recovery} HP.`, channel: 'game' });
+            const actualRecovery = this.applyHealing(roomId, playerId, recovery);
+            io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} takes a brief respite, recovering <span class="heal-value">${actualRecovery}</span> HP.`, channel: 'game' });
         } else {
             io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} has no Health Dice remaining.`, channel: 'game' });
         }
@@ -675,7 +677,7 @@ class GameManager {
                 if (def.damage) {
                     const damage = this.rollDice(def.damage);
                     this.applyDamage(roomId, combatantId, damage);
-                    io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${combatant.name} takes ${damage} damage from ${effect.name}.`, channel: 'game' });
+                    io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${combatant.name} takes <span class="damage-value">${damage}</span> damage from ${effect.name}.`, channel: 'game' });
                 }
             }
         });
@@ -770,6 +772,14 @@ class GameManager {
             } 
             // --- NPC EXPLORER AI (Dedicated Block) ---
             else if (npc.role === 'Explorer') {
+                // FIX: If there are no monsters on the board, the NPC should immediately end its turn.
+                if (room.gameState.board.monsters.length === 0) {
+                    console.log(`[NPC AI] Explorer ${npc.name} sees no monsters. Ending turn.`);
+                    io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${npc.name} sees no more threats and stands ready.`, channel: 'game' });
+                    setTimeout(() => this.nextTurn(roomId), 1500);
+                    return;
+                }
+                
                 const isInjured = npc.stats.currentHp / npc.stats.maxHp < 0.5;
                 const healingCard = npc.hand.find(c => c.effect?.type === 'heal');
 
@@ -965,7 +975,22 @@ io.on('connection', (socket) => {
             io.to(updatedRoom.id).emit('gameStateUpdate', updatedRoom);
             const player = updatedRoom.players[socket.id];
             const card = player.equipment.weapon?.id === cardId ? player.equipment.weapon : player.equipment.armor;
-            io.to(updatedRoom.id).emit('chatMessage', { senderName: 'System', message: `${player.name} equipped ${card.name}.`, channel: 'game' });
+            
+            let effectMessage = `${player.name} equipped ${card.name}.`;
+            if (card.effect?.bonuses) {
+                const bonusStrings = Object.entries(card.effect.bonuses)
+                    .map(([key, value]) => {
+                        if (value === 0) return null;
+                        const statName = key === 'ap' ? 'AP' : (key === 'shield' ? 'Shield Bonus' : 'Damage Bonus');
+                        return `<span class="stat-bonus">${value > 0 ? '+' : ''}${value} ${statName}</span>`;
+                    })
+                    .filter(Boolean);
+                if (bonusStrings.length > 0) {
+                    effectMessage += ` (${bonusStrings.join(', ')})`;
+                }
+            }
+            
+            io.to(updatedRoom.id).emit('chatMessage', { senderName: 'System', message: effectMessage, channel: 'game' });
         }
     });
 
