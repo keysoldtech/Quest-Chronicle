@@ -529,11 +529,13 @@ function renderGameState(room) {
             renderGameState(currentRoomState);
         };
 
+        // Create and setup desktop card
         const desktopCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
         desktopCardEl.addEventListener('click', clickHandler);
         gameBoardDiv.appendChild(desktopCardEl);
         
-        const mobileCardEl = desktopCardEl.cloneNode(true);
+        // Create and setup mobile card separately to avoid cloneNode issues
+        const mobileCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
         mobileCardEl.addEventListener('click', clickHandler);
         mobileBoardCards.appendChild(mobileCardEl);
     });
