@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+        [array[i], array[j]] = [array[j], array[j]];
     }
 }
 
@@ -302,33 +302,37 @@ class GameManager {
         room.gameState.currentPlayerIndex = -1; // Will be incremented to 0 by startNextTurn
         console.log(`[GameManager] Room ${room.id} - Turn order established: ${room.gameState.turnOrder.join(', ')}`);
         
-        const allCards = [
-            ...gameData.itemCards,
-            ...gameData.spellCards,
-            ...gameData.weaponCards,
-            ...gameData.armorCards,
-        ];
-        
         if (gameMode === 'Beginner') {
-            Object.values(room.players).forEach(player => {
-                if (player.role === 'Explorer' && !player.isNpc) {
-                    const classSpecificDeck = allCards.filter(card => {
-                        if (!card.class || card.class === 'Any') return true;
-                        if (Array.isArray(card.class)) return card.class.includes(player.class);
-                        return card.class === player.class;
-                    });
+            // --- BEGINNER MODE: Grant starting equipment to all explorers ---
+            console.log(`[GameManager] Room ${room.id} - Beginner Mode: Assigning starting equipment.`);
+            const equipableCards = [...gameData.weaponCards, ...gameData.armorCards];
+            shuffle(equipableCards);
+        
+            const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+        
+            explorers.forEach(player => {
+                if (equipableCards.length > 0) {
+                    const cardToEquip = { ...equipableCards.pop(), id: this.generateUniqueCardId() };
+                    const itemType = cardToEquip.type.toLowerCase(); // 'weapon' or 'armor'
+        
+                    // Equip the item directly
+                    player.equipment[itemType] = cardToEquip;
                     
-                    if (classSpecificDeck.length > 0) {
-                        shuffle(classSpecificDeck);
-                        const cardToDraw = classSpecificDeck.pop();
-                        player.hand.push({ ...cardToDraw, id: this.generateUniqueCardId() });
-                    }
+                    // Important: Recalculate stats after equipping
+                    this.calculatePlayerStats(player.id, room);
+                    
+                    this.broadcastToRoom(room.id, 'chatMessage', { 
+                        senderName: 'Game Master', 
+                        message: `${player.name} finds some starting gear: a ${cardToEquip.name}!`, 
+                        channel: 'game' 
+                    });
                 }
             });
+
             room.gameState.phase = 'active';
             this.broadcastToRoom(room.id, 'gameStarted', room);
             console.log(`[GameManager] Room ${room.id} - Game started. Beginning first turn.`);
-            setTimeout(() => this.startNextTurn(room.id), 500); // Start first turn after a short delay
+            setTimeout(() => this.startNextTurn(room.id), 500);
         } else if (gameMode === 'Advanced') {
             room.gameState.phase = 'advanced_setup_choice';
             this.broadcastToRoom(room.id, 'gameStarted', room);
@@ -441,28 +445,57 @@ class GameManager {
         const npc = room.players[npcId];
         if (!room || !npc) return;
     
-        // Decision Making
-        const hasWeapon = npc.equipment.weapon;
         const monstersExist = room.gameState.board.monsters.length > 0;
+        const hasWeapon = npc.equipment.weapon;
     
-        // Priority 1: Attack if possible
+        // --- PRIORITY 1: ATTACK ---
         if (hasWeapon && monstersExist) {
             const target = room.gameState.board.monsters[0]; // Simple AI: attack the first monster
             const narrative = this.getRandomDialogue('explorer', 'attack');
-            
             this.broadcastToRoom(roomId, 'chatMessage', { senderName: npc.name, message: narrative, channel: 'game', isNarrative: true });
             
-            // Wait a moment after the narrative before resolving the attack
             setTimeout(() => {
                 this.resolveAttack(roomId, npc, target, hasWeapon);
-                // End turn after the attack animation and message have time to be seen
-                setTimeout(() => this.startNextTurn(roomId), 4000);
+                setTimeout(() => this.startNextTurn(roomId), 4000); // Wait for animations/messages
             }, 1500);
-            return;
+            return; // Action taken, end function
+        }
+        
+        // --- PRIORITY 2: HEAL ---
+        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+        const woundedAllies = explorers.filter(p => p.stats.currentHp < (p.stats.maxHp / 2));
+        
+        if (woundedAllies.length > 0) {
+            // Find a healing card in the NPC's hand
+            const healingCardIndex = npc.hand.findIndex(card => card.effect && card.effect.type === 'heal');
+            
+            if (healingCardIndex !== -1) {
+                const healingCard = npc.hand[healingCardIndex];
+                // Find the most wounded ally
+                woundedAllies.sort((a, b) => (a.stats.currentHp / a.stats.maxHp) - (b.stats.currentHp / b.stats.maxHp));
+                const target = woundedAllies[0];
+                
+                const healthGained = this.rollDice(healingCard.effect.dice);
+                target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healthGained);
+                npc.hand.splice(healingCardIndex, 1); // Remove card from hand
+                
+                const narrative = this.getRandomDialogue('explorer', 'heal');
+                this.broadcastToRoom(roomId, 'chatMessage', { senderName: npc.name, message: narrative, channel: 'game', isNarrative: true });
+                this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `${npc.name} uses ${healingCard.name} on ${target.name}, restoring ${healthGained} HP.`, channel: 'game' });
+                
+                this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+                setTimeout(() => this.startNextTurn(roomId), 2000);
+                return; // Action taken, end function
+            }
         }
     
-        // Default action: If no other action is taken, just end the turn
-        this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `${npc.name} stands ready, assessing the situation.`, channel: 'game' });
+        // --- PRIORITY 3: DEFAULT (GUARD) ---
+        if (npc.currentAp >= gameData.actionCosts.guard) {
+            this.handlePlayerAbility(npc.id, 'guard');
+        } else {
+            this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `${npc.name} stands ready, assessing the situation.`, channel: 'game' });
+        }
+    
         setTimeout(() => this.startNextTurn(roomId), 2000);
     }
     
@@ -593,7 +626,9 @@ class GameManager {
 
         const actionCost = gameData.actionCosts[action] || 1; // Default cost to 1 if not specified
         if (player.currentAp < actionCost) {
-            io.to(socketId).emit('actionError', "Not enough AP to perform this action.");
+            if (!player.isNpc) { // Don't send errors to NPCs
+                io.to(socketId).emit('actionError', "Not enough AP to perform this action.");
+            }
             return;
         }
         
