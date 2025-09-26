@@ -14,7 +14,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.53</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.57</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -50,7 +50,7 @@
             <div>
                  <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                  <p>Turn: <span id="turn-counter">0</span></p>
-                 <p class="build-number-font">v3.53</p>
+                 <p class="build-number-font">v3.57</p>
             </div>
              <div class="header-controls">
                 <div id="dm-controls" class="dm-controls hidden">
@@ -113,19 +113,21 @@
 
             <!-- Right Column: Game Board & Player Hand -->
             <div class="right-panel">
-                <div class="world-events-section">
-                     <h2 class="header-font">World Events</h2>
-                     <div id="world-events-container" class="card-container-row"></div>
-                </div>
-                <div class="party-loot-section">
-                    <h2 class="header-font">Party Discoveries</h2>
-                    <div id="party-loot-container" class="card-container-row">
-                        <!-- Loot cards will be rendered here -->
+                <div class="upper-board-area">
+                    <div class="world-events-section">
+                         <h2 class="header-font">World Events</h2>
+                         <div id="world-events-container" class="card-container-row"></div>
                     </div>
-                </div>
-                <div id="game-board" class="game-board-section">
-                    <h2 class="header-font">Game Board</h2>
-                    <div id="board-cards" class="card-container-row"></div>
+                    <div class="party-loot-section">
+                        <h2 class="header-font">Party Discoveries</h2>
+                        <div id="party-loot-container" class="card-container-row">
+                            <!-- Loot cards will be rendered here -->
+                        </div>
+                    </div>
+                    <div id="game-board" class="game-board-section">
+                        <h2 class="header-font">Game Board</h2>
+                        <div id="board-cards" class="card-container-row"></div>
+                    </div>
                 </div>
                 <div class="player-hand-section">
                     <div class="player-hand-header">

@@ -66,6 +66,7 @@ class GameManager {
                 board: { monsters: [] },
                 lootPool: [],
                 worldEvents: { currentEvent: null, pendingSaves: [], resolved: false },
+                activeWorldEventEffects: [],
                 monstersDefeatedSinceLastTurn: false,
                 advancedChoicesPending: [],
                 combatState: {
@@ -481,7 +482,6 @@ class GameManager {
         
         const eventCard = room.gameState.decks.worldEvent.pop();
         room.gameState.worldEvents.currentEvent = eventCard;
-        room.gameState.worldEvents.resolved = false;
         
         this.broadcastToRoom(roomId, 'chatMessage', { 
             senderName: 'Game Master', 
@@ -489,19 +489,16 @@ class GameManager {
             channel: 'game' 
         });
 
-        // Trigger saves for all explorers if the event requires it
-        if (eventCard.dc && eventCard.save) {
-            const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
-            room.gameState.worldEvents.pendingSaves = explorers.map(e => e.id); // Populate list of players who need to save
-
-            explorers.forEach(explorer => {
-                if (explorer.isNpc) {
-                    // Resolve NPC save immediately but it will call checkAndProceed...
-                    this.resolveNpcWorldEventSave(roomId, explorer.id, eventCard);
-                } else {
-                    // Flag human players to make a save
-                    explorer.pendingWorldEventSave = { dc: eventCard.dc, save: eventCard.save, eventName: eventCard.name };
-                }
+        if (eventCard.effect) {
+            const effect = {
+                ...eventCard, // Copy card info for reference
+                endTurn: room.gameState.turnCount + eventCard.effect.duration
+            };
+            room.gameState.activeWorldEventEffects.push(effect);
+            this.broadcastToRoom(roomId, 'chatMessage', {
+                senderName: 'Game Master',
+                message: eventCard.effect.applyMessage,
+                channel: 'game'
             });
         }
     }
@@ -519,9 +516,28 @@ class GameManager {
         
         if (isDmTurn) {
             room.gameState.turnCount++;
-            room.gameState.worldEvents.currentEvent = null; // Clear previous event
-            room.gameState.worldEvents.pendingSaves = []; // Clear pending saves for new turn
-            room.gameState.worldEvents.resolved = false; // Reset resolution flag
+            
+            // --- Handle Expired World Events ---
+            const expiredEffects = [];
+            room.gameState.activeWorldEventEffects = room.gameState.activeWorldEventEffects.filter(effect => {
+                if (room.gameState.turnCount >= effect.endTurn) {
+                    expiredEffects.push(effect);
+                    return false; // remove from list
+                }
+                return true; // keep in list
+            });
+    
+            if (expiredEffects.length > 0) {
+                expiredEffects.forEach(effect => {
+                    this.broadcastToRoom(roomId, 'chatMessage', { 
+                        senderName: 'Game Master', 
+                        message: effect.effect.removeMessage, 
+                        channel: 'game' 
+                    });
+                });
+            }
+            
+            room.gameState.worldEvents.currentEvent = null; // Clear previous event card display
             console.log(`[GameManager] Room ${roomId} - DM Turn Start. Turn count: ${room.gameState.turnCount}`);
 
             if (room.gameState.turnCount === 1 && currentPlayer.isNpc) {
@@ -533,19 +549,12 @@ class GameManager {
 
             if (room.gameState.board.monsters.length === 0) {
                 this.playWorldEvent(roomId);
-                 // If the event requires saves, the game flow will now pause here.
-                 // checkAndProceedAfterWorldEvent will continue the turn later.
-                if (room.gameState.worldEvents.pendingSaves.length > 0) {
-                    this.broadcastToRoom(roomId, 'gameStateUpdate', room); // Update clients to show save prompts
-                    return; // HALT execution until all saves are resolved.
-                }
-
-                // If no saves were required by the event, continue the DM turn as normal.
+                
+                // Wait for event message to be read, then play a monster
                 setTimeout(() => {
                     this.playMonsterCard(roomId);
-                    this.broadcastToRoom(roomId, 'gameStateUpdate', room);
-                }, 3000);
-                setTimeout(() => this.startNextTurn(roomId), 5000);
+                }, 3000); // 3s for reading the event
+                setTimeout(() => this.startNextTurn(roomId), 5000); // 2s after monster appears
                 return;
 
             } else {
@@ -577,7 +586,10 @@ class GameManager {
                 baseAp = Math.max(0, baseAp - 1);
                 this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `${currentPlayer.name} is Drained and starts with less AP.`, channel: 'game' });
             }
-            currentPlayer.currentAp = baseAp;
+            
+            // Apply World Event AP modifiers
+            const apModifier = this.getStatModifier(currentPlayer, 'ap', room);
+            currentPlayer.currentAp = Math.max(0, baseAp + apModifier);
 
             // Decrement durations AFTER applying effects for this turn start.
             currentPlayer.statusEffects = currentPlayer.statusEffects
@@ -715,6 +727,28 @@ class GameManager {
             });
         }
     }
+    
+    getStatModifier(character, statToModify, room) {
+        let modifier = 0;
+        const isExplorer = character && character.role === 'Explorer';
+        const isMonster = character && character.type === 'Monster';
+    
+        for (const effect of room.gameState.activeWorldEventEffects) {
+            const effectData = effect.effect;
+            if (effectData.stat !== statToModify) continue;
+    
+            const targetMatch = (
+                effectData.target === 'all' ||
+                (effectData.target === 'all_explorers' && isExplorer) ||
+                (effectData.target === 'all_monsters' && isMonster)
+            );
+            
+            if (targetMatch) {
+                modifier += effectData.value;
+            }
+        }
+        return modifier;
+    }
 
     resolveAttack(roomId, attacker, target, weapon) {
         const room = this.rooms[roomId];
@@ -727,25 +761,24 @@ class GameManager {
         }
         attacker.currentAp -= apCost;
     
-        // --- CRITICAL REWRITE: Explicitly calculate bonus at time of attack ---
         const classBonus = (gameData.classes[attacker.class]?.baseDamageBonus) || 0;
         const weaponBonus = (weapon.effect?.bonuses?.damage) || 0;
-        const totalBonus = classBonus + weaponBonus;
-        // This 'totalBonus' is now the single source of truth for this attack action.
+        const eventBonus = this.getStatModifier(attacker, 'damageBonus', room);
+        const totalBonus = classBonus + weaponBonus + eventBonus;
     
         const hitRoll = this.rollDice('1d20');
-        const attackRoll = hitRoll + totalBonus; // Use fresh bonus for attack roll
+        const attackRoll = hitRoll + totalBonus;
         
         let message = '';
-        const requiredRoll = target.requiredRollToHit;
+        const requiredRoll = target.requiredRollToHit + this.getStatModifier(target, 'requiredRollToHit', room);
     
         if (attackRoll >= requiredRoll) {
             const damageDice = weapon.effect.dice;
             const rawDamageRoll = this.rollDice(damageDice);
-            const totalDamage = rawDamageRoll + totalBonus; // Use fresh bonus for damage roll
+            const totalDamage = rawDamageRoll + totalBonus;
 
-            console.log(`[Damage Calc REWRITE] Attacker: ${attacker.name}, Weapon: ${weapon.name}`);
-            console.log(`DMG = [Dice Roll: ${rawDamageRoll}] + [Total Bonus: ${totalBonus} (Class:${classBonus} + Wpn:${weaponBonus})] = Total: ${totalDamage}`);
+            console.log(`[Damage Calc] Attacker: ${attacker.name}, Weapon: ${weapon.name}`);
+            console.log(`DMG = [Dice Roll: ${rawDamageRoll}] + [Total Bonus: ${totalBonus} (Class:${classBonus} + Wpn:${weaponBonus} + Event:${eventBonus})] = Total: ${totalDamage}`);
             
             target.currentHp -= totalDamage;
             message = `${attacker.name} attacks ${target.name} for ${totalDamage} damage! (${rawDamageRoll} + ${totalBonus} Bonus)`;
@@ -783,12 +816,14 @@ class GameManager {
     resolveMonsterAttack(room, monster, target) {
         if (!room || !monster || !target) return;
 
-        const playerDefense = 10 + (target.stats.shieldBonus || 0);
+        const defenseBonusFromEvents = this.getStatModifier(target, 'shieldBonus', room);
+        const playerDefense = 10 + (target.stats.shieldBonus || 0) + defenseBonusFromEvents;
         const hitRoll = this.rollDice('1d20') + monster.attackBonus;
         
         let message = '';
         if (hitRoll >= playerDefense) {
-            let damage = this.rollDice(monster.effect.dice);
+            const damageBonusFromEvents = this.getStatModifier(monster, 'damageBonus', room);
+            let damage = this.rollDice(monster.effect.dice) + damageBonusFromEvents;
             let damageAbsorbed = 0;
             
             if (target.stats.shieldHp > 0) {
