@@ -22,7 +22,7 @@ const statusEffectDefinitions = {
 
 const actionCosts = {
     briefRespite: 1,
-    fullRest: 1,
+    fullRest: 2,
     guard: 1
 };
 

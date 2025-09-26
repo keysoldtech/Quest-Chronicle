@@ -469,24 +469,28 @@ class GameManager {
     endTurn(socketId) {
         const room = this.getRoomBySocketId(socketId);
         if (!room) return;
-        
+    
         const isCombat = room.gameState.combatState.isActive;
-        const currentTurnTakerId = isCombat ? room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] : room.gameState.turnOrder[room.gameState.currentPlayerIndex];
-        const currentTurnTaker = room.players[currentTurnTakerId];
+        const currentTurnTakerId = isCombat 
+            ? room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] 
+            : room.gameState.turnOrder[room.gameState.currentPlayerIndex];
         
-        // Allow the host to end the NPC DM's turn
+        const currentTurnTaker = room.players[currentTurnTakerId];
+    
+        // Allow the host to end the NPC DM's turn if it gets stuck
         if (currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc && socketId === room.hostId) {
             this.startNextTurn(room.id);
             return;
         }
-        
-        if (socketId !== currentTurnTakerId) return; // Not their turn
-        
-        if (isCombat) {
-             room.gameState.combatState.currentTurnIndex = (room.gameState.combatState.currentTurnIndex + 1) % room.gameState.combatState.turnOrder.length;
-        } else {
-            this.startNextTurn(room.id);
+    
+        if (socketId !== currentTurnTakerId) {
+            console.log(`[GameManager] Action blocked: Not ${socketId}'s turn.`);
+            return;
         }
+    
+        // The combat system is not fully implemented and its logic was causing a bug.
+        // Unify turn progression to always call startNextTurn.
+        this.startNextTurn(room.id);
     }
     
     resolveAttack(roomId, attacker, target, weapon) {
@@ -583,6 +587,66 @@ class GameManager {
 
         setTimeout(() => this.broadcastToRoom(room.id, 'gameStateUpdate', room), 4000); // Wait for client to see card
     }
+
+    handlePlayerAbility(socketId, action) {
+        const room = this.getRoomBySocketId(socketId);
+        if (!room) return;
+        const player = room.players[socketId];
+        const currentTurnTakerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
+        
+        if (!player || player.id !== currentTurnTakerId) return; // Not their turn
+
+        const actionCost = gameData.actionCosts[action] || 1; // Default cost to 1 if not specified
+        if (player.currentAp < actionCost) {
+            io.to(socketId).emit('actionError', "Not enough AP to perform this action.");
+            return;
+        }
+        
+        player.currentAp -= actionCost;
+        let message = '';
+
+        switch(action) {
+            case 'briefRespite': {
+                if (player.healthDice.current > 0) {
+                    const healthGained = this.rollDice('1d8') + (player.class === 'Cleric' ? 2 : 0);
+                    player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healthGained);
+                    player.healthDice.current -= 1;
+                    message = `${player.name} takes a brief respite, using one health die to recover ${healthGained} HP.`;
+                } else {
+                    message = `${player.name} tries to rest, but has no health dice remaining.`;
+                    player.currentAp += actionCost; // Refund AP
+                }
+                break;
+            }
+            case 'fullRest': {
+                if (player.healthDice.current > 1) {
+                    const healthGained = this.rollDice('2d8') + (player.class === 'Cleric' ? 4 : 0);
+                    player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healthGained);
+                    player.healthDice.current -= 2;
+                    message = `${player.name} takes a full rest, using two health dice to recover ${healthGained} HP.`;
+                } else {
+                    message = `${player.name} tries to take a full rest, but doesn't have enough health dice.`;
+                    player.currentAp += actionCost; // Refund AP
+                }
+                break;
+            }
+            case 'guard': {
+                const existingGuard = player.statusEffects.find(e => e.name === 'Guarded');
+                if (existingGuard) {
+                    existingGuard.duration = 2; // Refresh duration
+                } else {
+                    player.statusEffects.push({ name: 'Guarded', duration: 2 }); // Lasts until start of their next turn
+                }
+                message = `${player.name} takes a defensive stance, guarding against incoming attacks.`;
+                break;
+            }
+        }
+        
+        if (message) {
+            this.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
+        }
+        this.broadcastToRoom(room.id, 'gameStateUpdate', room);
+    }
 }
 
 const gameManager = new GameManager();
@@ -650,6 +714,8 @@ io.on('connection', (socket) => {
                  gameManager.resolveAttack(room.id, player, target, weapon);
                  io.to(room.id).emit('chatMessage', { senderName: player.name, message: data.narrative, channel: 'game', isNarrative: true });
              }
+        } else if (['briefRespite', 'fullRest', 'guard'].includes(data.action)) {
+            gameManager.handlePlayerAbility(socket.id, data.action);
         }
     });
     

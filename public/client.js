@@ -410,15 +410,23 @@ function renderGameState(room) {
     });
 
     // --- Render Player Actions ---
-    if(isMyTurn && playerActionsContainer.children.length === 0){
-        ['Brief Respite (1d)', 'Full Rest (2d)', 'Guard'].forEach(action => {
+    playerActionsContainer.innerHTML = ''; // Always clear to re-render
+    if (isMyTurn) {
+        const actions = {
+            'Brief Respite (1d)': 'briefRespite',
+            'Full Rest (2d)': 'fullRest',
+            'Guard': 'guard'
+        };
+
+        for (const [label, action] of Object.entries(actions)) {
             const btn = document.createElement('button');
-            btn.textContent = action;
+            btn.textContent = label;
             btn.className = 'fantasy-button-sm fantasy-button-secondary';
+            btn.onclick = () => {
+                socket.emit('playerAction', { action });
+            };
             playerActionsContainer.appendChild(btn);
-        });
-    } else if (!isMyTurn) {
-        playerActionsContainer.innerHTML = '';
+        }
     }
 }
 
