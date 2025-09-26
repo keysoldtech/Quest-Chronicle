@@ -87,6 +87,12 @@ body.fantasy-bg {
     font-weight: bold;
     color: var(--color-special);
 }
+.build-number-font {
+    font-size: 0.7rem;
+    color: var(--color-parchment);
+    opacity: 0.5;
+    margin-top: 0.25rem;
+}
 
 
 /* --- LOBBY & FORMS --- */

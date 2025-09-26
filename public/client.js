@@ -96,6 +96,14 @@ const eventResultSubtitle = document.getElementById('event-result-subtitle');
 const eventCardSelection = document.getElementById('event-card-selection');
 const eventResultOkayBtn = document.getElementById('event-result-okay-btn');
 
+// World Event Save Modal DOM refs
+const worldEventSaveModal = document.getElementById('world-event-save-modal');
+const worldEventSaveTitle = document.getElementById('world-event-save-title');
+const worldEventSavePrompt = document.getElementById('world-event-save-prompt');
+const worldEventDice = document.getElementById('world-event-dice');
+const worldEventRollResult = document.getElementById('world-event-roll-result');
+const worldEventSaveRollBtn = document.getElementById('world-event-save-roll-btn');
+
 
 // --- Helper Functions ---
 function logMessage(message, options = {}) {
@@ -172,7 +180,7 @@ function createCardElement(card, actions = {}) {
     cardDiv.innerHTML = `
         <div class="card-content">
             <h3 class="card-title">${card.name}</h3>
-            <p class="card-effect">${card.effect?.description || card.outcome || ''}</p>
+            <p class="card-effect">${card.effect?.description || card.description || card.outcome || ''}</p>
         </div>
         ${statusEffectsHTML}
         <div class="card-footer">
@@ -258,12 +266,16 @@ function renderGameState(room) {
     const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
     const currentTurnTaker = players[currentTurnTakerId];
     const isMyTurn = currentTurnTakerId === myId;
-    const isNpcDmTurn = currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc;
     
-    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || hasConfirmedClass);
+    // Show class selection if the player hasn't chosen a class yet (for lobby and drop-in)
+    classSelectionDiv.classList.toggle('hidden', hasConfirmedClass || isDM);
+
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
     playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
-    endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isHost && isNpcDmTurn)));
+    
+    // End Turn Button Logic: Only visible if it is my turn.
+    endTurnBtn.classList.toggle('hidden', !isMyTurn);
+    
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     playerActionsContainer.classList.toggle('hidden', !isMyTurn);
     
@@ -287,7 +299,7 @@ function renderGameState(room) {
     }
     isMyTurnPreviously = isMyTurn;
     
-    // Event Roll UI
+    // Personal Event Roll UI
     if (isMyTurn && myPlayerInfo.pendingEventRoll) {
         eventOverlay.classList.remove('hidden');
         eventRollContainer.classList.remove('hidden');
@@ -296,9 +308,21 @@ function renderGameState(room) {
     } else if (!myPlayerInfo.pendingEventChoice) {
         eventOverlay.classList.add('hidden');
     }
+    
+    // World Event Save UI
+    if (myPlayerInfo.pendingWorldEventSave) {
+        worldEventSaveModal.classList.remove('hidden');
+        const { dc, save, eventName } = myPlayerInfo.pendingWorldEventSave;
+        worldEventSaveTitle.textContent = eventName;
+        worldEventSavePrompt.textContent = `You must make a DC ${dc} ${save} save!`;
+        worldEventSaveRollBtn.disabled = false;
+        worldEventRollResult.classList.add('hidden');
+    } else {
+        worldEventSaveModal.classList.add('hidden');
+    }
 
-    // --- Lobby Phase ---
-    if (gameState.phase === 'lobby' && !hasConfirmedClass) {
+    // --- Lobby Phase & Drop-in Class Selection ---
+    if (!hasConfirmedClass && !isDM) {
         if (classCardsContainer.children.length === 0) {
             // Create cards once, without onclick handlers
             for (const [classId, data] of Object.entries(classData)) {
@@ -338,7 +362,7 @@ function renderGameState(room) {
         confirmClassBtn.disabled = false;
         confirmClassBtn.textContent = 'Confirm Class';
         
-    } else if (gameState.phase !== 'lobby' || hasConfirmedClass) {
+    } else if (hasConfirmedClass) {
         // Reset temp selection when not in class selection phase
         tempSelectedClassId = null;
     }
@@ -608,6 +632,14 @@ apModalCancelBtn.addEventListener('click', () => {
     apModal.classList.add('hidden');
 });
 
+worldEventSaveRollBtn.addEventListener('click', () => {
+    socket.emit('rollForWorldEventSave');
+    worldEventSaveRollBtn.disabled = true;
+    worldEventDice.classList.remove('is-rolling');
+    void worldEventDice.offsetWidth;
+    worldEventDice.classList.add('is-rolling');
+});
+
 
 // --- SOCKET.IO EVENT HANDLERS ---
 socket.on('connect', () => {
@@ -743,6 +775,19 @@ socket.on('eventCardReveal', ({ chosenCard }) => {
     setTimeout(() => {
         eventOverlay.classList.add('hidden');
     }, 4000); // Give player time to read the card
+});
+
+socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
+    setTimeout(() => {
+        worldEventDice.classList.remove('is-rolling');
+        worldEventRollResult.textContent = `Rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}... ${success ? 'Success!' : 'Failure!'}`;
+        worldEventRollResult.style.color = success ? 'var(--color-success)' : 'var(--color-danger)';
+        worldEventRollResult.classList.remove('hidden');
+        
+        setTimeout(() => {
+            worldEventSaveModal.classList.add('hidden');
+        }, 2500);
+    }, 1500);
 });
 
 

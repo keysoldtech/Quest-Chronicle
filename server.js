@@ -89,7 +89,7 @@ class GameManager {
             class: null,
             hand: [],
             equipment: { weapon: null, armor: null },
-            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0 },
+            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
             lifeCount: 3,
             healthDice: { max: 0, current: 0 },
             statusEffects: [], // e.g., { name: 'Poisoned', duration: 3 }
@@ -97,6 +97,7 @@ class GameManager {
             pendingEventRoll: false,
             pendingEventChoice: false,
             madeAdvancedChoice: false,
+            pendingWorldEventSave: null,
         };
     }
 
@@ -106,14 +107,45 @@ class GameManager {
             console.log(`[GameManager] Join failed: Room ${roomId} not found.`);
             return null;
         }
+
         const humanPlayerCount = Object.values(room.players).filter(p => !p.isNpc).length;
         if (humanPlayerCount >= 5) {
-            console.log(`[GameManager] Join failed: Room ${roomId} is full with 5 human players.`);
             socket.emit('actionError', 'This room is full with 5 players.');
             return null;
         }
-        
-        room.players[socket.id] = this.createPlayerObject(socket.id, playerName);
+
+        // Handle joining a game in progress by replacing an NPC
+        if (room.gameState.phase === 'active') {
+            const npcExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.isNpc);
+            if (npcExplorers.length > 0) {
+                shuffle(npcExplorers);
+                const npcToReplace = npcExplorers[0];
+                console.log(`[GameManager] Replacing NPC ${npcToReplace.name} with new player ${playerName} in room ${roomId}.`);
+                
+                const npcTurnIndex = room.gameState.turnOrder.indexOf(npcToReplace.id);
+                delete room.players[npcToReplace.id];
+
+                const newPlayer = this.createPlayerObject(socket.id, playerName);
+                room.players[socket.id] = newPlayer;
+
+                if (npcTurnIndex > -1) {
+                    room.gameState.turnOrder[npcTurnIndex] = socket.id;
+                }
+                
+                this.broadcastToRoom(roomId, 'chatMessage', { 
+                    senderName: 'Game Master', 
+                    message: `${npcToReplace.name} heads back to town as ${playerName} joins the quest!`, 
+                    channel: 'game' 
+                });
+                
+            } else {
+                socket.emit('actionError', 'This adventure is already full of heroes. Cannot join mid-game.');
+                return null;
+            }
+        } else { // Lobby join
+            room.players[socket.id] = this.createPlayerObject(socket.id, playerName);
+        }
+
         console.log(`[GameManager] ${playerName} (${socket.id}) joined room ${roomId}.`);
         return room;
     }
@@ -159,13 +191,13 @@ class GameManager {
     calculatePlayerStats(playerId, room) {
         const player = room.players[playerId];
         if (!player || !player.class) {
-            player.stats = { maxHp: 20, currentHp: 20, damageBonus: 0, shieldBonus: 0, ap: 3 };
+            player.stats = { ...player.stats, maxHp: 20, currentHp: 20, damageBonus: 0, shieldBonus: 0, ap: 3 };
             return;
         }
     
         const classData = gameData.classes[player.class];
         if (!classData) { // Fallback for safety
-             player.stats = { maxHp: 20, currentHp: 20, damageBonus: 0, shieldBonus: 0, ap: 3 };
+             player.stats = { ...player.stats, maxHp: 20, currentHp: 20, damageBonus: 0, shieldBonus: 0, ap: 3 };
              return;
         }
         let damageBonus = classData.baseDamageBonus;
@@ -185,6 +217,8 @@ class GameManager {
         const newMaxHp = classData.baseHp;
 
         player.stats = {
+            ...player.stats,
+            ...classData.stats, // Add str, dex, con etc.
             maxHp: newMaxHp,
             currentHp: player.stats.currentHp > 0 ? (player.stats.currentHp + (newMaxHp - oldMaxHp)) : newMaxHp,
             damageBonus,
@@ -265,7 +299,7 @@ class GameManager {
 
         Object.values(room.players).forEach(player => {
             if (player.role === 'DM') {
-                player.stats = { maxHp: 999, currentHp: 999, damageBonus: 99, shieldBonus: 99, ap: 99 };
+                player.stats = { ...player.stats, maxHp: 999, currentHp: 999, damageBonus: 99, shieldBonus: 99, ap: 99 };
             } else if (player.role === 'Explorer') {
                 this.calculatePlayerStats(player.id, room);
             }
@@ -377,9 +411,21 @@ class GameManager {
         
         this.broadcastToRoom(roomId, 'chatMessage', { 
             senderName: 'Game Master', 
-            message: `A World Event occurs: ${eventCard.name}! ${eventCard.outcome}`, 
+            message: `A World Event occurs: ${eventCard.name}! ${eventCard.description || eventCard.outcome}`, 
             channel: 'game' 
         });
+
+        // Trigger saves for all explorers if the event requires it
+        if (eventCard.dc && eventCard.save) {
+            const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+            explorers.forEach(explorer => {
+                if (explorer.isNpc) {
+                    this.resolveNpcWorldEventSave(roomId, explorer.id, eventCard);
+                } else {
+                    explorer.pendingWorldEventSave = { dc: eventCard.dc, save: eventCard.save, eventName: eventCard.name };
+                }
+            });
+        }
     }
 
     startNextTurn(roomId) {
@@ -405,9 +451,7 @@ class GameManager {
                  return;
             }
 
-            // Post-combat or pre-combat flow for turns after the first
             if (room.gameState.board.monsters.length === 0) {
-                console.log(`[GameManager] Room ${roomId} - DM turn, NO monsters. Starting post-combat flow.`);
                 this.playWorldEvent(roomId);
                 setTimeout(() => {
                     this.playMonsterCard(roomId);
@@ -416,16 +460,35 @@ class GameManager {
                 setTimeout(() => this.startNextTurn(roomId), 5000);
                 return;
             } else {
-                // Active combat flow
                 if (currentPlayer.isNpc) {
-                    console.log(`[GameManager] Room ${roomId} - NPC DM taking automated COMBAT turn.`);
                     setTimeout(() => this.executeDmCombatTurn(roomId), 2000);
                     return;
                 }
             }
+        } else { // It's an Explorer's turn
+            // --- Handle Status Effects at Turn Start ---
+            currentPlayer.statusEffects.forEach(effect => {
+                const effectDef = gameData.statusEffectDefinitions[effect.name];
+                if (effectDef && effectDef.trigger === 'start' && effectDef.damage) {
+                    this.applyEffect(currentPlayer.id, { type: 'damage', dice: effectDef.damage }, roomId);
+                    this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `${currentPlayer.name} is affected by ${effect.name}.`, channel: 'game' });
+                }
+            });
+
+            // Set AP for the turn
+            let baseAp = currentPlayer.stats.ap;
+            const drainedEffect = currentPlayer.statusEffects.find(e => e.name === 'Drained');
+            if (drainedEffect) {
+                baseAp = Math.max(0, baseAp - 1);
+                this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `${currentPlayer.name} is Drained and starts with less AP.`, channel: 'game' });
+            }
+            currentPlayer.currentAp = baseAp;
+
+            // Decrement durations AFTER applying effects for this turn start.
+            currentPlayer.statusEffects = currentPlayer.statusEffects
+                .map(effect => ({ ...effect, duration: effect.duration - 1 }))
+                .filter(effect => effect.duration > 0);
         }
-        
-        currentPlayer.currentAp = currentPlayer.stats.ap;
         
         if (currentPlayer.isNpc && currentPlayer.role === 'Explorer') {
             console.log(`[GameManager] Room ${roomId} - NPC Explorer ${currentPlayer.name}'s turn.`);
@@ -506,13 +569,6 @@ class GameManager {
         if (!room) return;
         
         const currentTurnTakerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
-        const currentTurnTaker = room.players[currentTurnTakerId];
-
-        if (currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc && socketId === room.hostId) {
-            this.startNextTurn(room.id);
-            return;
-        }
-
         if (socketId !== currentTurnTakerId) {
             console.log(`[GameManager] Action blocked: Not ${socketId}'s turn.`);
             return;
@@ -615,7 +671,7 @@ class GameManager {
         if (!room) return;
         
         const monsters = room.gameState.board.monsters;
-        const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0 && !p.isNpc);
+        const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
         
         if (monsters.length === 0 || livingExplorers.length === 0) {
             this.startNextTurn(roomId); // No monsters or no one to attack, end turn
@@ -624,7 +680,12 @@ class GameManager {
 
         const processAttack = (index) => {
             if (index >= monsters.length) {
-                setTimeout(() => this.startNextTurn(roomId), 1000); // All monsters have attacked
+                // All monsters have attacked. Check if reinforcements are needed.
+                if (monsters.length === 1 && livingExplorers.length >= 3 && Math.random() < 0.4) {
+                    this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `The commotion attracts another foe!`, channel: 'game' });
+                    this.playMonsterCard(roomId);
+                }
+                setTimeout(() => this.startNextTurn(roomId), 1000); 
                 return;
             }
             
@@ -638,6 +699,62 @@ class GameManager {
         };
 
         processAttack(0); // Start the attack sequence
+    }
+    
+    resolveNpcWorldEventSave(roomId, npcId, eventCard) {
+        const room = this.rooms[roomId];
+        const npc = room.players[npcId];
+        if (!room || !npc || !eventCard) return;
+
+        const bonus = npc.stats[eventCard.save.toLowerCase()] || 0;
+        const d20Roll = this.rollDice('1d20');
+        const totalRoll = d20Roll + bonus;
+        
+        let message = `${npc.name} attempts a ${eventCard.save} save (rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${eventCard.dc})... `;
+        
+        if (totalRoll >= eventCard.dc) {
+            message += `Success! ${npc.name} ${eventCard.successMessage}`;
+        } else {
+            message += `Failure! ${npc.name} ${eventCard.failureEffect.message}`;
+            if (eventCard.failureEffect.effect) {
+                this.applyEffect(npc.id, eventCard.failureEffect.effect, roomId);
+            }
+        }
+        
+        this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
+        this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+    }
+
+    applyEffect(targetId, effect, roomId) {
+        const room = this.rooms[roomId];
+        const target = room.players[targetId];
+        if (!target || !effect) return;
+    
+        let message = '';
+    
+        switch(effect.type) {
+            case 'damage': {
+                const damage = this.rollDice(effect.dice);
+                target.stats.currentHp = Math.max(0, target.stats.currentHp - damage);
+                message = `${target.name} takes ${damage} damage!`;
+                // future player death logic here...
+                break;
+            }
+            case 'status': {
+                const existingEffect = target.statusEffects.find(e => e.name === effect.status);
+                if (existingEffect) {
+                    existingEffect.duration = Math.max(existingEffect.duration, effect.duration);
+                } else {
+                    target.statusEffects.push({ name: effect.status, duration: effect.duration });
+                }
+                message = `${target.name} is now ${effect.status}!`;
+                break;
+            }
+        }
+    
+        if (message) {
+            this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
+        }
     }
 
     rollForEvent(socketId) {
@@ -790,9 +907,18 @@ io.on('connection', (socket) => {
     socket.on('chooseClass', ({ classId }) => {
         const room = gameManager.getRoomBySocketId(socket.id);
         if (room && room.players[socket.id]) {
-            room.players[socket.id].class = classId;
-            gameManager.calculatePlayerStats(socket.id, room);
+            const player = room.players[socket.id];
+            player.class = classId;
+            // A player joining mid-game won't have stats yet, so calculate them now.
+            if (player.stats.maxHp === 0) {
+                 gameManager.calculatePlayerStats(socket.id, room);
+                 // Set HP to full for the new player
+                 player.stats.currentHp = player.stats.maxHp;
+            } else {
+                gameManager.calculatePlayerStats(socket.id, room);
+            }
             io.to(room.id).emit('playerListUpdate', room);
+            io.to(room.id).emit('gameStateUpdate', room);
         }
     });
     
@@ -883,6 +1009,36 @@ io.on('connection', (socket) => {
     
     socket.on('selectEventCard', ({ cardId }) => {
         gameManager.selectEventCard(socket.id, cardId);
+    });
+    
+    socket.on('rollForWorldEventSave', () => {
+        const room = gameManager.getRoomBySocketId(socket.id);
+        const player = room.players[socket.id];
+        const eventData = player.pendingWorldEventSave;
+        if (!room || !player || !eventData) return;
+
+        player.pendingWorldEventSave = null;
+        const currentEvent = room.gameState.worldEvents.currentEvent;
+
+        const bonus = player.stats[eventData.save.toLowerCase()] || 0;
+        const d20Roll = gameManager.rollDice('1d20');
+        const totalRoll = d20Roll + bonus;
+        const success = totalRoll >= eventData.dc;
+        
+        let message = `${player.name} attempts a ${eventData.save} save (rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${eventData.dc})... `;
+        
+        if (success) {
+            message += `Success! ${player.name} ${currentEvent.successMessage}`;
+        } else {
+            message += `Failure! ${player.name} ${currentEvent.failureEffect.message}`;
+            if (currentEvent.failureEffect.effect) {
+                gameManager.applyEffect(socket.id, currentEvent.failureEffect.effect, room.id);
+            }
+        }
+
+        socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc: eventData.dc, success });
+        gameManager.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
+        gameManager.broadcastToRoom(room.id, 'gameStateUpdate', room);
     });
 
     // --- Voice Chat Handling ---

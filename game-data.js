@@ -4,12 +4,12 @@ let lastId = 0;
 const nextId = () => { lastId++; return `card-${lastId}`; };
 
 const classes = {
-    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, description: "A fierce warrior of primal rage.", abilities: ["Rage", "Reckless Attack"] },
-    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, description: "A conduit for divine power.", abilities: ["Channel Divinity", "Turn Undead"] },
-    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, description: "Wielder of arcane energies.", abilities: ["Arcane Recovery", "Spell Mastery"] },
-    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, description: "A peerless hunter and scout.", abilities: ["Favored Enemy", "Hunter's Mark"] },
-    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
-    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
+    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, description: "A fierce warrior of primal rage.", abilities: ["Rage", "Reckless Attack"] },
+    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, description: "A conduit for divine power.", abilities: ["Channel Divinity", "Turn Undead"] },
+    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, description: "Wielder of arcane energies.", abilities: ["Arcane Recovery", "Spell Mastery"] },
+    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, description: "A peerless hunter and scout.", abilities: ["Favored Enemy", "Hunter's Mark"] },
+    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
 };
 
 const statusEffectDefinitions = {
@@ -17,7 +17,8 @@ const statusEffectDefinitions = {
     'Stunned': { cannotAct: true, description: 'Cannot take actions.' },
     'On Fire': { trigger: 'start', damage: '1d6', description: 'Takes 1d6 damage at the start of their turn.'},
     'Guarded': { rollModifier: 2, description: 'Has +2 to defense rolls.'},
-    'Slowed': { rollModifier: -2, description: 'Has -2 to all d20 rolls.'}
+    'Slowed': { rollModifier: -2, description: 'Has -2 to all d20 rolls.'},
+    'Drained': { description: 'Starts turn with -1 AP.' }
 };
 
 const actionCosts = {
@@ -212,10 +213,10 @@ const armorCards = [
 ];
 
 const worldEventCards = [
-    { id: nextId(), name: "Crimson Orb", type: "World Event", tags: "Celestial, Magical", outcome: "Wisdom Save DC 12 or gain 1 level of exhaustion." },
-    { id: nextId(), name: "Ailment Cleansed", type: "World Event", tags: "Beneficial, Healing", outcome: "You are cured of one condition." },
-    { id: nextId(), name: "Arctic Squall", type: "World Event", tags: "Weather, Hazard", outcome: "Constitution Save DC 12 or gain one level of exhaustion." },
-    { id: nextId(), name: "Unforeseen Encounter", type: "World Event", tags: "Chance, Social", outcome: "Charisma Check DC 15. Success: new ally. Failure: new enemy." },
+    { id: nextId(), name: "Crimson Orb", type: "World Event", tags: "Celestial, Magical", description: "A strange red orb's gaze causes mental fatigue.", save: 'Wis', dc: 12, failureEffect: { message: "fails to resist and feels drained by the orb's influence.", effect: { type: 'status', status: 'Drained', duration: 2 } }, successMessage: "steels their mind and shrugs off the orb's effect." },
+    { id: nextId(), name: "Arctic Squall", type: "World Event", tags: "Weather, Hazard", description: "A sudden, freezing wind blasts the area.", save: 'Con', dc: 12, failureEffect: { message: "shivers uncontrollably and suffers from the biting cold.", effect: { type: 'damage', dice: '1d4' } }, successMessage: "braces against the icy wind." },
+    { id: nextId(), name: "Ailment Cleansed", type: "World Event", tags: "Beneficial, Healing", description: "A soothing light washes over the party, curing minor ailments." },
+    { id: nextId(), name: "Unforeseen Encounter", type: "World Event", tags: "Chance, Social", description: "The party stumbles upon a mysterious stranger on the road." },
 ];
 
 const playerEventCards = [

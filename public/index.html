@@ -14,7 +14,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.43</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.47</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -50,6 +50,7 @@
             <div>
                  <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                  <p>Turn: <span id="turn-counter">0</span></p>
+                 <p class="build-number-font">v3.47</p>
             </div>
              <div class="header-controls">
                 <div id="dm-controls" class="dm-controls hidden">
@@ -223,6 +224,21 @@
                 <!-- Card backs will be generated here -->
             </div>
             <button id="event-result-okay-btn" class="fantasy-button-primary hidden">Okay</button>
+        </div>
+    </div>
+    
+    <!-- World Event Save Modal -->
+    <div id="world-event-save-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="text-align: center;">
+            <h2 id="world-event-save-title" class="header-font">World Event!</h2>
+            <p id="world-event-save-prompt">You must make a save!</p>
+            <div class="dice-scene" style="margin: 1.5rem auto;">
+                <div id="world-event-dice" class="dice">
+                    <div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div>
+                </div>
+            </div>
+            <p id="world-event-roll-result" class="hidden" style="font-weight: bold; font-size: 1.2rem; margin-bottom: 1rem;"></p>
+            <button id="world-event-save-roll-btn" class="fantasy-button-special">Roll d20</button>
         </div>
     </div>
 
