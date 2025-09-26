@@ -62,7 +62,10 @@ class GameManager {
                     turnOrder: [],
                     currentTurnIndex: -1,
                     participants: {},
-                }
+                },
+                turnCount: 0,
+                monstersKilledCount: 0,
+                gameStage: 1,
             }
         };
         this.rooms[roomId] = newRoom;
@@ -297,7 +300,8 @@ class GameManager {
 
         room.gameState.decks = {
             item: [...gameData.itemCards], spell: [...gameData.spellCards], monster: [...gameData.monsterCards],
-            weapon: [...gameData.weaponCards], armor: [...gameData.armorCards], worldEvent: [...gameData.worldEventCards]
+            weapon: [...gameData.weaponCards], armor: [...gameData.armorCards], worldEvent: [...gameData.worldEventCards],
+            playerEvent: [...gameData.playerEventCards], discovery: [...gameData.discoveryCards]
         };
         Object.values(room.gameState.decks).forEach(deck => shuffle(deck));
         
@@ -398,6 +402,14 @@ class GameManager {
 
         const currentId = combatState.turnOrder[combatState.currentTurnIndex];
         this.processTurnEffects(roomId, currentId, 'end');
+        
+        // --- Event System Trigger ---
+        if (room.players[currentId]) { // Only trigger events for players, not monsters
+            room.gameState.turnCount++;
+            if (room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0) {
+                this.randomEvent(roomId, currentId);
+            }
+        }
 
         const explorersAlive = Object.values(room.players).some(p => p.role === 'Explorer' && p.stats.currentHp > 0 && p.lifeCount > 0);
         const monstersAlive = room.gameState.board.monsters.length > 0;
@@ -512,10 +524,21 @@ class GameManager {
                 if (dm && dialogue) {
                     io.to(roomId).emit('chatMessage', { senderName: dm.name, message: `"${dialogue}"`, channel: 'game', isNarrative: true });
                 }
+                
+                const monsterName = target.name;
                 room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== targetId);
                 room.gameState.combatState.turnOrder = room.gameState.combatState.turnOrder.filter(id => id !== targetId);
                 delete room.gameState.combatState.participants[targetId];
-                io.to(roomId).emit('chatMessage', { senderName: 'Combat', message: `${target.name} has been defeated!`, channel: 'game' });
+
+                room.gameState.monstersKilledCount++;
+                io.to(roomId).emit('chatMessage', { senderName: 'Combat', message: `${monsterName} has been defeated! (${room.gameState.monstersKilledCount} total monsters defeated)`, channel: 'game' });
+                
+                // Check for game stage increase every 5 kills
+                if (room.gameState.monstersKilledCount > 0 && room.gameState.monstersKilledCount % 5 === 0) {
+                    room.gameState.gameStage++;
+                    io.to(roomId).emit('chatMessage', { senderName: 'System', message: `The air grows heavier with dread... DANGER INCREASES! (Game Stage: ${room.gameState.gameStage})`, channel: 'game' });
+                    console.log(`[Game Stage] Room ${roomId} has advanced to stage ${room.gameState.gameStage}.`);
+                }
             }
         }
     }
@@ -612,7 +635,7 @@ class GameManager {
                 break;
         }
     }
-
+    
     // --- NEW MECHANICS ---
     briefRespite(roomId, playerId) {
         const player = this.rooms[roomId].players[playerId];
@@ -692,6 +715,88 @@ class GameManager {
         }
     }
 
+    // --- PROGRESSION & EVENT SYSTEMS ---
+    monsterScaling(monsterCard, gameStage) {
+        if (gameStage <= 1) return { ...monsterCard };
+        
+        const scaledMonster = JSON.parse(JSON.stringify(monsterCard)); // Deep copy
+        scaledMonster.maxHp = Math.floor(monsterCard.maxHp * gameStage);
+        scaledMonster.attackBonus = monsterCard.attackBonus + (gameStage - 1);
+        scaledMonster.requiredRollToHit = Math.min(19, monsterCard.requiredRollToHit + (gameStage - 1));
+
+        if (scaledMonster.effect?.dice) {
+            const parts = scaledMonster.effect.dice.match(/(\d+)d(\d+)/);
+            if (parts) {
+                const numDice = parseInt(parts[1], 10) * gameStage;
+                scaledMonster.effect.dice = `${numDice}d${parts[2]}`;
+            }
+        }
+        return scaledMonster;
+    }
+    
+    lootScaling(room) {
+        const { discovery } = room.gameState.decks;
+        const { gameStage } = room.gameState;
+
+        const availableLoot = discovery.filter(card => card.tier <= gameStage);
+        if (availableLoot.length === 0) return null;
+
+        const cardToDraw = availableLoot[Math.floor(Math.random() * availableLoot.length)];
+        const cardIndexInDeck = discovery.findIndex(c => c.id === cardToDraw.id);
+        if (cardIndexInDeck > -1) {
+            return discovery.splice(cardIndexInDeck, 1)[0];
+        }
+        return null;
+    }
+
+    resolvePlayerEvent(roomId, playerId, card) {
+        if (!card.effect) return;
+        const { type, dice, status, duration } = card.effect;
+        
+        switch(type) {
+            case 'damage':
+                this.applyDamage(roomId, playerId, this.rollDice(dice));
+                break;
+            case 'heal':
+                this.applyHealing(roomId, playerId, this.rollDice(dice));
+                break;
+            case 'status':
+                this.applyStatusEffect(roomId, playerId, status, duration);
+                break;
+        }
+    }
+
+    randomEvent(roomId, playerId) {
+        const room = this.rooms[roomId];
+        const player = room.players[playerId];
+        if (!room || !player) return;
+
+        const roll = this.rollDice('1d20');
+        console.log(`[Event System] Turn counter triggered for room ${roomId}. Player ${player.name} is active. Rolled a ${roll}.`);
+
+        if (roll >= 15) { // Player Event
+            const eventCard = room.gameState.decks.playerEvent.pop();
+            if (!eventCard) return;
+            console.log(`[Event System] Player Event: '${eventCard.name}' for ${player.name}.`);
+            io.to(roomId).emit('chatMessage', { senderName: 'System', message: `A strange energy envelops ${player.name}... ${eventCard.description}`, channel: 'game' });
+            this.resolvePlayerEvent(roomId, playerId, eventCard);
+            room.gameState.decks.playerEvent.unshift(eventCard);
+            shuffle(room.gameState.decks.playerEvent);
+        } else if (roll >= 10) { // Discovery Event
+            const lootCard = this.lootScaling(room);
+            if (!lootCard) {
+                console.log(`[Event System] Discovery Event triggered, but no suitable loot found.`);
+                return;
+            }
+            console.log(`[Event System] Discovery Event: ${player.name} found '${lootCard.name}'.`);
+            player.hand.push(lootCard);
+            io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} makes a discovery! Found: ${lootCard.name}.`, channel: 'game' });
+        } else { // No event
+            console.log(`[Event System] No event occurred.`);
+        }
+        io.to(roomId).emit('gameStateUpdate', room);
+    }
+    
     // --- NPC AND GAME FLOW ---
     endTurn(roomId, playerId) {
         const room = this.rooms[roomId];
@@ -705,6 +810,12 @@ class GameManager {
 
             // FIX: Add logging for turn progression
             console.log(`[Game Flow] ${room.players[playerId].name}'s turn ended in room ${roomId}.`);
+            
+            // --- Event System Trigger ---
+            room.gameState.turnCount++;
+            if (room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0) {
+                this.randomEvent(roomId, playerId);
+            }
             
             const nextIndex = room.gameState.currentPlayerIndex + 1;
 
@@ -916,7 +1027,8 @@ class GameManager {
         if (card.type === 'Monster') {
             if (cardIndex > -1) player.hand.splice(cardIndex, 1);
             // FIX: Monsters must be flagged as isNpc so the game loop can trigger their turn automatically.
-            const monsterData = { ...card, currentHp: card.maxHp, id: `${card.id}-${Math.random()}`, statusEffects: [], isNpc: true };
+            const scaledMonsterCard = this.monsterScaling(card, room.gameState.gameStage);
+            const monsterData = { ...scaledMonsterCard, currentHp: scaledMonsterCard.maxHp, id: `${card.id}-${Math.random()}`, statusEffects: [], isNpc: true };
             room.gameState.board.monsters.push(monsterData);
             io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} summons a ${monsterData.name}!`, channel: 'game' });
             if (!room.gameState.combatState.isActive) {

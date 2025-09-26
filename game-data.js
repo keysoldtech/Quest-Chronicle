@@ -218,6 +218,32 @@ const worldEventCards = [
     { id: nextId(), name: "Unforeseen Encounter", type: "World Event", tags: "Chance, Social", outcome: "Charisma Check DC 15. Success: new ally. Failure: new enemy." },
 ];
 
+const playerEventCards = [
+    { id: nextId(), name: "Sudden Vigor", type: "Player Event", description: "You feel a sudden surge of energy.", effect: { type: 'heal', dice: '2d6' } },
+    { id: nextId(), name: "Momentary Weakness", type: "Player Event", description: "A wave of fatigue washes over you.", effect: { type: 'damage', dice: '1d6' } },
+    { id: nextId(), name: "Cursed Ground", type: "Player Event", description: "The ground beneath you feels sticky and malevolent.", effect: { type: 'status', status: 'Slowed', duration: 2 } },
+    { id: nextId(), name: "Flash of Insight", type: "Player Event", description: "Your mind clears, granting you a tactical advantage.", effect: { type: 'status', status: 'Guarded', duration: 1 } },
+    { id: nextId(), name: "Bad Omen", type: "Player Event", description: "You feel a sense of dread, taking minor damage.", effect: { type: 'damage', dice: '1d4' } },
+];
+
+const discoveryCards = [
+    // Tier 1
+    { id: nextId(), name: "Sturdy Leather Armor", type: "Armor", tier: 1, effect: { description: "+3 Shield Bonus.", bonuses: { shield: 3, ap: 0 } } },
+    { id: nextId(), name: "Serrated Shortsword", type: "Weapon", tier: 1, apCost: 1, effect: { type: 'damage', dice: "1d8+1", bonuses: { damage: 1 }, description: "A reliable and sharp blade." } },
+    { id: nextId(), name: "Greater Healing Potion", type: "Potion", tier: 1, category: "Healing", apCost: 1, effect: { type: 'heal', dice: "4d4+4", target: 'any-explorer', description: "Restore 4d4 + 4 HP." } },
+
+    // Tier 2
+    { id: nextId(), name: "Elven Chainmail", type: "Armor", tier: 2, effect: { description: "+4 Shield Bonus, +1 AP.", bonuses: { shield: 4, ap: 1 } } },
+    { id: nextId(), name: "Flaming Longsword", type: "Weapon", tier: 2, apCost: 1, effect: { type: 'damage', dice: "2d6", bonuses: { damage: 2 }, status: 'On Fire', duration: 1, description: "A blade wreathed in magical fire." } },
+    { id: nextId(), name: "Scroll of Regeneration", type: "Scroll", tier: 2, category: "Healing", apCost: 1, effect: { type: 'heal', dice: "2d8+10", target: 'any-explorer', description: "Heals for a massive amount." } },
+
+    // Tier 3
+    { id: nextId(), name: "Dragonscale Plate", type: "Armor", tier: 3, effect: { description: "+6 Shield Bonus. Resistant to fire.", bonuses: { shield: 6, ap: 0 } } },
+    { id: nextId(), name: "Stormcaller's Axe", type: "Weapon", tier: 3, apCost: 1, effect: { type: 'damage', dice: "2d10", bonuses: { damage: 3 }, status: 'Stunned', duration: 1, description: "An axe crackling with lightning." } },
+    { id: nextId(), name: "Phoenix Down", type: "Consumable", tier: 3, category: "Utility", apCost: 2, effect: { type: 'utility', description: "Revives a fallen ally to full health and lives (conceptual)." } },
+];
+
+
 module.exports = {
     classes,
     itemCards,
@@ -229,4 +255,6 @@ module.exports = {
     statusEffectDefinitions,
     actionCosts,
     npcDialogue,
+    playerEventCards,
+    discoveryCards,
 };
