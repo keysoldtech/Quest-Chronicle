@@ -390,7 +390,13 @@ function renderGameState(room) {
         playerHandDiv.appendChild(cardEl);
     });
 
-    // --- Render Board ---
+    // --- Render Board & World Event ---
+    worldEventsContainer.innerHTML = '';
+    if (gameState.worldEvents.currentEvent) {
+        const cardEl = createCardElement(gameState.worldEvents.currentEvent);
+        worldEventsContainer.appendChild(cardEl);
+    }
+    
     gameBoardDiv.innerHTML = '';
     gameState.board.monsters.forEach(monster => {
         const cardEl = createCardElement({ ...monster, currentHp: monster.currentHp }, { isTargetable: isMyTurn });
@@ -609,19 +615,19 @@ socket.on('actionError', (errorMessage) => {
     alert(errorMessage);
 });
 
-socket.on('attackAnimation', ({ attackerName, damageDice, damageRoll }) => {
-    attackRollPopup.textContent = `${attackerName} is rolling ${damageDice}...`;
+socket.on('attackAnimation', ({ attackerName, damageDice, rawDamageRoll, damageBonus, totalDamage }) => {
+    attackRollPopup.textContent = `Rolling ${damageDice}...`;
     attackRollPopup.classList.remove('hidden');
 
     // After a delay, show the result
     setTimeout(() => {
-        attackRollPopup.textContent = `${attackerName} rolled a ${damageRoll}!`;
+        attackRollPopup.textContent = `${attackerName} rolled ${rawDamageRoll} + ${damageBonus} Bonus = ${totalDamage} Damage!`;
     }, 1200);
 
     // Hide popup after animation is done
     setTimeout(() => {
         attackRollPopup.classList.add('hidden');
-    }, 2400); // Slightly less than animation duration to avoid flicker
+    }, 2400);
 });
 
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {

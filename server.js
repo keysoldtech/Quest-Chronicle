@@ -64,7 +64,7 @@ class GameManager {
                 turnOrder: [],
                 currentPlayerIndex: -1,
                 board: { monsters: [] },
-                worldEvents: { currentSequence: [], sequenceActive: false },
+                worldEvents: { currentEvent: null, currentSequence: [], sequenceActive: false },
                 monstersDefeatedSinceLastTurn: false,
                 advancedChoicesPending: [],
                 combatState: {
@@ -275,6 +275,8 @@ class GameManager {
         console.log(`[GameManager] Room ${room.id} - Shuffling decks.`);
         room.gameState.decks.monster = [...gameData.monsterCards];
         shuffle(room.gameState.decks.monster);
+        room.gameState.decks.worldEvent = [...gameData.worldEventCards];
+        shuffle(room.gameState.decks.worldEvent);
 
         const dmId = Object.values(room.players).find(p => p.role === 'DM').id;
         const explorerIds = Object.values(room.players).filter(p => p.role === 'Explorer').map(p => p.id);
@@ -361,6 +363,25 @@ class GameManager {
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
     }
 
+    playWorldEvent(roomId) {
+        const room = this.rooms[roomId];
+        if (!room) return;
+        if (room.gameState.decks.worldEvent.length === 0) {
+            console.log(`[GameManager] Room ${roomId} - World Event deck empty, reshuffling.`);
+            room.gameState.decks.worldEvent = [...gameData.worldEventCards];
+            shuffle(room.gameState.decks.worldEvent);
+        }
+        
+        const eventCard = room.gameState.decks.worldEvent.pop();
+        room.gameState.worldEvents.currentEvent = eventCard;
+        
+        this.broadcastToRoom(roomId, 'chatMessage', { 
+            senderName: 'Game Master', 
+            message: `A World Event occurs: ${eventCard.name}! ${eventCard.outcome}`, 
+            channel: 'game' 
+        });
+    }
+
     startNextTurn(roomId) {
         const room = this.rooms[roomId];
         if (!room || room.gameState.turnOrder.length === 0) return;
@@ -374,7 +395,27 @@ class GameManager {
 
         if (isDmTurn) {
             room.gameState.turnCount++;
+            room.gameState.worldEvents.currentEvent = null; // Clear previous event
             console.log(`[GameManager] Room ${roomId} - DM Turn Start. Turn count: ${room.gameState.turnCount}`);
+            
+            // --- Post-Combat Flow ---
+            if (room.gameState.board.monsters.length === 0 && room.gameState.turnCount > 1) {
+                console.log(`[GameManager] Room ${roomId} - DM turn, no monsters. Starting post-combat flow.`);
+                this.playWorldEvent(roomId);
+                
+                setTimeout(() => {
+                    console.log(`[GameManager] Room ${roomId} - Spawning new monster post-event.`);
+                    this.playMonsterCard(roomId);
+                    // Update state to clients after monster spawn
+                    this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+                }, 3000); 
+                
+                setTimeout(() => {
+                    console.log(`[GameManager] Room ${roomId} - Ending DM post-combat turn.`);
+                    this.startNextTurn(roomId);
+                }, 5000); 
+                return; // Stop further execution for this turn
+            }
         }
 
         currentPlayer.currentAp = currentPlayer.stats.ap;
@@ -487,25 +528,30 @@ class GameManager {
         const room = this.rooms[roomId];
         if (!room || !attacker || !target || !weapon) return;
         
-        const attackRoll = this.rollDice('1d20') + attacker.stats.damageBonus;
+        const hitRoll = this.rollDice('1d20');
+        const attackRoll = hitRoll + attacker.stats.damageBonus;
+        
         const damageDice = weapon.effect.dice;
-        const damageRoll = this.rollDice(damageDice) + attacker.stats.damageBonus;
+        const rawDamageRoll = this.rollDice(damageDice);
+        const damageBonus = attacker.stats.damageBonus;
+        const totalDamage = rawDamageRoll + damageBonus;
         
         let message = '';
         
         if (attackRoll >= target.requiredRollToHit) {
-            target.currentHp -= damageRoll;
-            message = `${attacker.name} rolls a ${attackRoll} to hit... Success! They roll a ${damageRoll} on their ${damageDice}, dealing ${damageRoll} damage to ${target.name}.`;
+            target.currentHp -= totalDamage;
+            message = `${attacker.name} rolls a ${rawDamageRoll} on their ${damageDice} + ${damageBonus} Bonus for a total of ${totalDamage} damage to ${target.name}!`;
+            
             if (target.currentHp <= 0) {
                 message += ` ${target.name} has been defeated!`;
                 room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== target.id);
             }
+            this.broadcastToRoom(roomId, 'attackAnimation', { attackerName: attacker.name, damageDice, rawDamageRoll, damageBonus, totalDamage });
         } else {
             message = `${attacker.name} rolls a ${attackRoll} to hit... Miss!`;
         }
         
         this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
-        this.broadcastToRoom(roomId, 'attackAnimation', { attackerName: attacker.name, damageDice, damageRoll });
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
     }
 

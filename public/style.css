@@ -441,7 +441,10 @@ body.fantasy-bg {
 .chat-form .fantasy-input { flex-grow: 1; padding: 0.5rem; }
 .chat-form .fantasy-select { padding: 0.5rem; }
 
-.chat-message { font-size: 0.85rem; line-height: 1.4; }
+.chat-message {
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
 .chat-message.system { color: var(--color-danger); font-style: italic; }
 .chat-message .channel { font-weight: bold; margin-right: 0.25rem; }
 .chat-message .channel.party { color: var(--color-secondary); }
@@ -449,6 +452,9 @@ body.fantasy-bg {
 .chat-message .sender { font-weight: bold; }
 .chat-message .sender.self { color: var(--color-text-dark); }
 .chat-message .sender.other { color: #555; }
+.chat-message .message {
+    color: #2c2825;
+}
 .chat-message.narrative {
     color: var(--color-text-dark);
     font-style: italic;
