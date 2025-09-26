@@ -64,7 +64,7 @@ class GameManager {
                 turnOrder: [],
                 currentPlayerIndex: -1,
                 board: { monsters: [] },
-                worldEvents: { currentEvent: null, currentSequence: [], sequenceActive: false },
+                worldEvents: { currentEvent: null, currentSequence: [], sequenceActive: false, pendingSaves: [] },
                 monstersDefeatedSinceLastTurn: false,
                 advancedChoicesPending: [],
                 combatState: {
@@ -127,6 +127,27 @@ class GameManager {
 
                 const newPlayer = this.createPlayerObject(socket.id, playerName);
                 room.players[socket.id] = newPlayer;
+
+                // --- Late Joiner Balance ---
+                if (room.gameState.turnCount > 0) {
+                    const catchUpCards = [];
+                    // Create a pool of generally useful cards
+                    const cardPool = [...gameData.discoveryCards, ...gameData.itemCards.filter(c => c.type === 'Potion')];
+                    shuffle(cardPool);
+                    const numCards = Math.min(room.gameState.turnCount, 5); // Cap at 5 cards
+                    for (let i = 0; i < numCards; i++) {
+                        if (cardPool.length > 0) {
+                            catchUpCards.push({ ...cardPool.pop(), id: this.generateUniqueCardId() });
+                        }
+                    }
+                    newPlayer.hand.push(...catchUpCards);
+                    this.broadcastToRoom(roomId, 'chatMessage', { 
+                        senderName: 'Game Master', 
+                        message: `${playerName} receives ${numCards} item(s) from the quartermaster to catch up!`, 
+                        channel: 'game' 
+                    });
+                }
+
 
                 if (npcTurnIndex > -1) {
                     room.gameState.turnOrder[npcTurnIndex] = socket.id;
@@ -418,10 +439,14 @@ class GameManager {
         // Trigger saves for all explorers if the event requires it
         if (eventCard.dc && eventCard.save) {
             const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+            room.gameState.worldEvents.pendingSaves = explorers.map(e => e.id); // Populate list of players who need to save
+
             explorers.forEach(explorer => {
                 if (explorer.isNpc) {
+                    // Resolve NPC save immediately but it will call checkAndProceed...
                     this.resolveNpcWorldEventSave(roomId, explorer.id, eventCard);
                 } else {
+                    // Flag human players to make a save
                     explorer.pendingWorldEventSave = { dc: eventCard.dc, save: eventCard.save, eventName: eventCard.name };
                 }
             });
@@ -442,6 +467,7 @@ class GameManager {
         if (isDmTurn) {
             room.gameState.turnCount++;
             room.gameState.worldEvents.currentEvent = null; // Clear previous event
+            room.gameState.worldEvents.pendingSaves = []; // Clear pending saves for new turn
             console.log(`[GameManager] Room ${roomId} - DM Turn Start. Turn count: ${room.gameState.turnCount}`);
 
             if (room.gameState.turnCount === 1 && currentPlayer.isNpc) {
@@ -453,12 +479,21 @@ class GameManager {
 
             if (room.gameState.board.monsters.length === 0) {
                 this.playWorldEvent(roomId);
+                 // If the event requires saves, the game flow will now pause here.
+                 // checkAndProceedAfterWorldEvent will continue the turn later.
+                if (room.gameState.worldEvents.pendingSaves.length > 0) {
+                    this.broadcastToRoom(roomId, 'gameStateUpdate', room); // Update clients to show save prompts
+                    return; // HALT execution until all saves are resolved.
+                }
+
+                // If no saves were required by the event, continue the DM turn as normal.
                 setTimeout(() => {
                     this.playMonsterCard(roomId);
                     this.broadcastToRoom(roomId, 'gameStateUpdate', room);
                 }, 3000);
                 setTimeout(() => this.startNextTurn(roomId), 5000);
                 return;
+
             } else {
                 if (currentPlayer.isNpc) {
                     setTimeout(() => this.executeDmCombatTurn(roomId), 2000);
@@ -588,8 +623,14 @@ class GameManager {
         }
         attacker.currentAp -= apCost;
     
+        // --- CRITICAL REWRITE: Explicitly calculate bonus at time of attack ---
+        const classBonus = (gameData.classes[attacker.class]?.baseDamageBonus) || 0;
+        const weaponBonus = (weapon.effect?.bonuses?.damage) || 0;
+        const totalBonus = classBonus + weaponBonus;
+        // This 'totalBonus' is now the single source of truth for this attack action.
+    
         const hitRoll = this.rollDice('1d20');
-        const attackRoll = hitRoll + attacker.stats.damageBonus;
+        const attackRoll = hitRoll + totalBonus; // Use fresh bonus for attack roll
         
         let message = '';
         const requiredRoll = target.requiredRollToHit;
@@ -597,14 +638,10 @@ class GameManager {
         if (attackRoll >= requiredRoll) {
             const damageDice = weapon.effect.dice;
             const rawDamageRoll = this.rollDice(damageDice);
-            
-            const classBonus = (gameData.classes[attacker.class]?.baseDamageBonus) || 0;
-            const weaponBonus = (weapon.effect?.bonuses?.damage) || 0;
-            const totalBonus = classBonus + weaponBonus;
-            const totalDamage = rawDamageRoll + totalBonus;
+            const totalDamage = rawDamageRoll + totalBonus; // Use fresh bonus for damage roll
 
-            console.log(`[Damage Calc] Attacker: ${attacker.name}, Weapon: ${weapon.name}`);
-            console.log(`DMG = [Dice Roll: ${rawDamageRoll}] + [Class Bonus: ${classBonus}] + [Weapon Bonus: ${weaponBonus}] = Total: ${totalDamage}`);
+            console.log(`[Damage Calc REWRITE] Attacker: ${attacker.name}, Weapon: ${weapon.name}`);
+            console.log(`DMG = [Dice Roll: ${rawDamageRoll}] + [Total Bonus: ${totalBonus} (Class:${classBonus} + Wpn:${weaponBonus})] = Total: ${totalDamage}`);
             
             target.currentHp -= totalDamage;
             message = `${attacker.name} attacks ${target.name} for ${totalDamage} damage! (${rawDamageRoll} + ${totalBonus} Bonus)`;
@@ -723,6 +760,27 @@ class GameManager {
         
         this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+
+        // This NPC has finished its save. Remove it from the pending list.
+        room.gameState.worldEvents.pendingSaves = room.gameState.worldEvents.pendingSaves.filter(id => id !== npcId);
+        this.checkAndProceedAfterWorldEvent(roomId);
+    }
+    
+    checkAndProceedAfterWorldEvent(roomId) {
+        const room = this.rooms[roomId];
+        if (!room || room.gameState.worldEvents.pendingSaves.length > 0) {
+            return; // Still waiting for other players
+        }
+
+        // All saves are done. Now continue the DM's turn.
+        this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: 'All players have reacted to the event. The journey continues...', channel: 'game' });
+        
+        // This mirrors the logic that was previously after playWorldEvent in startNextTurn
+        setTimeout(() => {
+            this.playMonsterCard(roomId);
+            this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+        }, 2000);
+        setTimeout(() => this.startNextTurn(roomId), 4000);
     }
 
     applyEffect(targetId, effect, roomId) {
@@ -1038,6 +1096,11 @@ io.on('connection', (socket) => {
 
         socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc: eventData.dc, success });
         gameManager.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
+        
+        // This player has finished their save. Remove them from the pending list.
+        room.gameState.worldEvents.pendingSaves = room.gameState.worldEvents.pendingSaves.filter(id => id !== socket.id);
+        gameManager.checkAndProceedAfterWorldEvent(room.id);
+        
         gameManager.broadcastToRoom(room.id, 'gameStateUpdate', room);
     });
 

@@ -78,6 +78,12 @@ const apModal = document.getElementById('ap-modal');
 const apModalCancelBtn = document.getElementById('ap-modal-cancel-btn');
 const apModalConfirmBtn = document.getElementById('ap-modal-confirm-btn');
 
+// End Turn Modal refs
+const endTurnConfirmModal = document.getElementById('end-turn-confirm-modal');
+const endTurnCancelBtn = document.getElementById('end-turn-cancel-btn');
+const endTurnConfirmBtn = document.getElementById('end-turn-confirm-btn');
+
+
 // Dice Roll Overlay DOM refs
 const diceRollOverlay = document.getElementById('dice-roll-overlay');
 const diceRollTitle = document.getElementById('dice-roll-title');
@@ -552,8 +558,18 @@ startGameBtn.addEventListener('click', () => {
 });
 
 endTurnBtn.addEventListener('click', () => {
-    socket.emit('endTurn');
+    endTurnConfirmModal.classList.remove('hidden');
 });
+
+endTurnConfirmBtn.addEventListener('click', () => {
+    socket.emit('endTurn');
+    endTurnConfirmModal.classList.add('hidden');
+});
+
+endTurnCancelBtn.addEventListener('click', () => {
+    endTurnConfirmModal.classList.add('hidden');
+});
+
 
 dmPlayMonsterBtn.addEventListener('click', () => {
     socket.emit('dmAction', { action: 'playMonster' });

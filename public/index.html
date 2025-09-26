@@ -14,7 +14,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.47</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.48</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -50,7 +50,7 @@
             <div>
                  <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                  <p>Turn: <span id="turn-counter">0</span></p>
-                 <p class="build-number-font">v3.47</p>
+                 <p class="build-number-font">v3.48</p>
             </div>
              <div class="header-controls">
                 <div id="dm-controls" class="dm-controls hidden">
@@ -129,7 +129,7 @@
                                 <!-- Rest buttons will be added here by client.js -->
                             </div>
                             <button id="confirm-attack-btn" class="fantasy-button-primary hidden">Confirm Attack</button>
-                            <button id="endTurnBtn" class="fantasy-button-danger hidden">End Turn</button>
+                            <button id="endTurnBtn" class="fantasy-button-primary hidden">End Turn</button>
                         </div>
                     </div>
                     
@@ -166,6 +166,18 @@
             <div class="modal-actions">
                 <button id="ap-modal-cancel-btn" class="fantasy-button-secondary">Not Yet</button>
                 <button id="ap-modal-confirm-btn" class="fantasy-button-danger">End Turn</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- End Turn Confirmation Modal -->
+    <div id="end-turn-confirm-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="header-font">End Your Turn?</h2>
+            <p>Are you sure you want to end your turn? You may not be able to take any more actions.</p>
+            <div class="modal-actions">
+                <button id="end-turn-cancel-btn" class="fantasy-button-secondary">Cancel</button>
+                <button id="end-turn-confirm-btn" class="fantasy-button-danger">Confirm End Turn</button>
             </div>
         </div>
     </div>
