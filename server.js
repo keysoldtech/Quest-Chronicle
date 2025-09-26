@@ -1355,11 +1355,11 @@ io.on('connection', (socket) => {
             // Handle player leaving game logic
             const isHumanExplorer = !player.isNpc && player.role === 'Explorer';
             const isHumanDM = !player.isNpc && player.role === 'DM';
-            const gameIsActive = room.gameState.phase === 'active';
+            const gameIsActive = room.gameState.phase === 'active' || room.gameState.phase === 'advanced_setup_choice';
 
             if ((isHumanExplorer || isHumanDM) && gameIsActive) {
                 console.log(`[GameManager] Player ${player.name} left. Converting to NPC.`);
-                // Convert to NPC instead of removing completely
+                // VERIFIED (3.66): Convert to NPC instead of removing completely. This maintains game state.
                 const npc = gameManager.createPlayerObject(socket.id, `${player.name} (NPC)`, player.role, true);
                 // Keep all relevant stats and items
                 npc.class = player.class;
@@ -1380,17 +1380,18 @@ io.on('connection', (socket) => {
                  delete room.players[socket.id];
             }
 
-            // Check if any human players are left
+            // VERIFIED (3.66): Check if any human players are left *after* the potential conversion to NPC.
             const humanPlayersLeft = Object.values(room.players).filter(p => !p.isNpc);
             if (humanPlayersLeft.length === 0) {
-                // No human players left, clean up room
+                // VERIFIED (3.66): No human players left (neither explorers nor DM), so clean up the room.
+                // This correctly ends the game when the last human disconnects.
                 console.log(`[GameManager] Last human player left room ${room.id}. Deleting room.`);
                 delete gameManager.rooms[room.id];
                 return; // No need to broadcast update if room is gone
             }
 
             // If host leaves, assign a new host from remaining human players
-            if (socket.id === room.hostId) {
+            if (socket.id === room.hostId && humanPlayersLeft.length > 0) {
                 room.hostId = humanPlayersLeft[0].id;
                 console.log(`[GameManager] Host left. New host is ${humanPlayersLeft[0].name}.`);
             }

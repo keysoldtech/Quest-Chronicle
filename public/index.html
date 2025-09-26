@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=MedievalSharp&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -14,7 +15,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.65</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.66</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -46,103 +47,172 @@
 
     <!-- Game Area: Hidden until a room is joined -->
     <div id="game-area" class="game-area hidden">
-        <header class="game-header">
-            <div class="header-info">
-                 <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
-                 <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                 <p class="build-number-font">v3.65</p>
-            </div>
-             <div class="header-controls">
-                <div id="dm-controls" class="dm-controls hidden">
-                     <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
+        
+        <!-- ================= DESKTOP LAYOUT ================= -->
+        <div class="game-area-desktop">
+            <header class="game-header">
+                <div class="header-info">
+                     <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
+                     <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
+                     <p class="build-number-font">v3.66</p>
                 </div>
-                <button id="chat-toggle-btn" class="btn btn-sm btn-secondary">Chat</button>
-                <button id="join-voice-btn" class="btn btn-sm btn-success">Join Voice</button>
-                <button id="leave-game-btn" class="btn btn-sm btn-danger hidden">Leave Game</button>
-                <button id="startGameBtn" class="btn btn-primary hidden">Start Game</button>
-                <div class="room-code-display">
-                    <p>Room Code:</p>
-                    <p id="room-code">----</p>
-                </div>
-            </div>
-        </header>
-
-        <main class="game-main">
-            <!-- Left Column: Player List, Class Selection, Stats -->
-            <aside class="left-panel">
-                <div class="panel">
-                    <h2 class="panel-header">Players</h2>
-                    <ul id="player-list" class="player-list"></ul>
-                </div>
-
-                <div id="class-selection" class="panel hidden">
-                    <h2 class="panel-header">Choose Your Class</h2>
-                    <div id="class-cards-container" class="class-cards-container">
-                        <!-- Class cards will be generated here -->
+                 <div class="header-controls">
+                    <div id="dm-controls" class="dm-controls hidden">
+                         <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                     </div>
+                    <button id="chat-toggle-btn" class="btn btn-sm btn-secondary">Chat</button>
+                    <button id="join-voice-btn" class="btn btn-sm btn-success">Join Voice</button>
+                    <button id="leave-game-btn" class="btn btn-sm btn-danger hidden">Leave Game</button>
+                    <button id="startGameBtn" class="btn btn-primary hidden">Start Game</button>
+                    <div class="room-code-display">
+                        <p>Room Code:</p>
+                        <p id="room-code">----</p>
+                    </div>
+                </div>
+            </header>
+
+            <aside class="players-panel panel">
+                 <h2 class="panel-header">Players</h2>
+                 <ul id="player-list" class="player-list"></ul>
+            </aside>
+            
+            <aside class="character-panel panel">
+                <!-- This panel contains multiple states -->
+                <div id="class-selection" class="panel-content">
+                    <h2 class="panel-header">Choose Your Class</h2>
+                    <div id="class-cards-container" class="class-cards-container"></div>
                     <div class="class-confirm-container">
                          <button id="confirm-class-btn" class="btn btn-primary hidden">Confirm Class</button>
                     </div>
                 </div>
-                
-                <div id="advanced-card-choice" class="panel hidden">
+                <div id="advanced-card-choice" class="panel-content hidden">
                     <h2 class="panel-header">Choose Starting Card</h2>
-                    <div id="advanced-choice-buttons" class="button-grid">
-                        <!-- Advanced choice buttons will be generated here -->
-                    </div>
+                    <div id="advanced-choice-buttons" class="button-grid"></div>
                 </div>
-
-                <div id="player-stats-container" class="panel hidden">
+                <div id="player-stats-container" class="panel-content hidden">
                      <h2 class="panel-header">Your Stats</h2>
-                     <div id="player-stats" class="player-stats">
-                         <!-- Stats will be rendered here -->
-                     </div>
+                     <div id="player-stats" class="player-stats"></div>
                 </div>
             </aside>
 
-            <!-- Right Column: Game Board & Player Hand -->
-            <div class="right-panel">
-                <div class="upper-board-area">
-                    <div class="world-events-section panel">
-                         <h2 class="panel-header">World Events</h2>
-                         <div id="world-events-container" class="card-container-row"></div>
-                    </div>
-                    <div class="party-loot-section panel">
-                        <h2 class="panel-header">Party Discoveries</h2>
-                        <div id="party-loot-container" class="card-container-row">
-                            <!-- Loot cards will be rendered here -->
-                        </div>
-                    </div>
-                    <div id="game-board" class="game-board-section panel">
-                        <h2 class="panel-header">Game Board</h2>
-                        <div id="board-cards" class="card-container-row"></div>
+            <main class="board-panel panel">
+                <h2 class="panel-header">Game Board</h2>
+                <div id="board-cards" class="card-container-row"></div>
+            </main>
+
+            <aside class="info-tabs-panel">
+                <div class="tab-buttons">
+                    <button class="tab-btn active" data-tab="world-events-tab">World Events</button>
+                    <button class="tab-btn" data-tab="party-loot-tab">Party Discoveries</button>
+                </div>
+                <div id="world-events-tab" class="tab-content active">
+                    <div id="world-events-container" class="card-container-row"></div>
+                </div>
+                <div id="party-loot-tab" class="tab-content">
+                    <div id="party-loot-container" class="card-container-row"></div>
+                </div>
+            </aside>
+
+            <footer class="hand-panel panel">
+                 <div class="player-hand-header">
+                    <h2 class="panel-header">Your Hand & Equipment</h2>
+                    <div class="player-turn-controls">
+                        <div id="player-actions-container" class="player-actions-container hidden"></div>
+                        <button id="confirm-attack-btn" class="btn btn-primary hidden">Confirm Attack</button>
+                        <button id="endTurnBtn" class="btn btn-primary hidden">End Turn</button>
                     </div>
                 </div>
-                <div class="player-hand-section panel">
-                    <div class="player-hand-header">
-                        <h2 class="panel-header">Your Hand & Equipment</h2>
-                        <div class="player-turn-controls">
-                            <div id="player-actions-container" class="player-actions-container hidden">
-                                <!-- Rest buttons will be added here by client.js -->
-                            </div>
-                            <button id="confirm-attack-btn" class="btn btn-primary hidden">Confirm Attack</button>
-                            <button id="endTurnBtn" class="btn btn-primary hidden">End Turn</button>
-                        </div>
-                    </div>
-                    
+                <div class="hand-and-equipped-container">
                     <div id="equipped-items-container" class="equipped-items-container">
                         <h3 class="sub-header-font">Equipped</h3>
-                        <div id="equipped-items" class="card-container-row">
-                            <!-- Equipped items will be rendered here -->
-                        </div>
+                        <div id="equipped-items" class="card-container-row"></div>
                     </div>
                     <div id="player-hand" class="player-hand-container card-container-row"></div>
                 </div>
-            </div>
-        </main>
+            </footer>
+        </div>
+
+        <!-- ================= MOBILE LAYOUT ================= -->
+        <div class="game-area-mobile">
+            <header class="mobile-header">
+                <div class="mobile-header-info">
+                     <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
+                     <p class="turn-counter">Turn: <span id="mobile-turn-counter">0</span></p>
+                </div>
+                 <div class="mobile-header-controls">
+                    <button id="mobile-chat-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">chat</span></button>
+                    <button id="mobile-leave-game-btn" class="btn btn-sm btn-icon btn-danger"><span class="material-symbols-outlined">logout</span></button>
+                    <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
+                </div>
+            </header>
+            
+            <main class="mobile-main">
+                <!-- Mobile Screens -->
+                <div id="mobile-screen-game" class="mobile-screen active">
+                    <div class="panel mobile-panel">
+                        <h2 class="panel-header">Game Board</h2>
+                        <div id="mobile-board-cards" class="card-container-row"></div>
+                    </div>
+                    <div class="panel mobile-panel">
+                        <div class="player-hand-header">
+                             <h2 class="panel-header">Your Hand</h2>
+                             <div class="player-turn-controls">
+                                <button id="mobile-confirm-attack-btn" class="btn btn-sm btn-primary hidden">Attack</button>
+                                <button id="mobile-endTurnBtn" class="btn btn-sm btn-primary hidden">End Turn</button>
+                            </div>
+                        </div>
+                        <div id="mobile-player-hand" class="card-container-row"></div>
+                    </div>
+                </div>
+
+                <div id="mobile-screen-character" class="mobile-screen">
+                    <div id="mobile-class-selection" class="panel-content panel">
+                        <h2 class="panel-header">Choose Your Class</h2>
+                        <div id="mobile-class-cards-container" class="class-cards-container"></div>
+                        <div class="class-confirm-container">
+                             <button id="mobile-confirm-class-btn" class="btn btn-primary hidden">Confirm Class</button>
+                        </div>
+                    </div>
+                    <div id="mobile-player-stats" class="panel mobile-panel">
+                         <h2 class="panel-header">Your Stats</h2>
+                         <div id="mobile-stats-display" class="player-stats"></div>
+                    </div>
+                    <div id="mobile-player-equipment" class="panel mobile-panel">
+                         <h2 class="panel-header">Your Equipment</h2>
+                         <div id="mobile-equipped-items" class="card-container-row"></div>
+                    </div>
+                </div>
+
+                <div id="mobile-screen-party" class="mobile-screen">
+                     <div class="panel mobile-panel">
+                        <h2 class="panel-header">Players</h2>
+                        <ul id="mobile-player-list" class="player-list"></ul>
+                    </div>
+                </div>
+                
+                 <div id="mobile-screen-info" class="mobile-screen">
+                     <div class="panel mobile-panel">
+                         <h2 class="panel-header">World Events</h2>
+                         <div id="mobile-world-events-container" class="card-container-row"></div>
+                    </div>
+                     <div class="panel mobile-panel">
+                        <h2 class="panel-header">Party Discoveries</h2>
+                        <div id="mobile-party-loot-container" class="card-container-row"></div>
+                    </div>
+                </div>
+            </main>
+
+            <nav class="mobile-bottom-nav">
+                <button class="nav-btn active" data-screen="game"><span class="material-symbols-outlined">swords</span>Game</button>
+                <button class="nav-btn" data-screen="character"><span class="material-symbols-outlined">person</span>Character</button>
+                <button class="nav-btn" data-screen="party"><span class="material-symbols-outlined">groups</span>Party</button>
+                <button class="nav-btn" data-screen="info"><span class="material-symbols-outlined">public</span>Info</button>
+            </nav>
+        </div>
+
     </div>
     
-    <!-- Chat Overlay -->
+    <!-- Shared Overlays/Modals -->
     <div id="chat-overlay" class="chat-overlay hidden">
         <div class="chat-header">
             <h2 class="panel-header">Chat & Log</h2>
@@ -159,12 +229,11 @@
         </form>
     </div>
 
-    <!-- Narrative Input Modal -->
     <div id="narrative-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 class="panel-header">Describe Your Action</h2>
             <p id="narrative-prompt">How do you use [Card Name]?</p>
-            <textarea id="narrative-input" class="input-field" rows="3" placeholder="e.g., I chant the arcane words and a bolt of fire erupts from my hands..."></textarea>
+            <textarea id="narrative-input" class="input-field" rows="3" placeholder="e.g., I chant the arcane words..."></textarea>
             <div class="modal-actions">
                 <button id="narrative-cancel-btn" class="btn btn-secondary">Cancel</button>
                 <button id="narrative-confirm-btn" class="btn btn-primary">Confirm</button>
@@ -172,7 +241,6 @@
         </div>
     </div>
     
-    <!-- AP Modal -->
     <div id="ap-modal" class="modal-overlay hidden">
         <div class="modal-content ap-modal-content">
             <h2 class="panel-header">Out of Actions</h2>
@@ -184,92 +252,60 @@
         </div>
     </div>
 
-    <!-- End Turn Confirmation Modal -->
     <div id="end-turn-confirm-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 class="panel-header">End Your Turn?</h2>
-            <p>Are you sure you want to end your turn? You may not be able to take any more actions.</p>
+            <p>Are you sure you want to end your turn?</p>
             <div class="modal-actions">
                 <button id="end-turn-cancel-btn" class="btn btn-secondary">Cancel</button>
-                <button id="end-turn-confirm-btn" class="btn btn-danger">Confirm End Turn</button>
+                <button id="end-turn-confirm-btn" class="btn btn-danger">Confirm</button>
             </div>
         </div>
     </div>
 
-    <!-- "Your Turn" Popup -->
     <div id="your-turn-popup" class="your-turn-popup hidden">YOUR TURN</div>
 
-    <!-- Dice Roll Overlay -->
     <div id="dice-roll-overlay" class="modal-overlay hidden">
         <div class="dice-roll-content">
             <h2 id="dice-roll-title" class="panel-header">Attacking...</h2>
             <div class="dice-scene">
                 <div id="attack-dice" class="dice">
-                    <div class="face front"></div>
-                    <div class="face back"></div>
-                    <div class="face right"></div>
-                    <div class="face left"></div>
-                    <div class="face top"></div>
-                    <div class="face bottom"></div>
+                    <div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div>
                 </div>
             </div>
-            <div id="dice-roll-result" class="dice-roll-result-container hidden">
-                <!-- Results will be populated here by JS -->
-            </div>
+            <div id="dice-roll-result" class="dice-roll-result-container hidden"></div>
         </div>
     </div>
 
-    <!-- Event Overlay -->
     <div id="event-overlay" class="event-overlay hidden">
-        <!-- Step 1: Roll Button -->
         <div id="event-roll-container" class="event-step-container">
             <h2 class="panel-header">An Event is Triggered!</h2>
-            <p>Your actions have drawn the attention of fate. Roll the dice to see what happens.</p>
+            <p>Roll the dice to see what happens.</p>
             <button id="roll-dice-btn" class="btn btn-special">Roll Dice</button>
         </div>
-
-        <!-- Step 2: Dice Animation -->
         <div id="event-dice-animation-container" class="event-step-container hidden">
-            <div class="dice-scene">
-                <div id="dice" class="dice">
-                    <div class="face front"></div>
-                    <div class="face back"></div>
-                    <div class="face right"></div>
-                    <div class="face left"></div>
-                    <div class="face top"></div>
-                    <div class="face bottom"></div>
-                </div>
-            </div>
+            <div class="dice-scene"><div id="dice" class="dice"><div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div></div></div>
         </div>
-
-        <!-- Step 3: Result and Card Choice -->
         <div id="event-result-container" class="event-step-container hidden">
             <h2 class="panel-header" id="event-result-title"></h2>
             <p id="event-result-subtitle"></p>
-            <div id="event-card-selection" class="card-container-row hidden">
-                <!-- Card backs will be generated here -->
-            </div>
+            <div id="event-card-selection" class="card-container-row hidden"></div>
             <button id="event-result-okay-btn" class="btn btn-primary hidden">Okay</button>
         </div>
     </div>
     
-    <!-- World Event Save Modal -->
     <div id="world-event-save-modal" class="modal-overlay hidden">
         <div class="modal-content" style="text-align: center;">
             <h2 id="world-event-save-title" class="panel-header">World Event!</h2>
             <p id="world-event-save-prompt">You must make a save!</p>
             <div class="dice-scene" style="margin: 1.5rem auto;">
-                <div id="world-event-dice" class="dice">
-                    <div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div>
-                </div>
+                <div id="world-event-dice" class="dice"><div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div></div>
             </div>
             <p id="world-event-roll-result" class="hidden" style="font-weight: bold; font-size: 1.2rem; margin-bottom: 1rem;"></p>
             <button id="world-event-save-roll-btn" class="btn btn-special">Roll d20</button>
         </div>
     </div>
 
-
-    <!-- Container for remote audio streams -->
     <div id="voice-chat-container"></div>
 
     <script src="/socket.io/socket.io.js"></script>
