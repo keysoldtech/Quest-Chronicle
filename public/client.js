@@ -537,13 +537,13 @@ socket.on('actionError', (errorMessage) => {
     alert(errorMessage);
 });
 
-socket.on('attackAnimation', ({ damageDice, damageRoll }) => {
-    attackRollPopup.textContent = `Rolling ${damageDice}...`;
+socket.on('attackAnimation', ({ attackerName, damageDice, damageRoll }) => {
+    attackRollPopup.textContent = `${attackerName} is rolling ${damageDice}...`;
     attackRollPopup.classList.remove('hidden');
 
     // After a delay, show the result
     setTimeout(() => {
-        attackRollPopup.textContent = `${damageRoll}!`;
+        attackRollPopup.textContent = `${attackerName} rolled a ${damageRoll}!`;
     }, 1200);
 
     // Hide popup after animation is done

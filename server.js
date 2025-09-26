@@ -416,6 +416,14 @@ class GameManager {
             return; // Prevent other logic from running until the turn auto-ends
         }
         
+        // Handle NPC Explorer turns
+        if (currentPlayer.isNpc && currentPlayer.role === 'Explorer') {
+            console.log(`[GameManager] Room ${roomId} - NPC Explorer ${currentPlayer.name}'s turn.`);
+            // Use setTimeout to give a brief pause before the NPC acts.
+            setTimeout(() => this.executeNpcExplorerTurn(roomId, currentPlayer.id), 2000);
+            return; // Stop further execution for this turn, as NPC logic will handle the next step.
+        }
+        
         // Random event check every 3 explorer turns, triggered on subsequent DM turns
         if (isDmTurn && room.gameState.turnCount > 1 && (room.gameState.turnCount -1) % 3 === 0) {
              Object.values(room.players).forEach(p => {
@@ -426,6 +434,36 @@ class GameManager {
         }
 
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+    }
+    
+    executeNpcExplorerTurn(roomId, npcId) {
+        const room = this.rooms[roomId];
+        const npc = room.players[npcId];
+        if (!room || !npc) return;
+    
+        // Decision Making
+        const hasWeapon = npc.equipment.weapon;
+        const monstersExist = room.gameState.board.monsters.length > 0;
+    
+        // Priority 1: Attack if possible
+        if (hasWeapon && monstersExist) {
+            const target = room.gameState.board.monsters[0]; // Simple AI: attack the first monster
+            const narrative = this.getRandomDialogue('explorer', 'attack');
+            
+            this.broadcastToRoom(roomId, 'chatMessage', { senderName: npc.name, message: narrative, channel: 'game', isNarrative: true });
+            
+            // Wait a moment after the narrative before resolving the attack
+            setTimeout(() => {
+                this.resolveAttack(roomId, npc, target, hasWeapon);
+                // End turn after the attack animation and message have time to be seen
+                setTimeout(() => this.startNextTurn(roomId), 4000);
+            }, 1500);
+            return;
+        }
+    
+        // Default action: If no other action is taken, just end the turn
+        this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `${npc.name} stands ready, assessing the situation.`, channel: 'game' });
+        setTimeout(() => this.startNextTurn(roomId), 2000);
     }
     
     endTurn(socketId) {
@@ -473,8 +511,8 @@ class GameManager {
         }
         
         this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
-        // Send data for animation
-        io.to(attacker.id).emit('attackAnimation', { damageDice, damageRoll });
+        // Send data for animation to ALL clients
+        this.broadcastToRoom(roomId, 'attackAnimation', { attackerName: attacker.name, damageDice, damageRoll });
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
     }
 
