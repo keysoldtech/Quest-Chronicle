@@ -188,9 +188,12 @@ function createCardElement(card, actions = {}) {
 }
 
 function renderPlayerList(players, gameState) {
-    const currentPlayerId = gameState.combatState.isActive ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] : null;
+    const currentPlayerId = gameState.combatState.isActive ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] : (gameState.turnOrder[gameState.currentPlayerIndex] || null);
     playerList.innerHTML = ''; 
     Object.values(players).forEach(player => {
+        // Don't show the DM NPC in the player list
+        if (player.id === 'dm-npc') return;
+
         const isCurrentTurn = player.id === currentPlayerId;
         const li = document.createElement('li');
         li.id = `player-${player.id}`;
@@ -218,7 +221,7 @@ function renderPlayerList(players, gameState) {
 
 function renderGameState(room) {
     currentRoomState = room;
-    const { players, gameState } = room;
+    const { players, gameState, hostId } = room;
     myPlayerInfo = players[myId];
     if (!myPlayerInfo) return;
 
@@ -226,7 +229,7 @@ function renderGameState(room) {
     
     // --- Phase-specific UI rendering ---
     const isCombat = gameState.combatState.isActive;
-    const isDm = myPlayerInfo.role === 'DM';
+    const isHost = myId === hostId;
     
     // Determine whose turn it is
     let currentTurnTakerId;
@@ -240,13 +243,17 @@ function renderGameState(room) {
     const isDmNpcTurn = currentTurnTakerId === 'dm-npc';
     const canPlayTargetedCard = gameState.board.monsters.length > 0;
     
-    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || isDm || myPlayerInfo.class);
-    advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || isDm);
+    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || !!myPlayerInfo.class);
+    advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
     playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
-    endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isDm && isDmNpcTurn)));
-    dmControls.classList.toggle('hidden', !isDm || gameState.phase === 'lobby');
+    endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isHost && isDmNpcTurn)));
+    dmControls.classList.toggle('hidden', !isHost || gameState.phase === 'lobby');
     playerActionsContainer.classList.toggle('hidden', !isMyTurn);
     
+    // Game mode selector should only be visible to the host in the lobby
+    gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
+
+
     // "Your Turn" popup
     if (isMyTurn && !isMyTurnPreviously) {
         yourTurnPopup.classList.remove('hidden');
@@ -265,7 +272,7 @@ function renderGameState(room) {
     }
 
     // --- Lobby Phase ---
-    if (gameState.phase === 'lobby' && !isDm) {
+    if (gameState.phase === 'lobby') {
         if (classButtonsDiv.children.length === 0) {
             ['Warrior', 'Mage', 'Rogue', 'Cleric', 'Ranger', 'Barbarian'].forEach(className => {
                 const btn = document.createElement('button');
@@ -279,7 +286,7 @@ function renderGameState(room) {
     }
     
     // --- Advanced Setup Phase ---
-    if (gameState.phase === 'advanced_setup_choice' && !isDm) {
+    if (gameState.phase === 'advanced_setup_choice' && !myPlayerInfo.madeAdvancedChoice) {
         turnIndicator.textContent = "Choose your starting card type...";
         if (advancedChoiceButtonsDiv.children.length === 0) {
             ['Weapon', 'Armor', 'Spell'].forEach(cardType => {
@@ -300,6 +307,7 @@ function renderGameState(room) {
         if (turnTaker) {
             turnIndicator.textContent = `Current Turn: ${turnTaker.name}`;
             if(isMyTurn) turnIndicator.textContent += ' (Your Turn)';
+            if(isDmNpcTurn) turnIndicator.textContent = "Dungeon Master's Turn";
         } else {
             turnIndicator.textContent = 'Waiting for next turn...';
         }
@@ -453,9 +461,9 @@ socket.on('roomCreated', (room) => {
     gameArea.classList.remove('hidden');
     roomCodeDisplay.textContent = room.id;
     
-    // DM-specific UI setup
+    // Host-specific UI setup
     startGameBtn.classList.remove('hidden');
-    gameModeSelector.classList.add('hidden');
+    gameModeSelector.classList.remove('hidden');
 
     renderGameState(room);
 });
@@ -474,6 +482,7 @@ socket.on('playerListUpdate', (room) => {
 
 socket.on('gameStarted', (room) => {
     startGameBtn.classList.add('hidden');
+    gameModeSelector.classList.add('hidden');
     logMessage('The game has begun!', { type: 'system' });
     renderGameState(room);
 });

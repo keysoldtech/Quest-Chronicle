@@ -47,10 +47,11 @@ class GameManager {
 
     createRoom(socket, playerName) {
         const roomId = this.generateRoomId();
-        const newPlayer = this.createPlayerObject(socket.id, playerName, 'DM');
+        const newPlayer = this.createPlayerObject(socket.id, playerName, 'Explorer'); // The creator is an Explorer
         
         const newRoom = {
             id: roomId,
+            hostId: socket.id, // Designate this player as the host
             players: { [socket.id]: newPlayer },
             voiceChatPeers: [],
             gameState: {
@@ -96,6 +97,7 @@ class GameManager {
             currentAp: 0,
             pendingEventRoll: false,
             pendingEventChoice: false,
+            madeAdvancedChoice: false,
         };
     }
 
@@ -161,6 +163,10 @@ class GameManager {
         }
     
         const classData = gameData.classes[player.class];
+        if (!classData) { // Fallback for safety
+             player.stats = { maxHp: 20, currentHp: 20, damageBonus: 0, shieldBonus: 0, ap: 3 };
+             return;
+        }
         let damageBonus = classData.baseDamageBonus;
         let shieldBonus = classData.baseShieldBonus;
         let ap = classData.baseAp;
@@ -192,27 +198,51 @@ class GameManager {
     }
     
     // --- CORE GAME LOGIC ---
-    startGame(dmId, gameMode) {
-        const room = this.getRoomBySocketId(dmId);
-        if (!room || room.players[dmId].role !== 'DM' || room.gameState.phase !== 'lobby') return;
+    startGame(hostId, gameMode) {
+        const room = this.getRoomBySocketId(hostId);
+        if (!room || hostId !== room.hostId || room.gameState.phase !== 'lobby') return;
 
         room.gameState.gameMode = gameMode;
         
-        // Assign stats and initialize players
+        // --- NPC POPULATION LOGIC ---
+        const humanExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
+        const neededNpcs = 4 - humanExplorers.length;
+        if (neededNpcs > 0) {
+            console.log(`[GameManager] Room ${room.id} has ${humanExplorers.length} players, adding ${neededNpcs} NPCs.`);
+            const npcNames = ["Garrus", "Tali", "Liara", "Wrex", "Shepard", "Ashley"];
+            shuffle(npcNames);
+            const availableClasses = Object.keys(gameData.classes);
+            
+            for (let i = 0; i < neededNpcs; i++) {
+                const npcId = `npc-${i}-${Date.now()}`;
+                let npcName = npcNames[i % npcNames.length];
+                let nameCounter = 2;
+                while(Object.values(room.players).some(p => p.name === npcName)){
+                    npcName = `${npcNames[i % npcNames.length]} ${nameCounter}`;
+                    nameCounter++;
+                }
+                const npc = this.createPlayerObject(npcId, npcName, 'Explorer', true);
+                shuffle(availableClasses);
+                npc.class = availableClasses[0];
+                room.players[npcId] = npc;
+            }
+        }
+
+        // Assign stats to all players and NPCs
         Object.values(room.players).forEach(p => {
-            if(p.role !== 'DM') this.calculatePlayerStats(p.id, room);
+            if (p.role === 'Explorer') this.calculatePlayerStats(p.id, room);
         });
 
-        // Create a dedicated NPC for the DM's turn to prevent crashes and ensure a DM turn
+        // Create a dedicated NPC for the DM's turn
         const dmNpcId = 'dm-npc';
-        const dmNpc = this.createPlayerObject(dmNpcId, 'Dungeon Master', 'Explorer', true);
+        const dmNpc = this.createPlayerObject(dmNpcId, 'Dungeon Master', 'DM', true);
         dmNpc.stats = { maxHp: 999, currentHp: 999, damageBonus: 99, shieldBonus: 99, ap: 99 };
-        dmNpc.class = 'DM'; // For client display purposes
+        dmNpc.class = 'DM';
         room.players[dmNpcId] = dmNpc;
 
-        // Create turn order with DM NPC first, followed by shuffled explorers
+        // Create turn order: DM NPC first, then all shuffled explorers (human + NPC)
         const explorerIds = Object.values(room.players)
-            .filter(p => p.role === 'Explorer' && !p.isNpc)
+            .filter(p => p.role === 'Explorer')
             .map(p => p.id);
         shuffle(explorerIds);
         room.gameState.turnOrder = [dmNpcId, ...explorerIds];
@@ -227,7 +257,7 @@ class GameManager {
         
         if (gameMode === 'Beginner') {
             Object.values(room.players).forEach(player => {
-                if (player.role !== 'DM' && player.class && !player.isNpc) {
+                if (player.role === 'Explorer' && player.class && !player.isNpc) {
                     const classSpecificDeck = allCards.filter(card => {
                         if (!card.class || card.class === 'Any') return true;
                         if (Array.isArray(card.class)) return card.class.includes(player.class);
@@ -274,7 +304,7 @@ class GameManager {
         player.madeAdvancedChoice = true;
         
         const allExplorersMadeChoice = Object.values(room.players)
-            .filter(p => p.role !== 'DM' && !p.isNpc)
+            .filter(p => p.role === 'Explorer' && !p.isNpc)
             .every(p => p.madeAdvancedChoice);
             
         if (allExplorersMadeChoice) {
@@ -321,12 +351,10 @@ class GameManager {
         
         const isCombat = room.gameState.combatState.isActive;
         const currentTurnTakerId = isCombat ? room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] : room.gameState.turnOrder[room.gameState.currentPlayerIndex];
-        const playerEndingTurn = room.players[socketId];
-
-        // Allow the human DM to end the DM-NPC's turn
-        if (currentTurnTakerId === 'dm-npc' && playerEndingTurn && playerEndingTurn.role === 'DM') {
+        
+        // Allow the host to end the DM-NPC's turn
+        if (currentTurnTakerId === 'dm-npc' && socketId === room.hostId) {
             this.startNextTurn(room.id);
-            this.broadcastToRoom(room.id, 'gameStateUpdate', room);
             return;
         }
         
@@ -470,7 +498,7 @@ io.on('connection', (socket) => {
     
     socket.on('startGame', ({ gameMode }) => {
         const room = gameManager.getRoomBySocketId(socket.id);
-        if(room && room.players[socket.id].role === 'DM') {
+        if (room && socket.id === room.hostId) { // Check if the starter is the host
             gameManager.startGame(socket.id, gameMode);
         }
     });
@@ -556,16 +584,16 @@ io.on('connection', (socket) => {
         console.log(`[Socket.IO] User disconnected: ${socket.id}`);
         const room = gameManager.getRoomBySocketId(socket.id);
         if (room) {
-            const playerName = room.players[socket.id].name;
+            const playerName = room.players[socket.id]?.name || 'A player';
             delete room.players[socket.id];
             
             // Voice chat cleanup
             room.voiceChatPeers = room.voiceChatPeers.filter(id => id !== socket.id);
             socket.to(room.id).emit('voice-peer-disconnect', { peerId: socket.id });
 
-            if (Object.keys(room.players).length === 0) {
+            if (Object.keys(room.players).filter(id => !room.players[id].isNpc).length === 0) {
                 delete gameManager.rooms[room.id];
-                console.log(`[GameManager] Room ${room.id} closed.`);
+                console.log(`[GameManager] Room ${room.id} closed as all human players left.`);
             } else {
                  io.to(room.id).emit('playerLeft', { room: { playerName, remainingPlayers: room.players } });
             }
