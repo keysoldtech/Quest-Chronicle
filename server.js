@@ -1346,19 +1346,22 @@ io.on('connection', (socket) => {
         const room = gameManager.getRoomBySocketId(socket.id);
         if (room) {
             const player = room.players[socket.id];
+            if (!player) return; // Player may have already been removed
             
             // Remove from voice chat
             room.voiceChatPeers = room.voiceChatPeers.filter(id => id !== socket.id);
             socket.to(room.id).emit('voice-peer-disconnect', { peerId: socket.id });
             
             // Handle player leaving game logic
-            const isExplorer = player.role === 'Explorer';
+            const isHumanExplorer = !player.isNpc && player.role === 'Explorer';
+            const isHumanDM = !player.isNpc && player.role === 'DM';
             const gameIsActive = room.gameState.phase === 'active';
 
-            if (isExplorer && gameIsActive) {
-                console.log(`[GameManager] Explorer ${player.name} left. Converting to NPC.`);
-                // Convert to NPC instead of removing
-                const npc = gameManager.createPlayerObject(socket.id, `${player.name} (NPC)`, 'Explorer', true);
+            if ((isHumanExplorer || isHumanDM) && gameIsActive) {
+                console.log(`[GameManager] Player ${player.name} left. Converting to NPC.`);
+                // Convert to NPC instead of removing completely
+                const npc = gameManager.createPlayerObject(socket.id, `${player.name} (NPC)`, player.role, true);
+                // Keep all relevant stats and items
                 npc.class = player.class;
                 npc.stats = player.stats;
                 npc.lifeCount = player.lifeCount;
@@ -1372,22 +1375,24 @@ io.on('connection', (socket) => {
                     channel: 'game' 
                 });
             } else {
+                 // If in lobby or already an NPC, just remove them
                  console.log(`[GameManager] Player ${player.name} left room ${room.id}.`);
                  delete room.players[socket.id];
             }
 
-            // If host leaves, assign a new host
+            // Check if any human players are left
+            const humanPlayersLeft = Object.values(room.players).filter(p => !p.isNpc);
+            if (humanPlayersLeft.length === 0) {
+                // No human players left, clean up room
+                console.log(`[GameManager] Last human player left room ${room.id}. Deleting room.`);
+                delete gameManager.rooms[room.id];
+                return; // No need to broadcast update if room is gone
+            }
+
+            // If host leaves, assign a new host from remaining human players
             if (socket.id === room.hostId) {
-                const otherPlayers = Object.values(room.players).filter(p => !p.isNpc);
-                if (otherPlayers.length > 0) {
-                    room.hostId = otherPlayers[0].id;
-                    console.log(`[GameManager] Host left. New host is ${otherPlayers[0].name}.`);
-                } else {
-                    // No human players left, clean up room
-                    console.log(`[GameManager] Last player left room ${room.id}. Deleting room.`);
-                    delete gameManager.rooms[room.id];
-                    return; // No need to broadcast update if room is gone
-                }
+                room.hostId = humanPlayersLeft[0].id;
+                console.log(`[GameManager] Host left. New host is ${humanPlayersLeft[0].name}.`);
             }
 
             io.to(room.id).emit('playerLeft', { playerName: player.name });

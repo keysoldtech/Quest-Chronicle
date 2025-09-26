@@ -42,10 +42,6 @@ const joinRoomBtn = document.getElementById('joinRoomBtn');
 const roomIdInput = document.getElementById('roomIdInput');
 const roomCodeDisplay = document.getElementById('room-code');
 const playerList = document.getElementById('player-list');
-const chatLog = document.getElementById('chat-log');
-const chatForm = document.getElementById('chat-form');
-const chatChannel = document.getElementById('chat-channel');
-const chatInput = document.getElementById('chat-input');
 const startGameBtn = document.getElementById('startGameBtn');
 const endTurnBtn = document.getElementById('endTurnBtn');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -78,12 +74,21 @@ const apModal = document.getElementById('ap-modal');
 const apModalCancelBtn = document.getElementById('ap-modal-cancel-btn');
 const apModalConfirmBtn = document.getElementById('ap-modal-confirm-btn');
 const partyLootContainer = document.getElementById('party-loot-container');
+const leaveGameBtn = document.getElementById('leave-game-btn');
+
+// Chat Overlay Refs
+const chatOverlay = document.getElementById('chat-overlay');
+const chatToggleBtn = document.getElementById('chat-toggle-btn');
+const chatCloseBtn = document.getElementById('chat-close-btn');
+const chatLog = document.getElementById('chat-log');
+const chatForm = document.getElementById('chat-form');
+const chatChannel = document.getElementById('chat-channel');
+const chatInput = document.getElementById('chat-input');
 
 // End Turn Modal refs
 const endTurnConfirmModal = document.getElementById('end-turn-confirm-modal');
 const endTurnCancelBtn = document.getElementById('end-turn-cancel-btn');
 const endTurnConfirmBtn = document.getElementById('end-turn-confirm-btn');
-
 
 // Dice Roll Overlay DOM refs
 const diceRollOverlay = document.getElementById('dice-roll-overlay');
@@ -204,7 +209,7 @@ function createCardElement(card, actions = {}) {
         const playBtn = document.createElement('button');
         const cardEffect = card.effect || {};
         playBtn.textContent = card.type === 'Spell' ? 'Cast' : 'Use';
-        playBtn.className = 'fantasy-button-xs fantasy-button-primary';
+        playBtn.className = 'btn btn-xs btn-primary';
         playBtn.onclick = () => {
             if ((cardEffect.type === 'damage' || cardEffect.target === 'any-monster') && !selectedTargetId) {
                 alert("You must select a monster to target!");
@@ -219,7 +224,7 @@ function createCardElement(card, actions = {}) {
     if (isEquippable) {
         const equipBtn = document.createElement('button');
         equipBtn.textContent = 'Equip';
-        equipBtn.className = 'fantasy-button-xs fantasy-button-success';
+        equipBtn.className = 'btn btn-xs btn-success';
         equipBtn.onclick = () => socket.emit('equipItem', { cardId: card.id });
         actionContainer.appendChild(equipBtn);
     }
@@ -279,6 +284,7 @@ function renderGameState(room) {
 
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
     playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
+    leaveGameBtn.classList.toggle('hidden', gameState.phase === 'lobby');
     
     // End Turn Button Logic: Only visible if it is my turn.
     endTurnBtn.classList.toggle('hidden', !isMyTurn);
@@ -381,7 +387,7 @@ function renderGameState(room) {
             ['Weapon', 'Armor', 'Spell'].forEach(cardType => {
                 const btn = document.createElement('button');
                 btn.textContent = cardType;
-                btn.className = 'fantasy-button';
+                btn.className = 'btn';
                 btn.onclick = () => { socket.emit('advancedCardChoice', { cardType }); advancedCardChoiceDiv.classList.add('hidden'); };
                 advancedChoiceButtonsDiv.appendChild(btn);
             });
@@ -525,12 +531,12 @@ function renderGameState(room) {
         for (const [label, action] of Object.entries(actions)) {
             const btn = document.createElement('button');
             btn.textContent = label;
-            btn.className = 'fantasy-button-sm fantasy-button-secondary';
+            btn.className = 'btn btn-sm btn-secondary';
 
             if (pendingAbilityConfirmation === action) {
                 btn.textContent = `Confirm ${label.split(' ')[0]}?`;
-                btn.classList.remove('fantasy-button-secondary');
-                btn.classList.add('fantasy-button-danger');
+                btn.classList.remove('btn-secondary');
+                btn.classList.add('btn-danger');
             }
 
             btn.onclick = () => {
@@ -650,6 +656,18 @@ confirmAttackBtn.addEventListener('click', () => {
         }
     }
 });
+
+leaveGameBtn.addEventListener('click', () => {
+    if (confirm("Are you sure you want to leave the game? Your character will be controlled by an NPC.")) {
+        socket.disconnect();
+        // A brief delay to allow the disconnect message to be sent
+        setTimeout(() => window.location.reload(), 200);
+    }
+});
+
+// Chat Listeners
+chatToggleBtn.addEventListener('click', () => chatOverlay.classList.toggle('hidden'));
+chatCloseBtn.addEventListener('click', () => chatOverlay.classList.add('hidden'));
 
 chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -860,8 +878,8 @@ joinVoiceBtn.addEventListener('click', async () => {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             socket.emit('join-voice');
             joinVoiceBtn.textContent = 'Voice On';
-            joinVoiceBtn.classList.remove('fantasy-button-success');
-            joinVoiceBtn.classList.add('fantasy-button-danger');
+            joinVoiceBtn.classList.remove('btn-success');
+            joinVoiceBtn.classList.add('btn-danger');
         } catch (error) {
             console.error('Error accessing media devices.', error);
             alert('Could not access microphone. Please check your browser permissions.');
