@@ -18,6 +18,17 @@ const iceServers = {
     ]
 };
 
+// Static data for rendering class cards without needing a server round-trip
+const classData = {
+    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, description: "A fierce warrior of primal rage.", abilities: ["Rage", "Reckless Attack"] },
+    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, description: "A conduit for divine power.", abilities: ["Channel Divinity", "Turn Undead"] },
+    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, description: "Wielder of arcane energies.", abilities: ["Arcane Recovery", "Spell Mastery"] },
+    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, description: "A peerless hunter and scout.", abilities: ["Favored Enemy", "Hunter's Mark"] },
+    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
+};
+
+
 // --- DOM Element References ---
 const lobbyScreen = document.getElementById('lobby');
 const gameArea = document.getElementById('game-area');
@@ -43,7 +54,7 @@ const gameModeSelector = document.getElementById('game-mode-selector');
 const dmControls = document.getElementById('dm-controls');
 const worldEventsContainer = document.getElementById('world-events-container');
 const classSelectionDiv = document.getElementById('class-selection');
-const classButtonsDiv = document.getElementById('class-buttons');
+const classCardsContainer = document.getElementById('class-cards-container');
 const playerStatsContainer = document.getElementById('player-stats-container');
 const playerStatsDiv = document.getElementById('player-stats');
 const equippedItemsDiv = document.getElementById('equipped-items');
@@ -272,16 +283,33 @@ function renderGameState(room) {
 
     // --- Lobby Phase ---
     if (gameState.phase === 'lobby') {
-        if (classButtonsDiv.children.length === 0) {
-            ['Warrior', 'Mage', 'Rogue', 'Cleric', 'Ranger', 'Barbarian'].forEach(className => {
-                const btn = document.createElement('button');
-                btn.textContent = className;
-                btn.className = 'fantasy-button';
-                btn.onclick = () => { socket.emit('chooseClass', { classId: className }); };
-                classButtonsDiv.appendChild(btn);
-            });
+        if (classCardsContainer.children.length === 0) {
+            for (const [classId, data] of Object.entries(classData)) {
+                const card = document.createElement('div');
+                card.className = 'class-card';
+                card.dataset.classId = classId;
+                
+                card.innerHTML = `
+                    <h3 class="class-card-title">${classId}</h3>
+                    <p class="class-card-desc">${data.description}</p>
+                    <div class="class-card-stats">
+                        <span class="stat-label">HP:</span><span>${data.baseHp}</span>
+                        <span class="stat-label">DMG Bonus:</span><span>+${data.baseDamageBonus}</span>
+                        <span class="stat-label">Shield Bonus:</span><span>+${data.baseShieldBonus}</span>
+                        <span class="stat-label">AP:</span><span>${data.baseAp}</span>
+                        <span class="stat-label">Health Dice:</span><span>${data.healthDice}</span>
+                    </div>
+                    <ul class="class-card-abilities">
+                        <li class="header">Abilities</li>
+                        ${data.abilities.map(ability => `<li>${ability}</li>`).join('')}
+                    </ul>
+                `;
+
+                card.onclick = () => { socket.emit('chooseClass', { classId }); };
+                classCardsContainer.appendChild(card);
+            }
         }
-        document.querySelectorAll('#class-buttons button').forEach(b => b.classList.toggle('active', b.textContent === myPlayerInfo.class));
+        document.querySelectorAll('.class-card').forEach(c => c.classList.toggle('selected', c.dataset.classId === myPlayerInfo.class));
     }
     
     // --- Advanced Setup Phase ---
@@ -304,9 +332,12 @@ function renderGameState(room) {
         const turnTaker = players[currentTurnTakerId] || gameState.board.monsters.find(m => m.id === currentTurnTakerId);
         
         if (turnTaker) {
-            turnIndicator.textContent = `Current Turn: ${turnTaker.name}`;
-            if(isMyTurn) turnIndicator.textContent += ' (Your Turn)';
-            if(isDmNpcTurn) turnIndicator.textContent = "Dungeon Master's Turn";
+            if(isDmNpcTurn) {
+                turnIndicator.textContent = "Dungeon Master's Turn";
+            } else {
+                 turnIndicator.textContent = `Current Turn: ${turnTaker.name}`;
+                 if(isMyTurn) turnIndicator.textContent += ' (Your Turn)';
+            }
         } else {
             turnIndicator.textContent = 'Waiting for next turn...';
         }

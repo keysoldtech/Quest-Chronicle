@@ -349,8 +349,9 @@ class GameManager {
         room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
         const currentPlayerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
         const currentPlayer = room.players[currentPlayerId];
+        const isDmTurn = currentPlayerId === 'dm-npc';
 
-        if (currentPlayerId === 'dm-npc') {
+        if (isDmTurn) {
             room.gameState.turnCount++;
             console.log(`[GameManager] Room ${roomId} - DM Turn Start. Turn count: ${room.gameState.turnCount}`);
         }
@@ -361,7 +362,7 @@ class GameManager {
 
         // --- HANDLE TURN-START EFFECTS ---
         // Special logic for DM's automated first turn
-        if (currentPlayerId === 'dm-npc' && room.gameState.turnCount === 1) {
+        if (isDmTurn && room.gameState.turnCount === 1) {
             console.log(`[GameManager] Room ${roomId} - DM is taking its automated first turn.`);
             
             if (room.gameState.decks.monster.length > 0) {
@@ -384,9 +385,13 @@ class GameManager {
             }
         }
         
-        // Random event check every 3 explorer turns, triggered on the DM's turn (but not the first)
-        if (currentPlayerId === 'dm-npc' && room.gameState.turnCount > 1 && (room.gameState.turnCount -1) % 3 === 0) {
-             Object.values(room.players).forEach(p => p.pendingEventRoll = (p.role === 'Explorer' && !p.isNpc));
+        // Random event check every 3 explorer turns, triggered on subsequent DM turns
+        if (isDmTurn && room.gameState.turnCount > 1 && (room.gameState.turnCount -1) % 3 === 0) {
+             Object.values(room.players).forEach(p => {
+                 if (p.role === 'Explorer' && !p.isNpc) {
+                    p.pendingEventRoll = true;
+                 }
+             });
         }
 
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
@@ -412,8 +417,6 @@ class GameManager {
         } else {
             this.startNextTurn(room.id);
         }
-        // startNextTurn now broadcasts, so this is redundant
-        // this.broadcastToRoom(room.id, 'gameStateUpdate', room); 
     }
     
     resolveAttack(roomId, attacker, target, weapon) {
