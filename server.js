@@ -217,31 +217,52 @@ class GameManager {
             player.stats = { ...player.stats, maxHp: 20, currentHp: 20, damageBonus: 0, shieldBonus: 0, ap: 3 };
             return;
         }
-    
+
         const classData = gameData.classes[player.class];
         if (!classData) { // Fallback for safety
              player.stats = { ...player.stats, maxHp: 20, currentHp: 20, damageBonus: 0, shieldBonus: 0, ap: 3 };
              return;
         }
-        let damageBonus = classData.baseDamageBonus;
-        let shieldBonus = classData.baseShieldBonus;
-        let ap = classData.baseAp;
+
+        // --- Universal Stat Calculation ---
+        // Start with base class stats
+        let { baseDamageBonus: damageBonus, baseShieldBonus: shieldBonus, baseAp: ap } = classData;
+        const newCoreStats = { ...classData.stats };
+
+        // Process bonuses from all equipment universally
+        const processEquipment = (equipment) => {
+            if (!equipment?.effect?.bonuses) return;
     
-        // Add bonuses from equipment
-        if (player.equipment.weapon && player.equipment.weapon.effect.bonuses) {
-            damageBonus += player.equipment.weapon.effect.bonuses.damage || 0;
-        }
-        if (player.equipment.armor && player.equipment.armor.effect.bonuses) {
-            shieldBonus += player.equipment.armor.effect.bonuses.shield || 0;
-            ap += player.equipment.armor.effect.bonuses.ap || 0;
-        }
+            for (const [stat, value] of Object.entries(equipment.effect.bonuses)) {
+                switch (stat) {
+                    case 'damage':
+                        damageBonus += value || 0;
+                        break;
+                    case 'shield':
+                        shieldBonus += value || 0;
+                        break;
+                    case 'ap':
+                        ap += value || 0;
+                        break;
+                    default:
+                        // For core stats like STR, DEX, etc.
+                        if (newCoreStats.hasOwnProperty(stat)) {
+                            newCoreStats[stat] += value || 0;
+                        }
+                        break;
+                }
+            }
+        };
+
+        processEquipment(player.equipment.weapon);
+        processEquipment(player.equipment.armor);
         
         const oldMaxHp = player.stats.maxHp;
         const newMaxHp = classData.baseHp;
 
         player.stats = {
-            ...player.stats,
-            ...classData.stats, // Add str, dex, con etc.
+            ...player.stats, // Keep shieldHp, currentHp, etc.
+            ...newCoreStats, // Apply updated core stats (str, dex...)
             maxHp: newMaxHp,
             currentHp: player.stats.currentHp > 0 ? (player.stats.currentHp + (newMaxHp - oldMaxHp)) : newMaxHp,
             damageBonus,
@@ -907,7 +928,7 @@ class GameManager {
             message += `Success! ${npc.name} ${eventCard.successMessage}`;
         } else {
             message += `Failure! ${npc.name} ${eventCard.failureEffect.message}`;
-            if (eventCard.failureEffect.effect) {
+            if (eventCard.failureEffect && eventCard.failureEffect.effect) {
                 this.applyEffect(npc.id, eventCard.failureEffect.effect, roomId);
             }
         }
@@ -1023,17 +1044,30 @@ class GameManager {
         player.pendingEventChoice = false;
 
         const allEventCards = [...gameData.playerEventCards, ...gameData.discoveryCards];
-        const chosenCardTemplate = allEventCards.find(c => c.id === chosenCardId.split('-')[0] || c.name === allEventCards.find(c2 => c2.id === chosenCardId)?.name);
+        // This lookup is complex and was prone to errors. Simplified it slightly, but the root issue is finding the card template
+        // after a unique ID has been assigned. We find by name as a fallback.
+        const chosenCardTemplate = allEventCards.find(c => c.name === allEventCards.find(c2 => c2.id === chosenCardId)?.name);
         const chosenCard = { ...chosenCardTemplate, id: chosenCardId };
 
-        if (!chosenCard) return;
+
+        if (!chosenCard || !chosenCard.type) {
+            console.error(`[GameManager] CRITICAL ERROR: Could not find valid card data for chosen card ID ${chosenCardId}. Aborting to prevent crash.`);
+            return;
+        }
 
         io.to(socketId).emit('eventCardReveal', { chosenCard });
 
         if (chosenCard.type === 'Player Event') {
             this.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message: `${player.name} triggered a Player Event: ${chosenCard.name}! ${chosenCard.description}`, channel: 'game' });
-            if (chosenCard.effect.type === 'heal') player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + this.rollDice(chosenCard.effect.dice));
-            if (chosenCard.effect.type === 'damage') player.stats.currentHp -= this.rollDice(chosenCard.effect.dice);
+             // CRITICAL FIX: Add robust check for a valid, processable effect to prevent crashes from bad data.
+            if (chosenCard.effect && chosenCard.effect.type && chosenCard.effect.dice) {
+                if (chosenCard.effect.type === 'heal') {
+                    player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + this.rollDice(chosenCard.effect.dice));
+                }
+                if (chosenCard.effect.type === 'damage') {
+                    player.stats.currentHp -= this.rollDice(chosenCard.effect.dice);
+                }
+            }
         } else {
             player.hand.push(chosenCard);
             this.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message: `${player.name} made a discovery! A new item has been found!`, channel: 'game' });
@@ -1243,74 +1277,128 @@ io.on('connection', (socket) => {
     socket.on('rollForWorldEventSave', () => {
         const room = gameManager.getRoomBySocketId(socket.id);
         const player = room.players[socket.id];
+        if (!room || !player || !player.pendingWorldEventSave) return;
+        
         const eventData = player.pendingWorldEventSave;
-        if (!room || !player || !eventData) return;
-
-        player.pendingWorldEventSave = null;
-        const currentEvent = room.gameState.worldEvents.currentEvent;
-
         const bonus = player.stats[eventData.save.toLowerCase()] || 0;
         const d20Roll = gameManager.rollDice('1d20');
         const totalRoll = d20Roll + bonus;
+        
         const success = totalRoll >= eventData.dc;
         
         let message = `${player.name} attempts a ${eventData.save} save (rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${eventData.dc})... `;
-        
+
         if (success) {
-            message += `Success! ${player.name} ${currentEvent.successMessage}`;
+            message += `Success! ${player.name} ${eventData.successMessage}`;
         } else {
-            message += `Failure! ${player.name} ${currentEvent.failureEffect.message}`;
-            if (currentEvent.failureEffect.effect) {
-                gameManager.applyEffect(socket.id, currentEvent.failureEffect.effect, room.id);
+            message += `Failure! ${player.name} ${eventData.failureEffect.message}`;
+            if (eventData.failureEffect && eventData.failureEffect.effect) {
+                gameManager.applyEffect(player.id, eventData.failureEffect.effect, room.id);
             }
         }
 
-        socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc: eventData.dc, success });
+        io.to(socket.id).emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc: eventData.dc, success });
         gameManager.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
+        
+        player.pendingWorldEventSave = null;
         
         // This player has finished their save. Remove them from the pending list.
         room.gameState.worldEvents.pendingSaves = room.gameState.worldEvents.pendingSaves.filter(id => id !== socket.id);
-        gameManager.checkAndProceedAfterWorldEvent(room.id);
         
         gameManager.broadcastToRoom(room.id, 'gameStateUpdate', room);
+        
+        gameManager.checkAndProceedAfterWorldEvent(room.id);
     });
 
-    // --- Voice Chat Handling ---
+    // --- VOICE CHAT ---
     socket.on('join-voice', () => {
         const room = gameManager.getRoomBySocketId(socket.id);
         if (room) {
-            const peers = room.voiceChatPeers;
+            // Get all other peers in the voice chat
+            const peers = room.voiceChatPeers.filter(peerId => peerId !== socket.id);
+            
+            // Send the list of existing peers to the new joiner
             socket.emit('voice-peers', peers);
-            peers.push(socket.id);
+            
+            // Add the new joiner to the list
+            room.voiceChatPeers.push(socket.id);
+            
+            // Notify all other peers that a new peer has joined
             socket.to(room.id).emit('voice-peer-join', { peerId: socket.id });
         }
     });
-    socket.on('voice-offer', ({ offer, toId }) => socket.to(toId).emit('voice-offer', { offer, fromId: socket.id }));
-    socket.on('voice-answer', ({ answer, toId }) => socket.to(toId).emit('voice-answer', { answer, fromId: socket.id }));
-    socket.on('voice-ice-candidate', ({ candidate, toId }) => socket.to(toId).emit('voice-ice-candidate', { candidate, fromId: socket.id }));
+
+    socket.on('voice-offer', ({ offer, toId }) => {
+        socket.to(toId).emit('voice-offer', { offer, fromId: socket.id });
+    });
+
+    socket.on('voice-answer', ({ answer, toId }) => {
+        socket.to(toId).emit('voice-answer', { answer, fromId: socket.id });
+    });
+
+    socket.on('voice-ice-candidate', ({ candidate, toId }) => {
+        socket.to(toId).emit('voice-ice-candidate', { candidate, fromId: socket.id });
+    });
+
 
     socket.on('disconnect', () => {
         console.log(`[Socket.IO] User disconnected: ${socket.id}`);
         const room = gameManager.getRoomBySocketId(socket.id);
         if (room) {
-            const playerName = room.players[socket.id]?.name || 'A player';
-            delete room.players[socket.id];
+            const player = room.players[socket.id];
             
+            // Remove from voice chat
             room.voiceChatPeers = room.voiceChatPeers.filter(id => id !== socket.id);
             socket.to(room.id).emit('voice-peer-disconnect', { peerId: socket.id });
+            
+            // Handle player leaving game logic
+            const isExplorer = player.role === 'Explorer';
+            const gameIsActive = room.gameState.phase === 'active';
 
-            if (Object.values(room.players).filter(p => !p.isNpc).length === 0) {
-                delete gameManager.rooms[room.id];
-                console.log(`[GameManager] Room ${room.id} closed as all human players left.`);
+            if (isExplorer && gameIsActive) {
+                console.log(`[GameManager] Explorer ${player.name} left. Converting to NPC.`);
+                // Convert to NPC instead of removing
+                const npc = gameManager.createPlayerObject(socket.id, `${player.name} (NPC)`, 'Explorer', true);
+                npc.class = player.class;
+                npc.stats = player.stats;
+                npc.lifeCount = player.lifeCount;
+                npc.healthDice = player.healthDice;
+                npc.hand = player.hand;
+                npc.equipment = player.equipment;
+                room.players[socket.id] = npc;
+                 gameManager.broadcastToRoom(room.id, 'chatMessage', { 
+                    senderName: 'Game Master', 
+                    message: `${player.name} has lost connection. Their spirit will fight on!`, 
+                    channel: 'game' 
+                });
             } else {
-                 io.to(room.id).emit('playerListUpdate', room);
-                 io.to(room.id).emit('chatMessage', { senderName: 'System', message: `${playerName} has left the game.`, channel: 'game'});
+                 console.log(`[GameManager] Player ${player.name} left room ${room.id}.`);
+                 delete room.players[socket.id];
             }
+
+            // If host leaves, assign a new host
+            if (socket.id === room.hostId) {
+                const otherPlayers = Object.values(room.players).filter(p => !p.isNpc);
+                if (otherPlayers.length > 0) {
+                    room.hostId = otherPlayers[0].id;
+                    console.log(`[GameManager] Host left. New host is ${otherPlayers[0].name}.`);
+                } else {
+                    // No human players left, clean up room
+                    console.log(`[GameManager] Last player left room ${room.id}. Deleting room.`);
+                    delete gameManager.rooms[room.id];
+                    return; // No need to broadcast update if room is gone
+                }
+            }
+
+            io.to(room.id).emit('playerLeft', { playerName: player.name });
+            io.to(room.id).emit('playerListUpdate', room);
+            io.to(room.id).emit('gameStateUpdate', room);
         }
     });
 });
 
-// --- Server Start ---
+
+// --- Server Listen ---
 server.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`[Server] Express server running on port ${PORT}`);
 });

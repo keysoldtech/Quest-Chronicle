@@ -278,8 +278,8 @@ body.fantasy-bg {
     overflow-y: auto;
 }
 .right-panel {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: 1fr auto;
     gap: 1rem;
     overflow: hidden;
 }
@@ -504,9 +504,8 @@ body.fantasy-bg {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    flex-grow: 1;
     overflow-y: auto;
-    min-height: 0; /* Magic flexbox property */
+    min-height: 0; /* Magic flexbox/grid property */
     padding-right: 0.5rem; /* Space for scrollbar */
 }
 .party-loot-section {
@@ -873,6 +872,8 @@ body.fantasy-bg {
     .right-panel {
         order: 1;
         overflow: visible;
+        display: flex; /* Revert to flex for mobile simplicity */
+        flex-direction: column;
     }
 
     .upper-board-area {
