@@ -201,11 +201,30 @@ class GameManager {
     startGame(hostId, gameMode) {
         const room = this.getRoomBySocketId(hostId);
         if (!room || hostId !== room.hostId || room.gameState.phase !== 'lobby') return;
+        
+        console.log(`[GameManager] Attempting to start game in room ${room.id} by host ${hostId}.`);
+
+        // --- CLASS SELECTION VALIDATION ---
+        const humanExplorers = Object.values(room.players).filter(p => !p.isNpc && p.role === 'Explorer');
+        const playersWithoutClass = humanExplorers.filter(p => !p.class);
+
+        if (playersWithoutClass.length > 0) {
+            const names = playersWithoutClass.map(p => p.name).join(', ');
+            const message = `Cannot start game. The following players must still choose a class: ${names}.`;
+            console.log(`[GameManager] Start game failed for room ${room.id}: ${message}`);
+            io.to(hostId).emit('actionError', message);
+            return;
+        }
+        console.log(`[GameManager] Room ${room.id} - All players have selected a class. Proceeding with startup.`);
 
         room.gameState.gameMode = gameMode;
+
+        // --- SHUFFLE DECKS ---
+        console.log(`[GameManager] Room ${room.id} - Shuffling decks.`);
+        room.gameState.decks.monster = [...gameData.monsterCards];
+        shuffle(room.gameState.decks.monster);
         
         // --- NPC POPULATION LOGIC ---
-        const humanExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
         const neededNpcs = 4 - humanExplorers.length;
         if (neededNpcs > 0) {
             console.log(`[GameManager] Room ${room.id} has ${humanExplorers.length} players, adding ${neededNpcs} NPCs.`);
@@ -226,6 +245,9 @@ class GameManager {
                 npc.class = availableClasses[0];
                 room.players[npcId] = npc;
             }
+            console.log(`[GameManager] Room ${room.id} - Populated with ${neededNpcs} NPC explorers.`);
+        } else {
+            console.log(`[GameManager] Room ${room.id} - No additional NPCs needed.`);
         }
 
         // Assign stats to all players and NPCs
@@ -239,6 +261,8 @@ class GameManager {
         dmNpc.stats = { maxHp: 999, currentHp: 999, damageBonus: 99, shieldBonus: 99, ap: 99 };
         dmNpc.class = 'DM';
         room.players[dmNpcId] = dmNpc;
+        console.log(`[GameManager] Room ${room.id} - Assigned stats and created DM NPC.`);
+
 
         // Create turn order: DM NPC first, then all shuffled explorers (human + NPC)
         const explorerIds = Object.values(room.players)
@@ -247,6 +271,8 @@ class GameManager {
         shuffle(explorerIds);
         room.gameState.turnOrder = [dmNpcId, ...explorerIds];
         room.gameState.currentPlayerIndex = -1; // Will be incremented to 0 by startNextTurn
+        console.log(`[GameManager] Room ${room.id} - Turn order established: ${room.gameState.turnOrder.join(', ')}`);
+
         
         const allCards = [
             ...gameData.itemCards,
@@ -272,12 +298,13 @@ class GameManager {
                 }
             });
             room.gameState.phase = 'active';
-            this.startNextTurn(room.id);
+            this.broadcastToRoom(room.id, 'gameStarted', room);
+            console.log(`[GameManager] Room ${room.id} - Game started. Beginning first turn.`);
+            setTimeout(() => this.startNextTurn(room.id), 500); // Start first turn after a short delay
         } else if (gameMode === 'Advanced') {
             room.gameState.phase = 'advanced_setup_choice';
+            this.broadcastToRoom(room.id, 'gameStarted', room);
         }
-        
-        this.broadcastToRoom(room.id, 'gameStarted', room);
     }
     
     handleAdvancedCardChoice(socketId, cardType) {
@@ -318,28 +345,48 @@ class GameManager {
     startNextTurn(roomId) {
         const room = this.rooms[roomId];
         if (!room || room.gameState.turnOrder.length === 0) return;
+
+        room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
+        const currentPlayerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
+        const currentPlayer = room.players[currentPlayerId];
+
+        if (currentPlayerId === 'dm-npc') {
+            room.gameState.turnCount++;
+            console.log(`[GameManager] Room ${roomId} - DM Turn Start. Turn count: ${room.gameState.turnCount}`);
+        }
+
+        if (currentPlayer) {
+            currentPlayer.currentAp = currentPlayer.stats.ap;
+        }
+
+        // --- HANDLE TURN-START EFFECTS ---
+        // Special logic for DM's automated first turn
+        if (currentPlayerId === 'dm-npc' && room.gameState.turnCount === 1) {
+            console.log(`[GameManager] Room ${roomId} - DM is taking its automated first turn.`);
+            
+            if (room.gameState.decks.monster.length > 0) {
+                const monsterCard = room.gameState.decks.monster.pop();
+                const monsterInstance = {
+                    ...monsterCard,
+                    id: `monster-${this.generateUniqueCardId()}`,
+                    currentHp: monsterCard.maxHp,
+                    statusEffects: []
+                };
+                room.gameState.board.monsters.push(monsterInstance);
+                this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `A ${monsterInstance.name} emerges from the shadows!`, channel: 'game' });
+                this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+
+                setTimeout(() => {
+                    console.log(`[GameManager] Room ${roomId} - Automatically ending DM's first turn.`);
+                    this.startNextTurn(roomId);
+                }, 3000);
+                return; // Prevent other logic from running until the turn auto-ends
+            }
+        }
         
-        if (room.gameState.combatState.isActive) {
-             // Combat turn logic handled by endTurn
-        } else {
-            room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
-            const currentPlayerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
-            const currentPlayer = room.players[currentPlayerId];
-            
-            // Increment turn count only when the DM NPC's turn starts
-            if (currentPlayerId === 'dm-npc') {
-                room.gameState.turnCount++;
-            }
-            
-            // Random event check every 3 explorer turns, triggered on the DM's turn
-            if (room.gameState.turnCount > 1 && (room.gameState.turnCount -1) % 3 === 0 && currentPlayerId === 'dm-npc') {
-                 Object.values(room.players).forEach(p => p.pendingEventRoll = (p.role === 'Explorer' && !p.isNpc));
-            }
-            
-            // Reset AP
-            if (currentPlayer) {
-                currentPlayer.currentAp = currentPlayer.stats.ap;
-            }
+        // Random event check every 3 explorer turns, triggered on the DM's turn (but not the first)
+        if (currentPlayerId === 'dm-npc' && room.gameState.turnCount > 1 && (room.gameState.turnCount -1) % 3 === 0) {
+             Object.values(room.players).forEach(p => p.pendingEventRoll = (p.role === 'Explorer' && !p.isNpc));
         }
 
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
@@ -352,7 +399,7 @@ class GameManager {
         const isCombat = room.gameState.combatState.isActive;
         const currentTurnTakerId = isCombat ? room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] : room.gameState.turnOrder[room.gameState.currentPlayerIndex];
         
-        // Allow the host to end the DM-NPC's turn
+        // Allow the host to end the DM-NPC's turn (for non-automated turns)
         if (currentTurnTakerId === 'dm-npc' && socketId === room.hostId) {
             this.startNextTurn(room.id);
             return;
@@ -365,7 +412,8 @@ class GameManager {
         } else {
             this.startNextTurn(room.id);
         }
-        this.broadcastToRoom(room.id, 'gameStateUpdate', room);
+        // startNextTurn now broadcasts, so this is redundant
+        // this.broadcastToRoom(room.id, 'gameStateUpdate', room); 
     }
     
     resolveAttack(roomId, attacker, target, weapon) {

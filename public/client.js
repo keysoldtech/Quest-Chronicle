@@ -41,7 +41,6 @@ const joinVoiceBtn = document.getElementById('join-voice-btn');
 const voiceChatContainer = document.getElementById('voice-chat-container');
 const gameModeSelector = document.getElementById('game-mode-selector');
 const dmControls = document.getElementById('dm-controls');
-const worldEventBtn = document.getElementById('worldEventBtn');
 const worldEventsContainer = document.getElementById('world-events-container');
 const classSelectionDiv = document.getElementById('class-selection');
 const classButtonsDiv = document.getElementById('class-buttons');
