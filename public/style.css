@@ -231,7 +231,11 @@ body {
 .player-stats { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; font-size: 0.9rem; }
 .player-stats span { color: var(--color-text-secondary); }
 .player-stats .stat-value { font-weight: bold; color: var(--color-text-primary); }
-.stat-bonus-highlight { color: var(--color-primary); font-weight: bold; margin-left: 0.25rem; }
+.stat-bonus {
+    color: var(--color-primary);
+    font-weight: bold;
+    margin-left: 0.25rem;
+}
 .shield-hp-value { color: var(--color-success); text-shadow: 0 0 5px var(--color-success); }
 
 .card-container-row { display: flex; gap: 1rem; overflow-x: auto; padding: 0.5rem; min-height: 100px; align-items: center; flex: 1;}

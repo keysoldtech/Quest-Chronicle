@@ -451,22 +451,42 @@ function renderGameState(room) {
     // --- Render Player Stats with Bonus Highlighting ---
     if (myPlayerInfo.stats && myPlayerInfo.class) {
         const classDataClient = classData[myPlayerInfo.class];
-        let damageBonusHTML = `<span>DMG Bonus:</span><span class="stat-value">${myPlayerInfo.stats.damageBonus}</span>`;
-        let shieldBonusHTML = `<span>SHIELD Bonus:</span><span class="stat-value">${myPlayerInfo.stats.shieldBonus}</span>`;
-        let apHTML = `<span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}</span>`;
-
-        if (classDataClient) { /* ... bonus highlighting logic ... */ }
         
-        const statsHTML = `
+        const renderStatWithBonus = (baseValue, totalValue) => {
+            const bonus = totalValue - baseValue;
+            if (bonus !== 0) {
+                const sign = bonus > 0 ? '+' : '';
+                return `${baseValue} <span class="stat-bonus">${sign}${bonus}</span>`;
+            }
+            return `${baseValue}`;
+        };
+        
+        let statsHTML = `
             <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${myPlayerInfo.stats.maxHp}</span>
             ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
-            ${apHTML}${damageBonusHTML}${shieldBonusHTML}
+            <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}</span>
+            <span>DMG Bonus:</span><span class="stat-value">${myPlayerInfo.stats.damageBonus}</span>
+            <span>SHIELD Bonus:</span><span class="stat-value">${myPlayerInfo.stats.shieldBonus}</span>
             <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
             <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
         `;
+
+        if (classDataClient) {
+            statsHTML = `
+                <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${renderStatWithBonus(classDataClient.baseHp, myPlayerInfo.stats.maxHp)}</span>
+                ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
+                <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${renderStatWithBonus(classDataClient.baseAp, myPlayerInfo.stats.ap)}</span>
+                <span>DMG Bonus:</span><span class="stat-value">${renderStatWithBonus(classDataClient.baseDamageBonus, myPlayerInfo.stats.damageBonus)}</span>
+                <span>SHIELD Bonus:</span><span class="stat-value">${renderStatWithBonus(classDataClient.baseShieldBonus, myPlayerInfo.stats.shieldBonus)}</span>
+                <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
+                <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
+            `;
+        }
+        
         playerStatsDiv.innerHTML = statsHTML;
         mobileStatsDisplay.innerHTML = statsHTML;
     }
+
 
     // --- Render Hand & Equipment ---
     [equippedItemsDiv, mobileEquippedItems].forEach(container => {

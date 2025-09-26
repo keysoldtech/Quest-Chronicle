@@ -430,6 +430,7 @@ class GameManager {
                     player.currentAp -= gameData.actionCosts.guard;
                     const guardBonus = player.equipment.armor?.guardBonus || 2;
                     player.stats.shieldHp += guardBonus;
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Guard, gaining ${guardBonus} Shield HP.` });
                 }
                 break;
             case 'briefRespite':
@@ -437,7 +438,10 @@ class GameManager {
                     player.currentAp -= gameData.actionCosts.briefRespite;
                     player.healthDice.current--;
                     const healAmount = Math.floor(Math.random() * 8) + 1; // 1d8
+                    const oldHp = player.stats.currentHp;
                     player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+                    const actualHeal = player.stats.currentHp - oldHp;
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Brief Respite, healing for ${actualHeal} HP.` });
                 }
                 break;
             case 'fullRest':
@@ -445,7 +449,10 @@ class GameManager {
                     player.currentAp -= gameData.actionCosts.fullRest;
                     player.healthDice.current -= 2;
                     const healAmount = (Math.floor(Math.random() * 8) + 1) + (Math.floor(Math.random() * 8) + 1); // 2d8
+                    const oldHp = player.stats.currentHp;
                     player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+                    const actualHeal = player.stats.currentHp - oldHp;
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Full Rest, healing for ${actualHeal} HP.` });
                 }
                 break;
         }
@@ -475,10 +482,17 @@ class GameManager {
         const d20Roll = Math.floor(Math.random() * 20) + 1;
         const totalRollToHit = d20Roll + player.stats.damageBonus; // Assuming damageBonus also applies to hit
         const hit = totalRollToHit >= target.requiredRollToHit;
+        
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', type: 'system',
+            message: `${player.name} attacks ${target.name} with ${weapon.name}! Rolls a ${d20Roll} + ${player.stats.damageBonus} bonus = ${totalRollToHit} (vs DC ${target.requiredRollToHit})`
+        });
+        
         let totalDamage = 0;
         let rawDamageRoll = 0;
         
         if (hit) {
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `It's a HIT!` });
             const damageDice = weapon.effect.dice;
             const [numDice, diceType] = damageDice.split('d').map(Number);
             for (let i = 0; i < numDice; i++) {
@@ -486,6 +500,12 @@ class GameManager {
             }
             totalDamage = rawDamageRoll + player.stats.damageBonus;
             target.currentHp -= totalDamage;
+            this.sendMessageToRoom(room.id, {
+                channel: 'game', type: 'system',
+                message: `${player.name} deals ${rawDamageRoll} (dice) + ${player.stats.damageBonus} (bonus) = ${totalDamage} damage to ${target.name}.`
+            });
+        } else {
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `It's a MISS!` });
         }
         
         io.to(room.id).emit('attackAnimation', {
@@ -578,7 +598,8 @@ class GameManager {
             senderName: data.senderName || 'System',
             channel: data.channel,
             message: data.message,
-            isNarrative: data.isNarrative || false
+            isNarrative: data.isNarrative || false,
+            type: data.type || 'system' // Pass through the type
         };
         io.to(roomId).emit('chatMessage', messageData);
     }
@@ -664,6 +685,16 @@ class GameManager {
             }
         }
         
+        let outcomeText = "Nothing happens.";
+        if (outcome === 'player_event') outcomeText = 'A Player Event occurs!';
+        if (outcome === 'discovery') outcomeText = 'A Discovery is made!';
+        if (outcome === 'world_event') outcomeText = 'A World Event is triggered!';
+        
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', type: 'system',
+            message: `${player.name} rolls for an event: ${roll}. Outcome: ${outcomeText}`
+        });
+
         if (outcome === 'player_event' || outcome === 'discovery') {
             player.pendingEventChoice = { outcome, cardOptions };
         }
@@ -706,11 +737,11 @@ class GameManager {
         const totalRoll = d20Roll + bonus;
         const success = totalRoll >= dc;
         
-        if (success) {
-            this.sendMessageToRoom(room.id, { channel: 'game', message: `${player.name} succeeded their save against the ${player.pendingWorldEventSave.eventName}!` });
-        } else {
-            this.sendMessageToRoom(room.id, { channel: 'game', message: `${player.name} failed their save against the ${player.pendingWorldEventSave.eventName}!` });
-        }
+        const outcomeText = success ? 'SUCCESS' : 'FAILURE';
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', type: 'system',
+            message: `${player.name} rolls a save for ${player.pendingWorldEventSave.eventName}: ${d20Roll} + ${bonus} bonus = ${totalRoll} (vs DC ${dc}) - ${outcomeText}!`
+        });
 
         player.pendingWorldEventSave = null;
         socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc, success });
