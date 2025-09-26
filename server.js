@@ -544,11 +544,20 @@ class GameManager {
         if (attackRoll >= requiredRoll) {
             const damageDice = weapon.effect.dice;
             const rawDamageRoll = this.rollDice(damageDice);
-            const damageBonus = attacker.stats.damageBonus;
-            const totalDamage = rawDamageRoll + damageBonus;
+            
+            // --- CRITICAL DAMAGE CALCULATION FIX ---
+            // Explicitly calculate total bonus from class and weapon to ensure accuracy.
+            const classBonus = (gameData.classes[attacker.class] && gameData.classes[attacker.class].baseDamageBonus) || 0;
+            const weaponBonus = (weapon.effect && weapon.effect.bonuses && weapon.effect.bonuses.damage) || 0;
+            const totalBonus = classBonus + weaponBonus;
+            const totalDamage = rawDamageRoll + totalBonus;
+
+            // Server-side log for debugging, as requested.
+            console.log(`[Damage Calc] Attacker: ${attacker.name}, Weapon: ${weapon.name}`);
+            console.log(`DMG = [Dice Roll: ${rawDamageRoll}] + [Class Bonus: ${classBonus}] + [Weapon Bonus: ${weaponBonus}] = Total: ${totalDamage}`);
             
             target.currentHp -= totalDamage;
-            message = `${attacker.name} rolls a ${rawDamageRoll} on their ${damageDice} + ${damageBonus} Bonus for a total of ${totalDamage} damage to ${target.name}!`;
+            message = `${attacker.name} rolls a ${rawDamageRoll} on their ${damageDice} + ${totalBonus} Bonus for a total of ${totalDamage} damage to ${target.name}!`;
             
             this.broadcastToRoom(roomId, 'attackAnimation', { 
                 hit: true,
@@ -557,7 +566,7 @@ class GameManager {
                 requiredRoll,
                 damageDice, 
                 rawDamageRoll, 
-                damageBonus, 
+                damageBonus: totalBonus, // Send the correct, newly calculated total bonus
                 totalDamage 
             });
             
