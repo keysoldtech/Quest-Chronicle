@@ -293,7 +293,22 @@ function renderGameState(room) {
     }
     if (myPlayerInfo.equipment) {
         Object.values(myPlayerInfo.equipment).forEach(item => {
-            if(item) equippedItemsDiv.appendChild(createCardElement(item, {}));
+            if(item) {
+                const itemCardElement = createCardElement(item, {});
+                // FIX: Make equipped weapon interactive for attacks on the player's turn.
+                if (item.type === 'Weapon' && isMyTurn && isCombat && gameState.board.monsters.length > 0) {
+                    itemCardElement.classList.add('attackable-weapon');
+                    itemCardElement.onclick = () => {
+                        if (!selectedTargetId) {
+                            alert("Please select a monster to attack first!");
+                            return;
+                        }
+                        openNarrativeModal({ action: 'attack', targetId: selectedTargetId }, item.name);
+                        selectedTargetId = null; // Reset after action initiated
+                    };
+                }
+                equippedItemsDiv.appendChild(itemCardElement);
+            }
         });
     }
     

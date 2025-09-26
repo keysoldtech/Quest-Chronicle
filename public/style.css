@@ -345,7 +345,7 @@ body.fantasy-bg {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
-    min-height: 200px;
+    min-height: 300px; /* FIX: Increased chat box height */
 }
 .chat-log {
     flex-grow: 1;
@@ -381,9 +381,8 @@ body.fantasy-bg {
 
 
 /* --- RIGHT PANEL COMPONENTS --- */
-.world-events-section { height: 25%; }
+/* FIX: Removed fixed percentage heights for a flexible layout */
 .game-board-section { flex-grow: 1; }
-.player-hand-section { height: 40%; }
 
 .world-events-section,
 .game-board-section,
@@ -438,7 +437,7 @@ body.fantasy-bg {
     flex-shrink: 0;
     position: relative;
     user-select: none;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .card.targetable:hover {
     transform: translateY(-5px);
@@ -448,6 +447,16 @@ body.fantasy-bg {
 .card.selected-target {
     border-color: var(--color-special);
     box-shadow: 0 0 20px var(--color-special-hover);
+}
+/* FIX: Style for weapon card when it's usable for an attack */
+.card.attackable-weapon {
+    border-color: var(--color-danger);
+    cursor: crosshair;
+    box-shadow: 0 0 15px var(--color-danger);
+}
+.card.attackable-weapon:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0 20px var(--color-danger-hover);
 }
 .card-title {
     font-family: var(--font-title);
