@@ -657,7 +657,9 @@ body.fantasy-bg {
     height: 100px;
     position: relative;
     transform-style: preserve-3d;
-    animation: roll 2s linear infinite;
+}
+.dice.is-rolling {
+    animation: roll 1.5s ease-out forwards;
 }
 .face {
     position: absolute;
@@ -675,7 +677,7 @@ body.fantasy-bg {
 
 @keyframes roll {
     0% { transform: rotateX(0deg) rotateY(0deg); }
-    100% { transform: rotateX(720deg) rotateY(1080deg); }
+    100% { transform: rotateX(1080deg) rotateY(720deg); }
 }
 
 /* Event Card Selection */

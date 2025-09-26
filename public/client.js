@@ -64,6 +64,7 @@ const eventOverlay = document.getElementById('event-overlay');
 const eventRollContainer = document.getElementById('event-roll-container');
 const rollDiceBtn = document.getElementById('roll-dice-btn');
 const eventDiceAnimationContainer = document.getElementById('event-dice-animation-container');
+const dice = document.getElementById('dice');
 const eventResultContainer = document.getElementById('event-result-container');
 const eventResultTitle = document.getElementById('event-result-title');
 const eventResultSubtitle = document.getElementById('event-result-subtitle');
@@ -229,7 +230,7 @@ function renderGameState(room) {
     const isDm = myPlayerInfo.role === 'DM';
     const canPlayTargetedCard = gameState.board.monsters.length > 0;
     
-    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || isDm);
+    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || isDm || myPlayerInfo.class);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || isDm);
     playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
     endTurnBtn.classList.toggle('hidden', !isMyTurn);
@@ -297,311 +298,361 @@ function renderGameState(room) {
         
         if (turnTaker) {
             turnIndicator.textContent = `Current Turn: ${turnTaker.name}`;
-            if(isMyTurn) turnIndicator.textContent += " (Your Turn!)";
+            if(isMyTurn) turnIndicator.textContent += ' (Your Turn)';
         } else {
-            // If no turnTaker is identified, it's the DM's turn to act
-            turnIndicator.textContent = "Waiting on DM...";
+            turnIndicator.textContent = 'Waiting for next turn...';
         }
     }
+    
+    // --- Render Player Stats ---
+    if (myPlayerInfo.stats) {
+        playerStatsDiv.innerHTML = `
+            <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${myPlayerInfo.stats.maxHp}</span>
+            <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}</span>
+            <span>DMG Bonus:</span><span class="stat-value">${myPlayerInfo.stats.damageBonus}</span>
+            <span>SHIELD Bonus:</span><span class="stat-value">${myPlayerInfo.stats.shieldBonus}</span>
+            <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
+            <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
+        `;
+    }
 
-    const { stats, currentAp } = myPlayerInfo;
-    playerStatsDiv.innerHTML = `
-        <span>HP:</span> <span class="stat-value">${stats.currentHp} / ${stats.maxHp}</span>
-        <span>Damage Bonus:</span> <span class="stat-value">${stats.damageBonus > 0 ? '+' : ''}${stats.damageBonus}</span>
-        <span>Shield Bonus:</span> <span class="stat-value">${stats.shieldBonus > 0 ? '+' : ''}${stats.shieldBonus}</span>
-        <span>Action Points:</span> <span class="stat-value">${currentAp} / ${stats.ap}</span>
-        <span>Health Dice:</span> <span class="stat-value">${myPlayerInfo.healthDice?.current || 0} / ${myPlayerInfo.healthDice?.max || 0}</span>
-    `;
-
-    // --- Render Hand & Equipment ---
+    // --- Render Player Hand & Equipment ---
     playerHandDiv.innerHTML = '';
     equippedItemsDiv.innerHTML = '';
     
-    if (myPlayerInfo.hand) {
-        myPlayerInfo.hand.forEach(card => {
-            const isEquippable = card.type === 'Weapon' || card.type === 'Armor';
-            const isPlayable = isMyTurn && ((card.effect?.target !== 'any-monster' || canPlayTargetedCard));
-            playerHandDiv.appendChild(createCardElement(card, { isPlayable, isEquippable }));
-        });
-    }
-    if (myPlayerInfo.equipment) {
-        Object.values(myPlayerInfo.equipment).forEach(item => {
-            if(item) {
-                const itemCardElement = createCardElement(item, {});
-                // FIX: Make equipped weapon interactive for attacks on the player's turn.
-                if (item.type === 'Weapon' && isMyTurn && isCombat && gameState.board.monsters.length > 0) {
-                    itemCardElement.classList.add('attackable-weapon');
-                    itemCardElement.onclick = () => {
-                        if (!selectedTargetId) {
-                            alert("Please select a monster to attack first!");
-                            return;
-                        }
-                        openNarrativeModal({ action: 'attack', targetId: selectedTargetId }, item.name);
-                        selectedTargetId = null; // Reset after action initiated
-                    };
-                }
-                equippedItemsDiv.appendChild(itemCardElement);
+    // Render equipped items
+    ['weapon', 'armor'].forEach(type => {
+        const item = myPlayerInfo.equipment[type];
+        if (item) {
+            const actions = { isPlayable: isMyTurn && type === 'weapon' && canPlayTargetedCard };
+            const cardEl = createCardElement(item, actions);
+            if (actions.isPlayable) cardEl.classList.add('attackable-weapon');
+            equippedItemsDiv.appendChild(cardEl);
+        }
+    });
+
+    // Render hand
+    myPlayerInfo.hand.forEach(card => {
+        const isEquippable = card.type === 'Weapon' || card.type === 'Armor';
+        const isPlayable = isMyTurn && !isEquippable;
+        const cardEl = createCardElement(card, { isPlayable, isEquippable });
+        playerHandDiv.appendChild(cardEl);
+    });
+
+    // --- Render Board ---
+    gameBoardDiv.innerHTML = '';
+    gameState.board.monsters.forEach(monster => {
+        const cardEl = createCardElement({ ...monster, currentHp: monster.currentHp }, { isTargetable: isMyTurn });
+        cardEl.addEventListener('click', () => {
+            if (isMyTurn) {
+                selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
+                renderGameState(currentRoomState); // Re-render to show selection
             }
         });
-    }
-    
-    // --- Render Board & World Events ---
-    gameBoardDiv.innerHTML = '';
-    (gameState.board.monsters || []).forEach(monster => {
-        const isTargetable = isMyTurn;
-        const monsterCard = createCardElement(monster, { isTargetable });
-        if(isTargetable) {
-            monsterCard.onclick = () => {
-                selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
-                renderGameState(currentRoomState); // Re-render to show selection change
-            };
-        }
-        gameBoardDiv.appendChild(monsterCard);
-    });
-    
-    worldEventsContainer.innerHTML = '';
-    (gameState.worldEvents?.currentSequence || []).forEach(card => {
-        worldEventsContainer.appendChild(createCardElement(card, {}));
+        gameBoardDiv.appendChild(cardEl);
     });
 
-    // Render contextual actions
-    playerActionsContainer.innerHTML = '';
-    if (isMyTurn && !isCombat) {
-        const respiteBtn = document.createElement('button');
-        respiteBtn.textContent = 'Brief Respite';
-        respiteBtn.className = 'fantasy-button-sm fantasy-button-secondary';
-        respiteBtn.onclick = () => socket.emit('playerAction', { action: 'briefRespite' });
-        playerActionsContainer.appendChild(respiteBtn);
-        
-        const restBtn = document.createElement('button');
-        restBtn.textContent = 'Full Rest';
-        restBtn.className = 'fantasy-button-sm fantasy-button-success';
-        restBtn.onclick = () => socket.emit('playerAction', { action: 'fullRest' });
-        playerActionsContainer.appendChild(restBtn);
+    // --- Render Player Actions ---
+    if(isMyTurn && playerActionsContainer.children.length === 0){
+        ['Brief Respite (1d)', 'Full Rest (2d)', 'Guard'].forEach(action => {
+            const btn = document.createElement('button');
+            btn.textContent = action;
+            btn.className = 'fantasy-button-sm fantasy-button-secondary';
+            playerActionsContainer.appendChild(btn);
+        });
+    } else if (!isMyTurn) {
+        playerActionsContainer.innerHTML = '';
     }
 }
 
-function showGameArea(room) {
-    lobbyScreen.classList.add('hidden');
-    gameArea.classList.remove('hidden');
-    myPlayerInfo = room.players[myId];
-    
-    if (myPlayerInfo.role === 'DM') {
-        chatChannel.querySelector('option[value="party"]').disabled = true;
-        startGameBtn.classList.remove('hidden');
-    } else {
-        startGameBtn.classList.add('hidden');
-    }
+function renderEventCardChoices(cardOptions) {
+    eventResultTitle.textContent = "Choose a Card";
+    eventResultSubtitle.textContent = "Your choice will determine the outcome.";
+    eventCardSelection.classList.remove('hidden');
+    eventCardSelection.innerHTML = ''; // Clear previous cards
+
+    cardOptions.forEach(card => {
+        const cardBack = document.createElement('div');
+        cardBack.className = 'card';
+        cardBack.dataset.cardId = card.id;
+        cardBack.onclick = () => {
+            socket.emit('selectEventCard', { cardId: card.id });
+            eventCardSelection.innerHTML = ''; // Prevent further clicks
+        };
+        eventCardSelection.appendChild(cardBack);
+    });
 }
 
-// --- Lobby Event Listeners ---
+
+// --- LOBBY EVENT LISTENERS ---
 createRoomBtn.addEventListener('click', () => {
     const playerName = playerNameInput.value.trim();
-    if (!playerName) return alert('Please enter a player name.');
-    socket.emit('createRoom', playerName);
+    if (playerName) {
+        socket.emit('createRoom', playerName);
+    } else {
+        alert('Please enter a name!');
+    }
 });
 
 joinRoomBtn.addEventListener('click', () => {
     const playerName = playerNameInput.value.trim();
     const roomId = roomIdInput.value.trim();
-    if (!playerName || !roomId) return alert('Please enter a player name and a room code.');
-    gameModeSelector.classList.add('hidden');
-    socket.emit('joinRoom', { roomId, playerName });
-});
-
-gameModeSelector.addEventListener('change', (e) => {
-    document.querySelectorAll('#game-mode-selector span').forEach(span => span.parentElement.classList.remove('active'));
-    document.querySelector('input[name="gameMode"]:checked').parentElement.classList.add('active');
-});
-document.querySelector('input[name="gameMode"]:checked').parentElement.classList.add('active');
-
-
-// --- Game Event Listeners ---
-chatForm.addEventListener('submit', (e) => { e.preventDefault(); const msg=chatInput.value.trim(); if (msg) { socket.emit('sendMessage', { channel: chatChannel.value, message: msg }); chatInput.value = ''; } });
-startGameBtn.addEventListener('click', () => socket.emit('startGame', { gameMode: document.querySelector('input[name="gameMode"]:checked').value }));
-endTurnBtn.addEventListener('click', () => socket.emit('endTurn'));
-worldEventBtn.addEventListener('click', () => {
-    const worldEventCard = myPlayerInfo.hand.find(c => c.type === 'World Event');
-    if (worldEventCard) {
-        socket.emit('playCard', { cardId: worldEventCard.id });
+    if (playerName && roomId) {
+        socket.emit('joinRoom', { roomId, playerName });
     } else {
-        alert("You don't have a World Event card to play!");
+        alert('Please enter your name and a room code!');
     }
 });
+
+// --- GAME EVENT LISTENERS ---
+startGameBtn.addEventListener('click', () => {
+    const selectedMode = document.querySelector('input[name="gameMode"]:checked').value;
+    socket.emit('startGame', { gameMode: selectedMode });
+});
+
+endTurnBtn.addEventListener('click', () => {
+    socket.emit('endTurn');
+});
+
+chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const message = chatInput.value.trim();
+    const channel = chatChannel.value;
+    if (message) {
+        socket.emit('sendMessage', { channel, message });
+        chatInput.value = '';
+    }
+});
+
 narrativeConfirmBtn.addEventListener('click', () => {
     if (pendingActionData) {
-        pendingActionData.narrative = narrativeInput.value.trim();
-        socket.emit('playerAction', pendingActionData);
+        const narrative = narrativeInput.value.trim();
+        socket.emit('playerAction', { ...pendingActionData, narrative });
         closeNarrativeModal();
     }
 });
+
 narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
 
-rollDiceBtn.addEventListener('click', () => {
+rollDiceBtn.onclick = () => {
+    socket.emit('rollForEvent');
     eventRollContainer.classList.add('hidden');
     eventDiceAnimationContainer.classList.remove('hidden');
-    socket.emit('rollForEvent');
+    dice.classList.add('is-rolling'); // Start animation
+};
+
+
+// --- SOCKET.IO EVENT HANDLERS ---
+socket.on('connect', () => {
+    myId = socket.id;
 });
 
-
-// --- Socket.IO Event Handlers ---
 socket.on('roomCreated', (room) => {
-    myId = socket.id;
+    lobbyScreen.classList.add('hidden');
+    gameArea.classList.remove('hidden');
     roomCodeDisplay.textContent = room.id;
-    showGameArea(room);
+    
+    // DM-specific UI setup
+    startGameBtn.classList.remove('hidden');
+    gameModeSelector.classList.add('hidden');
+
     renderGameState(room);
-    logMessage(`You created the room. The code is ${room.id}.`);
 });
 
 socket.on('joinSuccess', (room) => {
-    myId = socket.id;
+    lobbyScreen.classList.add('hidden');
+    gameArea.classList.remove('hidden');
     roomCodeDisplay.textContent = room.id;
-    gameModeSelector.style.display = 'none';
-    showGameArea(room);
+    gameModeSelector.classList.add('hidden');
     renderGameState(room);
-    logMessage(`You joined room ${room.id}. Welcome!`);
 });
 
 socket.on('playerListUpdate', (room) => {
-    const oldPlayerCount = currentRoomState.players ? Object.keys(currentRoomState.players).length : 0;
-    const newPlayerCount = room.players ? Object.keys(room.players).length : 0;
-    if (newPlayerCount > oldPlayerCount) {
-        const newPlayer = Object.values(room.players).find(p => !currentRoomState.players || !currentRoomState.players[p.id]);
-        if(newPlayer) logMessage(`${newPlayer.name} has joined the room.`);
-    }
     renderGameState(room);
 });
 
-socket.on('playerLeft', ({ room }) => {
-    logMessage(`${room.playerName} has left the room.`);
-    renderGameState({ players: room.remainingPlayers, gameState: currentRoomState.gameState });
-});
-
-socket.on('chatMessage', ({ senderName, message, channel, isNarrative }) => logMessage(message, { type: 'chat', channel, senderName, isNarrative }));
-
 socket.on('gameStarted', (room) => {
-    console.log("Game has started!", room);
     startGameBtn.classList.add('hidden');
-    gameModeSelector.style.display = 'none';
+    logMessage('The game has begun!', { type: 'system' });
     renderGameState(room);
 });
 
 socket.on('gameStateUpdate', (room) => {
-    console.log("Game state updated!", room);
     renderGameState(room);
 });
 
-socket.on('actionError', (message) => { 
-    alert(`Action Failed: ${message}`);
-    logMessage(message, { type: 'system' });
+socket.on('chatMessage', ({ senderName, message, channel, isNarrative }) => {
+    logMessage(message, { type: 'chat', senderName, channel, isNarrative });
+});
+
+socket.on('playerLeft', ({ playerName }) => {
+    logMessage(`${playerName} has left the game.`, { type: 'system' });
+});
+
+socket.on('actionError', (errorMessage) => {
+    alert(errorMessage);
 });
 
 socket.on('attackAnimation', ({ damageDice, damageRoll }) => {
-    attackRollPopup.innerHTML = `${damageDice} &rarr; <strong>${damageRoll}</strong>`;
+    attackRollPopup.textContent = `Rolling ${damageDice}...`;
     attackRollPopup.classList.remove('hidden');
+
+    // After a delay, show the result
+    setTimeout(() => {
+        attackRollPopup.textContent = `${damageRoll}!`;
+    }, 1200);
+
+    // Hide popup after animation is done
     setTimeout(() => {
         attackRollPopup.classList.add('hidden');
-    }, 2500);
+    }, 2400); // Slightly less than animation duration to avoid flicker
 });
 
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
+    // Wait for dice animation to complete
     setTimeout(() => {
+        dice.classList.remove('is-rolling'); // Reset for next time
         eventDiceAnimationContainer.classList.add('hidden');
         eventResultContainer.classList.remove('hidden');
-        eventCardSelection.innerHTML = '';
-        eventResultOkayBtn.classList.remove('hidden');
-        eventCardSelection.classList.add('hidden');
+        eventCardSelection.classList.add('hidden'); // Hide card backs initially
+        eventResultOkayBtn.classList.remove('hidden'); // Show okay button
 
         eventResultTitle.textContent = `You rolled a ${roll}!`;
 
-        if (outcome === 'none') {
-            eventResultSubtitle.textContent = "The winds of fate are calm... for now.";
-            eventResultOkayBtn.onclick = () => eventOverlay.classList.add('hidden');
-        } else {
-            const eventType = outcome === 'playerEvent' ? 'Player Event' : 'Discovery';
-            eventResultSubtitle.textContent = `A ${eventType} occurs!`;
-            
+        if (outcome === 'discovery') {
+            eventResultSubtitle.textContent = "You've made a Discovery! Press Okay to see your options.";
             eventResultOkayBtn.onclick = () => {
-                eventResultTitle.textContent = `Choose a card...`;
-                eventResultSubtitle.textContent = `Select one of the cards to reveal your fate.`;
                 eventResultOkayBtn.classList.add('hidden');
-                eventCardSelection.classList.remove('hidden');
-                
-                cardOptions.forEach(cardInfo => {
-                    const cardBack = document.createElement('div');
-                    cardBack.className = 'card';
-                    cardBack.dataset.cardId = cardInfo.id;
-                    cardBack.onclick = () => {
-                        eventResultSubtitle.textContent = "Revealing your choice...";
-                        document.querySelectorAll('#event-card-selection .card').forEach(c => c.onclick = null); // Disable further clicks
-                        socket.emit('selectEventCard', { cardId: cardInfo.id });
-                    };
-                    eventCardSelection.appendChild(cardBack);
-                });
+                renderEventCardChoices(cardOptions);
+            };
+        } else if (outcome === 'playerEvent') {
+            eventResultSubtitle.textContent = "You've triggered a Player Event! Press Okay to see your options.";
+            eventResultOkayBtn.onclick = () => {
+                eventResultOkayBtn.classList.add('hidden');
+                renderEventCardChoices(cardOptions);
+            };
+        } else { // 'none'
+            eventResultSubtitle.textContent = "The moment passes without incident. Your journey continues.";
+            eventResultOkayBtn.onclick = () => {
+                eventOverlay.classList.add('hidden');
             };
         }
-    }, 2000); // Wait for dice animation to finish
+    }, 1500); // Corresponds to dice animation duration
 });
 
 socket.on('eventCardReveal', ({ chosenCard }) => {
-    const chosenCardElem = document.querySelector(`#event-card-selection .card[data-card-id="${chosenCard.id}"]`);
-    const otherCardElems = document.querySelectorAll(`#event-card-selection .card:not([data-card-id="${chosenCard.id}"])`);
+    eventResultTitle.textContent = `You found: ${chosenCard.name}`;
+    eventResultSubtitle.textContent = '';
+    eventCardSelection.innerHTML = '';
     
-    if (chosenCardElem) {
-        // Replace card back with revealed card
-        const newCard = createCardElement(chosenCard);
-        chosenCardElem.replaceWith(newCard);
+    const cardEl = createCardElement(chosenCard);
+    eventCardSelection.appendChild(cardEl);
+    eventCardSelection.classList.remove('hidden');
 
-        // Make other cards disappear
-        otherCardElems.forEach(c => c.style.opacity = '0');
-        
-        setTimeout(() => {
-            eventOverlay.classList.add('hidden');
-        }, 4000); // Give player time to read the card
-    }
+    setTimeout(() => {
+        eventOverlay.classList.add('hidden');
+    }, 4000); // Give player time to read the card
 });
 
 
-// --- WebRTC Logic ---
-async function handleVoiceConnection(peerId, isInitiator) {
+// --- VOICE CHAT ---
+joinVoiceBtn.addEventListener('click', async () => {
     if (!localStream) {
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (err) { console.error('Error accessing microphone:', err); logMessage('Could not access microphone.'); return; }
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            socket.emit('join-voice');
+            joinVoiceBtn.textContent = 'Voice On';
+            joinVoiceBtn.classList.remove('fantasy-button-success');
+            joinVoiceBtn.classList.add('fantasy-button-danger');
+        } catch (error) {
+            console.error('Error accessing media devices.', error);
+            alert('Could not access microphone. Please check your browser permissions.');
+        }
     }
-    const peerConnection = new RTCPeerConnection(iceServers);
-    peerConnections[peerId] = peerConnection;
-    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-    peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('voice-ice-candidate', { candidate: e.candidate, toId: peerId }); };
-    peerConnection.ontrack = e => {
-        const audio = document.createElement('audio');
-        audio.srcObject = e.streams[0];
-        audio.autoplay = true;
-        audio.id = `audio-${peerId}`;
-        voiceChatContainer.appendChild(audio);
-    };
-    if (isInitiator) {
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        socket.emit('voice-offer', { offer, toId: peerId });
-    }
-}
+});
 
-joinVoiceBtn.addEventListener('click', () => { socket.emit('join-voice'); joinVoiceBtn.disabled=true; joinVoiceBtn.textContent='Voice Active'; logMessage('Joining voice chat...'); });
-socket.on('voice-peers', peerIds => peerIds.forEach(id => handleVoiceConnection(id, true)));
-socket.on('voice-peer-join', ({ peerId }) => { logMessage('A user joined voice. Connecting...'); handleVoiceConnection(peerId, false); });
+const createPeerConnection = (peerId) => {
+    const pc = new RTCPeerConnection(iceServers);
+    peerConnections[peerId] = pc;
+
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    pc.onicecandidate = event => {
+        if (event.candidate) {
+            socket.emit('voice-ice-candidate', { candidate: event.candidate, toId: peerId });
+        }
+    };
+    
+    pc.ontrack = (event) => {
+        let audio = document.getElementById(`audio-${peerId}`);
+        if (!audio) {
+            audio = document.createElement('audio');
+            audio.id = `audio-${peerId}`;
+            audio.autoplay = true;
+            voiceChatContainer.appendChild(audio);
+        }
+        audio.srcObject = event.streams[0];
+    };
+    
+    return pc;
+};
+
+socket.on('voice-peers', (peers) => {
+    peers.forEach(peerId => {
+        const pc = createPeerConnection(peerId);
+        pc.createOffer()
+            .then(offer => pc.setLocalDescription(offer))
+            .then(() => {
+                socket.emit('voice-offer', { offer: pc.localDescription, toId: peerId });
+            });
+    });
+});
+
+socket.on('voice-peer-join', ({ peerId }) => {
+    // This is initiated by the new peer, no offer needed here.
+    logMessage('A player joined voice chat.', { type: 'system' });
+});
+
 socket.on('voice-offer', async ({ offer, fromId }) => {
-    await handleVoiceConnection(fromId, false);
-    await peerConnections[fromId].setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnections[fromId].createAnswer();
-    await peerConnections[fromId].setLocalDescription(answer);
-    socket.emit('voice-answer', { answer, toId: fromId });
+    const pc = createPeerConnection(fromId);
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit('voice-answer', { answer: pc.localDescription, toId: fromId });
 });
-socket.on('voice-answer', async ({ answer, fromId }) => { if (peerConnections[fromId]) await peerConnections[fromId].setRemoteDescription(new RTCSessionDescription(answer)); });
-socket.on('voice-ice-candidate', async ({ candidate, fromId }) => { if (peerConnections[fromId]) await peerConnections[fromId].addIceCandidate(new RTCIceCandidate(candidate)); });
+
+socket.on('voice-answer', async ({ answer, fromId }) => {
+    const pc = peerConnections[fromId];
+    if (pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+});
+
+socket.on('voice-ice-candidate', async ({ candidate, fromId }) => {
+    const pc = peerConnections[fromId];
+    if (pc && candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+});
+
 socket.on('voice-peer-disconnect', ({ peerId }) => {
-    logMessage('A user left voice chat.');
-    if (peerConnections[peerId]) { peerConnections[peerId].close(); delete peerConnections[peerId]; }
+    if (peerConnections[peerId]) {
+        peerConnections[peerId].close();
+        delete peerConnections[peerId];
+    }
     const audioEl = document.getElementById(`audio-${peerId}`);
-    if (audioEl) audioEl.remove();
+    if (audioEl) {
+        audioEl.remove();
+    }
+    logMessage('A player left voice chat.', { type: 'system' });
 });
+
+// --- UI HELPERS ---
+document.querySelector('.radio-group').addEventListener('change', (e) => {
+    if (e.target.name === 'gameMode') {
+        document.querySelectorAll('.radio-label').forEach(label => label.classList.remove('active'));
+        e.target.closest('.radio-label').classList.add('active');
+    }
+});
+// Set initial active state for radio buttons
+document.querySelector('.radio-label').classList.add('active');

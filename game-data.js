@@ -173,21 +173,21 @@ const npcDialogue = {
 };
 
 const itemCards = [
-    { id: nextId(), name: "Purifying Flask", type: "Consumable", category: "Damage", apCost: 1, effect: { type: 'damage', dice: "2d6", target: 'any-monster', description: "Deals 2d6 radiant damage to Undead or Fiends." } },
-    { id: nextId(), name: "Everbright Stick", type: "Consumable", category: "Utility", apCost: 1, effect: { type: 'utility', description: "Emits bright light for 1 hour." } },
-    { id: nextId(), name: "Vial of Vitality", type: "Potion", category: "Healing", apCost: 1, effect: { type: 'heal', dice: "2d4+2", target: 'any-explorer', description: "Restore 2d4 + 2 HP." } },
-    { id: nextId(), name: "Sovereign Salve", type: "Potion", category: "Healing", apCost: 1, effect: { type: 'heal', dice: "1d8", target: 'any-explorer', description: "Restore 1d8 HP." } },
-    { id: nextId(), name: "Combustion Flask", type: "Consumable", category: "Damage", apCost: 1, effect: { type: 'damage', dice: "1d4", status: 'On Fire', duration: 2, target: 'any-monster', description: "Target takes 1d4 fire damage and is set On Fire." } },
-    { id: nextId(), name: "Scroll of Healing Touch", type: "Scroll", category: "Healing", apCost: 1, effect: { type: 'heal', dice: "1d8+5", target: 'any-explorer', description: "Magically heal for 1d8+5 HP." } },
-    { id: nextId(), name: "Lockpicks & Shims", type: "Utility", category: "Utility", apCost: 1, effect: { type: 'utility', description: "Advantage on picking locks (conceptual)." } },
+    { id: nextId(), name: "Purifying Flask", type: "Consumable", class: 'Any', category: "Damage", apCost: 1, effect: { type: 'damage', dice: "2d6", target: 'any-monster', description: "Deals 2d6 radiant damage to Undead or Fiends." } },
+    { id: nextId(), name: "Everbright Stick", type: "Consumable", class: 'Any', category: "Utility", apCost: 1, effect: { type: 'utility', description: "Emits bright light for 1 hour." } },
+    { id: nextId(), name: "Vial of Vitality", type: "Potion", class: 'Any', category: "Healing", apCost: 1, effect: { type: 'heal', dice: "2d4+2", target: 'any-explorer', description: "Restore 2d4 + 2 HP." } },
+    { id: nextId(), name: "Sovereign Salve", type: "Potion", class: 'Any', category: "Healing", apCost: 1, effect: { type: 'heal', dice: "1d8", target: 'any-explorer', description: "Restore 1d8 HP." } },
+    { id: nextId(), name: "Combustion Flask", type: "Consumable", class: 'Any', category: "Damage", apCost: 1, effect: { type: 'damage', dice: "1d4", status: 'On Fire', duration: 2, target: 'any-monster', description: "Target takes 1d4 fire damage and is set On Fire." } },
+    { id: nextId(), name: "Scroll of Healing Touch", type: "Scroll", class: 'Cleric', category: "Healing", apCost: 1, effect: { type: 'heal', dice: "1d8+5", target: 'any-explorer', description: "Magically heal for 1d8+5 HP." } },
+    { id: nextId(), name: "Lockpicks & Shims", type: "Utility", class: 'Rogue', category: "Utility", apCost: 1, effect: { type: 'utility', description: "Advantage on picking locks (conceptual)." } },
 ];
 
 const spellCards = [
-    { id: nextId(), name: "Cinder Shot", type: "Spell", category: "Damage", apCost: 2, effect: { type: 'damage', dice: "1d10", target: 'any-monster', description: "Deals 1d10 fire damage." } },
-    { id: nextId(), name: "Frost Beam", type: "Spell", category: "Damage", apCost: 1, effect: { type: 'damage', dice: "1d8", status: 'Slowed', duration: 1, target: 'any-monster', description: "1d8 cold damage and slows the target." } },
-    { id: nextId(), name: "Healing Touch", type: "Spell", category: "Healing", apCost: 1, effect: { type: 'heal', dice: "1d8+5", target: 'any-explorer', description: "Heals 1d8 + 5 HP." } },
-    { id: nextId(), name: "Force Barrier", type: "Spell", category: "Utility", apCost: 1, effect: { type: 'status', status: 'Guarded', duration: 2, target: 'self', description: "Increase Shield Points by 5 for 1 round." } },
-    { id: nextId(), name: "Shockwave", type: "Spell", category: "Damage", apCost: 2, effect: { type: 'damage', dice: "2d8", status: 'Stunned', duration: 1, target: 'any-monster', description: "2d8 thunder damage and stuns creatures." } },
+    { id: nextId(), name: "Cinder Shot", type: "Spell", class: 'Mage', category: "Damage", apCost: 2, effect: { type: 'damage', dice: "1d10", target: 'any-monster', description: "Deals 1d10 fire damage." } },
+    { id: nextId(), name: "Frost Beam", type: "Spell", class: 'Mage', category: "Damage", apCost: 1, effect: { type: 'damage', dice: "1d8", status: 'Slowed', duration: 1, target: 'any-monster', description: "1d8 cold damage and slows the target." } },
+    { id: nextId(), name: "Healing Touch", type: "Spell", class: 'Cleric', category: "Healing", apCost: 1, effect: { type: 'heal', dice: "1d8+5", target: 'any-explorer', description: "Heals 1d8 + 5 HP." } },
+    { id: nextId(), name: "Force Barrier", type: "Spell", class: 'Mage', category: "Utility", apCost: 1, effect: { type: 'status', status: 'Guarded', duration: 2, target: 'self', description: "Increase Shield Points by 5 for 1 round." } },
+    { id: nextId(), name: "Shockwave", type: "Spell", class: 'Mage', category: "Damage", apCost: 2, effect: { type: 'damage', dice: "2d8", status: 'Stunned', duration: 1, target: 'any-monster', description: "2d8 thunder damage and stuns creatures." } },
 ];
 
 const monsterCards = [
@@ -199,16 +199,16 @@ const monsterCards = [
 ];
 
 const weaponCards = [
-    { id: nextId(), name: "Axechuck", type: "Weapon", apCost: 1, effect: { type: 'damage', dice: "1d6", bonuses: { damage: 1 }, description: "1d6 slashing, Thrown (20/60), Returning." } },
-    { id: nextId(), name: "Balanced Steel", type: "Weapon", apCost: 1, effect: { type: 'damage', dice: "1d8", bonuses: { damage: 2 }, description: "1d8 slashing, Versatile (1d10)." } },
-    { id: nextId(), name: "Farstrike Bow", type: "Weapon", apCost: 1, effect: { type: 'damage', dice: "1d8", bonuses: { damage: 2 }, description: "1d8 piercing, Ammunition, Heavy, Two-Handed." } },
+    { id: nextId(), name: "Axechuck", type: "Weapon", class: ['Barbarian', 'Ranger'], apCost: 1, effect: { type: 'damage', dice: "1d6", bonuses: { damage: 1 }, description: "1d6 slashing, Thrown (20/60), Returning." } },
+    { id: nextId(), name: "Balanced Steel", type: "Weapon", class: ['Warrior', 'Rogue', 'Ranger'], apCost: 1, effect: { type: 'damage', dice: "1d8", bonuses: { damage: 2 }, description: "1d8 slashing, Versatile (1d10)." } },
+    { id: nextId(), name: "Farstrike Bow", type: "Weapon", class: ['Ranger', 'Rogue'], apCost: 1, effect: { type: 'damage', dice: "1d8", bonuses: { damage: 2 }, description: "1d8 piercing, Ammunition, Heavy, Two-Handed." } },
 ];
 
 const armorCards = [
-     { id: nextId(), name: "Hide Vest", type: "Armor", effect: { description: "+2 Shield Bonus, +1 AP Bonus.", bonuses: { shield: 2, ap: 1 } } },
-     { id: nextId(), name: "Link Hauberk", type: "Armor", effect: { description: "+4 Shield Bonus.", bonuses: { shield: 4, ap: 0 } } },
-     { id: nextId(), name: "Bastion Shield", type: "Armor", effect: { description: "+3 Shield Bonus, -1 AP Bonus.", bonuses: { shield: 3, ap: -1 } } },
-     { id: nextId(), name: "Warding Band", type: "Armor", effect: { description: "Gain +1 Shield Bonus.", bonuses: { shield: 1, ap: 0 } } },
+     { id: nextId(), name: "Hide Vest", type: "Armor", class: ['Rogue', 'Ranger', 'Barbarian'], effect: { description: "+2 Shield Bonus, +1 AP Bonus.", bonuses: { shield: 2, ap: 1 } } },
+     { id: nextId(), name: "Link Hauberk", type: "Armor", class: ['Warrior', 'Cleric', 'Ranger'], effect: { description: "+4 Shield Bonus.", bonuses: { shield: 4, ap: 0 } } },
+     { id: nextId(), name: "Bastion Shield", type: "Armor", class: ['Warrior', 'Cleric'], effect: { description: "+3 Shield Bonus, -1 AP Bonus.", bonuses: { shield: 3, ap: -1 } } },
+     { id: nextId(), name: "Warding Band", type: "Armor", class: 'Any', effect: { description: "Gain +1 Shield Bonus.", bonuses: { shield: 1, ap: 0 } } },
 ];
 
 const worldEventCards = [
@@ -228,19 +228,19 @@ const playerEventCards = [
 
 const discoveryCards = [
     // Tier 1
-    { id: nextId(), name: "Sturdy Leather Armor", type: "Armor", tier: 1, effect: { description: "+3 Shield Bonus.", bonuses: { shield: 3, ap: 0 } } },
-    { id: nextId(), name: "Serrated Shortsword", type: "Weapon", tier: 1, apCost: 1, effect: { type: 'damage', dice: "1d8+1", bonuses: { damage: 1 }, description: "A reliable and sharp blade." } },
-    { id: nextId(), name: "Greater Healing Potion", type: "Potion", tier: 1, category: "Healing", apCost: 1, effect: { type: 'heal', dice: "4d4+4", target: 'any-explorer', description: "Restore 4d4 + 4 HP." } },
+    { id: nextId(), name: "Sturdy Leather Armor", type: "Armor", class: ['Rogue', 'Ranger', 'Barbarian'], tier: 1, effect: { description: "+3 Shield Bonus.", bonuses: { shield: 3, ap: 0 } } },
+    { id: nextId(), name: "Serrated Shortsword", type: "Weapon", class: ['Rogue', 'Warrior'], tier: 1, apCost: 1, effect: { type: 'damage', dice: "1d8+1", bonuses: { damage: 1 }, description: "A reliable and sharp blade." } },
+    { id: nextId(), name: "Greater Healing Potion", type: "Potion", class: 'Any', tier: 1, category: "Healing", apCost: 1, effect: { type: 'heal', dice: "4d4+4", target: 'any-explorer', description: "Restore 4d4 + 4 HP." } },
 
     // Tier 2
-    { id: nextId(), name: "Elven Chainmail", type: "Armor", tier: 2, effect: { description: "+4 Shield Bonus, +1 AP.", bonuses: { shield: 4, ap: 1 } } },
-    { id: nextId(), name: "Flaming Longsword", type: "Weapon", tier: 2, apCost: 1, effect: { type: 'damage', dice: "2d6", bonuses: { damage: 2 }, status: 'On Fire', duration: 1, description: "A blade wreathed in magical fire." } },
-    { id: nextId(), name: "Scroll of Regeneration", type: "Scroll", tier: 2, category: "Healing", apCost: 1, effect: { type: 'heal', dice: "2d8+10", target: 'any-explorer', description: "Heals for a massive amount." } },
+    { id: nextId(), name: "Elven Chainmail", type: "Armor", class: ['Ranger', 'Rogue', 'Warrior'], tier: 2, effect: { description: "+4 Shield Bonus, +1 AP.", bonuses: { shield: 4, ap: 1 } } },
+    { id: nextId(), name: "Flaming Longsword", type: "Weapon", class: ['Warrior', 'Mage'], tier: 2, apCost: 1, effect: { type: 'damage', dice: "2d6", bonuses: { damage: 2 }, status: 'On Fire', duration: 1, description: "A blade wreathed in magical fire." } },
+    { id: nextId(), name: "Scroll of Regeneration", type: "Scroll", class: 'Cleric', tier: 2, category: "Healing", apCost: 1, effect: { type: 'heal', dice: "2d8+10", target: 'any-explorer', description: "Heals for a massive amount." } },
 
     // Tier 3
-    { id: nextId(), name: "Dragonscale Plate", type: "Armor", tier: 3, effect: { description: "+6 Shield Bonus. Resistant to fire.", bonuses: { shield: 6, ap: 0 } } },
-    { id: nextId(), name: "Stormcaller's Axe", type: "Weapon", tier: 3, apCost: 1, effect: { type: 'damage', dice: "2d10", bonuses: { damage: 3 }, status: 'Stunned', duration: 1, description: "An axe crackling with lightning." } },
-    { id: nextId(), name: "Phoenix Down", type: "Consumable", tier: 3, category: "Utility", apCost: 2, effect: { type: 'utility', description: "Revives a fallen ally to full health and lives (conceptual)." } },
+    { id: nextId(), name: "Dragonscale Plate", type: "Armor", class: ['Warrior', 'Barbarian'], tier: 3, effect: { description: "+6 Shield Bonus. Resistant to fire.", bonuses: { shield: 6, ap: 0 } } },
+    { id: nextId(), name: "Stormcaller's Axe", type: "Weapon", class: ['Barbarian', 'Warrior'], tier: 3, apCost: 1, effect: { type: 'damage', dice: "2d10", bonuses: { damage: 3 }, status: 'Stunned', duration: 1, description: "An axe crackling with lightning." } },
+    { id: nextId(), name: "Phoenix Down", type: "Consumable", class: 'Any', tier: 3, category: "Utility", apCost: 2, effect: { type: 'utility', description: "Revives a fallen ally to full health and lives (conceptual)." } },
 ];
 
 
