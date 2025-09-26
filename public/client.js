@@ -57,6 +57,7 @@ const narrativeInput = document.getElementById('narrative-input');
 const narrativeCancelBtn = document.getElementById('narrative-cancel-btn');
 const narrativeConfirmBtn = document.getElementById('narrative-confirm-btn');
 const yourTurnPopup = document.getElementById('your-turn-popup');
+const attackRollPopup = document.getElementById('attack-roll-popup');
 
 // Event System DOM refs
 const eventOverlay = document.getElementById('event-overlay');
@@ -67,6 +68,7 @@ const eventResultContainer = document.getElementById('event-result-container');
 const eventResultTitle = document.getElementById('event-result-title');
 const eventResultSubtitle = document.getElementById('event-result-subtitle');
 const eventCardSelection = document.getElementById('event-card-selection');
+const eventResultOkayBtn = document.getElementById('event-result-okay-btn');
 
 
 // --- Helper Functions ---
@@ -494,33 +496,49 @@ socket.on('actionError', (message) => {
     logMessage(message, { type: 'system' });
 });
 
+socket.on('attackAnimation', ({ damageDice, damageRoll }) => {
+    attackRollPopup.innerHTML = `${damageDice} &rarr; <strong>${damageRoll}</strong>`;
+    attackRollPopup.classList.remove('hidden');
+    setTimeout(() => {
+        attackRollPopup.classList.add('hidden');
+    }, 2500);
+});
+
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
     setTimeout(() => {
         eventDiceAnimationContainer.classList.add('hidden');
         eventResultContainer.classList.remove('hidden');
         eventCardSelection.innerHTML = '';
+        eventResultOkayBtn.classList.remove('hidden');
+        eventCardSelection.classList.add('hidden');
+
+        eventResultTitle.textContent = `You rolled a ${roll}!`;
 
         if (outcome === 'none') {
-            eventResultTitle.textContent = `You rolled a ${roll}.`;
             eventResultSubtitle.textContent = "The winds of fate are calm... for now.";
-            setTimeout(() => {
-                eventOverlay.classList.add('hidden');
-            }, 2500);
+            eventResultOkayBtn.onclick = () => eventOverlay.classList.add('hidden');
         } else {
             const eventType = outcome === 'playerEvent' ? 'Player Event' : 'Discovery';
-            eventResultTitle.textContent = `You rolled a ${roll}!`;
-            eventResultSubtitle.textContent = `A ${eventType} occurs! Choose a card to reveal your fate.`;
-            cardOptions.forEach(cardInfo => {
-                const cardBack = document.createElement('div');
-                cardBack.className = 'card';
-                cardBack.dataset.cardId = cardInfo.id;
-                cardBack.onclick = () => {
-                    eventResultSubtitle.textContent = "Revealing your choice...";
-                    document.querySelectorAll('#event-card-selection .card').forEach(c => c.onclick = null); // Disable further clicks
-                    socket.emit('selectEventCard', { cardId: cardInfo.id });
-                };
-                eventCardSelection.appendChild(cardBack);
-            });
+            eventResultSubtitle.textContent = `A ${eventType} occurs!`;
+            
+            eventResultOkayBtn.onclick = () => {
+                eventResultTitle.textContent = `Choose a card...`;
+                eventResultSubtitle.textContent = `Select one of the cards to reveal your fate.`;
+                eventResultOkayBtn.classList.add('hidden');
+                eventCardSelection.classList.remove('hidden');
+                
+                cardOptions.forEach(cardInfo => {
+                    const cardBack = document.createElement('div');
+                    cardBack.className = 'card';
+                    cardBack.dataset.cardId = cardInfo.id;
+                    cardBack.onclick = () => {
+                        eventResultSubtitle.textContent = "Revealing your choice...";
+                        document.querySelectorAll('#event-card-selection .card').forEach(c => c.onclick = null); // Disable further clicks
+                        socket.emit('selectEventCard', { cardId: cardInfo.id });
+                    };
+                    eventCardSelection.appendChild(cardBack);
+                });
+            };
         }
     }, 2000); // Wait for dice animation to finish
 });

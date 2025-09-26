@@ -460,33 +460,35 @@ class GameManager {
             if (def?.rollModifier) rollModifier += def.rollModifier;
         });
 
-        const roll = this.rollDice('1d20');
+        const hitRoll = this.rollDice('1d20');
         let message = '';
         
-        if (roll === 1) {
-            message = `${attacker.name} attacks ${target.name}... It's a critical miss!`;
+        if (hitRoll === 1) {
+            message = `${attacker.name} attacks ${target.name} (rolls a 1)... It's a critical miss!`;
             io.to(roomId).emit('chatMessage', { senderName: 'Combat', message, channel: 'game' });
             return;
         }
         
         const requiredRoll = target.stats?.shieldBonus ? (10 + target.stats.shieldBonus) : target.requiredRollToHit;
-        const totalRoll = roll + attackBonus + rollModifier;
+        const totalRoll = hitRoll + attackBonus + rollModifier;
 
-        if (totalRoll >= requiredRoll || roll === 20) {
+        if (totalRoll >= requiredRoll || hitRoll === 20) {
             const effect = weaponOrSpell.effect;
             let damageDice = effect?.dice || '1d4';
-            let damage = this.rollDice(damageDice);
+            let damageRoll = this.rollDice(damageDice);
+            let totalDamage = damageRoll;
 
-            if (roll === 20) { 
-                damage += this.rollDice(damageDice); 
-                message = `${attacker.name} lands a CRITICAL HIT on ${target.name} for <span class="damage-value">${damage}</span> damage!`;
+            io.to(roomId).emit('attackAnimation', { damageDice, damageRoll });
+
+            if (hitRoll === 20) { 
+                const critDamage = this.rollDice(damageDice); 
+                totalDamage += critDamage;
+                message = `${attacker.name} lands a CRITICAL HIT on ${target.name} (rolls a 20)! They roll ${damageRoll}+${critDamage} on ${damageDice} for <span class="damage-value">${totalDamage}</span> damage!`;
             } else {
-                message = `${attacker.name}'s attack hits ${target.name} for <span class="damage-value">${damage}</span> damage.`;
+                message = `${attacker.name}'s attack hits ${target.name} (rolls ${totalRoll} vs DC ${requiredRoll}). They roll a ${damageRoll} on ${damageDice} for <span class="damage-value">${totalDamage}</span> damage.`;
             }
 
-            // FIX: Add server-side log for damage dealt
-            console.log(`[Combat] ${attacker.name} deals ${damage} damage to ${target.name}.`);
-            this.applyDamage(roomId, targetId, damage);
+            this.applyDamage(roomId, targetId, totalDamage);
 
             if (effect?.status) {
                 this.applyStatusEffect(roomId, targetId, effect.status, effect.duration);
@@ -494,7 +496,7 @@ class GameManager {
             }
 
         } else {
-            message = `${attacker.name}'s attack misses ${target.name}.`;
+            message = `${attacker.name}'s attack misses ${target.name} (rolls ${totalRoll} vs DC ${requiredRoll}).`;
         }
         io.to(roomId).emit('chatMessage', { senderName: 'Combat', message, channel: 'game' });
     }
@@ -652,7 +654,7 @@ class GameManager {
             player.healthDice.current--;
             const recovery = this.rollDice('1d6');
             const actualRecovery = this.applyHealing(roomId, playerId, recovery);
-            io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} takes a brief respite, recovering <span class="heal-value">${actualRecovery}</span> HP.`, channel: 'game' });
+            io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} takes a brief respite (rolls a ${recovery}), recovering <span class="heal-value">${actualRecovery}</span> HP.`, channel: 'game' });
         } else {
             io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} has no Health Dice remaining.`, channel: 'game' });
         }
@@ -671,22 +673,22 @@ class GameManager {
         const roll = this.rollDice('1d20');
         let message = `${player.name} attempts a skill challenge (DC ${dc})... `;
         if (roll === 1) {
-            message += `It's a Critical Failure!`;
+            message += `It's a Critical Failure! (Rolled a 1)`;
             io.to(roomId).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
             return { success: false, critical: true, roll: 1 };
         }
         if (roll === 20) {
-            message += `It's a Critical Success!`;
+            message += `It's a Critical Success! (Rolled a 20)`;
             io.to(roomId).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
             return { success: true, critical: true, roll: 20 };
         }
         const total = roll + bonus;
         if (total >= dc) {
-            message += `Success! (Rolled ${total})`;
+            message += `Success! (Rolled ${roll} + ${bonus} = ${total})`;
             io.to(roomId).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
             return { success: true, critical: false, roll: total };
         } else {
-            message += `Failure. (Rolled ${total})`;
+            message += `Failure. (Rolled ${roll} + ${bonus} = ${total})`;
             io.to(roomId).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
             return { success: false, critical: false, roll: total };
         }
@@ -1153,6 +1155,8 @@ io.on('connection', (socket) => {
         player.pendingEventRoll = false;
 
         const roll = gameManager.rollDice('1d20');
+        io.to(room.id).emit('chatMessage', { senderName: 'System', message: `${player.name} rolls a ${roll} for a random event.`, channel: 'game' });
+
         let outcome = 'none';
         let drawnCards = [];
 
@@ -1194,17 +1198,19 @@ io.on('connection', (socket) => {
 
         // Put other cards back at the bottom of the deck
         const deckName = chosenCard.type === 'Player Event' ? 'playerEvent' : 'discovery';
-        room.gameState.decks[deckName].unshift(...otherCards);
+        if (room.gameState.decks[deckName]) {
+            room.gameState.decks[deckName].unshift(...otherCards);
+        }
 
         let message = '';
         if (chosenCard.type === 'Player Event') {
-            message = `${player.name} drew an event card: ${chosenCard.name}! ${chosen-card.description}`;
+            message = `${player.name} drew an event card: ${chosenCard.name}! ${chosenCard.description}`;
             gameManager.resolvePlayerEvent(room.id, player.id, chosenCard);
             // Put the resolved card back in its deck and shuffle
             room.gameState.decks.playerEvent.unshift(chosenCard);
             shuffle(room.gameState.decks.playerEvent);
         } else { // Discovery
-            message = `${player.name} made a discovery! Found: ${chosenCard.name}.`;
+            message = `${player.name} made a discovery! A new item has been found.`;
             player.hand.push(chosenCard);
         }
 
