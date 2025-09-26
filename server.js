@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[j]];
+        [array[i], array[j]] = [array[j], array[i]]; // Corrected shuffle logic
     }
 }
 
@@ -208,7 +208,6 @@ class GameManager {
         const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
 
         // --- CLASS SELECTION VALIDATION ---
-        // All human players must select a class before roles are assigned.
         const playersWithoutClass = humanPlayers.filter(p => !p.class);
         if (playersWithoutClass.length > 0) {
             const names = playersWithoutClass.map(p => p.name).join(', ');
@@ -223,37 +222,27 @@ class GameManager {
 
         // --- ROLE ASSIGNMENT & PARTY SETUP ---
         if (humanPlayers.length === 5) {
-            // Case: 5 human players. One becomes DM.
             console.log(`[GameManager] Room ${room.id} has 5 human players. Assigning one as DM.`);
             shuffle(humanPlayers);
-
             const dmPlayer = humanPlayers[0];
             dmPlayer.role = 'DM';
-            dmPlayer.class = 'DM'; // Assign a class for stat consistency
-
+            dmPlayer.class = 'DM';
             const explorerPlayers = humanPlayers.slice(1);
             explorerPlayers.forEach(p => p.role = 'Explorer');
-            
             console.log(`[GameManager] Room ${room.id} Party created: 1 Human Dungeon Master, 4 Human Explorers.`);
-
         } else {
-            // Case: < 5 human players. NPC DM and fill with NPC Explorers.
             console.log(`[GameManager] Room ${room.id} has ${humanPlayers.length} human players. Creating NPC DM and filling explorer slots.`);
-            
             humanPlayers.forEach(p => p.role = 'Explorer');
-            
             const dmNpcId = 'dm-npc';
             const dmNpc = this.createPlayerObject(dmNpcId, 'Dungeon Master', 'DM', true);
             dmNpc.class = 'DM';
             room.players[dmNpcId] = dmNpc;
-            
             const neededNpcs = 4 - humanPlayers.length;
             if (neededNpcs > 0) {
                 console.log(`[GameManager] Room ${room.id} - Adding ${neededNpcs} NPC explorers.`);
                 const npcNames = ["Garrus", "Tali", "Liara", "Wrex", "Shepard", "Ashley"];
                 shuffle(npcNames);
                 const availableClasses = Object.keys(gameData.classes);
-                
                 for (let i = 0; i < neededNpcs; i++) {
                     const npcId = `npc-${i}-${Date.now()}`;
                     let npcName = npcNames[i % npcNames.length];
@@ -264,20 +253,16 @@ class GameManager {
                     }
                     const npc = this.createPlayerObject(npcId, npcName, 'Explorer', true);
                     shuffle(availableClasses);
-                    npc.class = availableClasses[0];
+                    npc.class = availableClasses.find(c => !Object.values(room.players).some(p => p.class === c)) || availableClasses[0];
                     room.players[npcId] = npc;
                 }
             }
-             console.log(`[GameManager] Room ${room.id} Party created: 1 NPC Dungeon Master, ${humanPlayers.length} Human Explorers, ${neededNpcs} NPC Explorers.`);
+            console.log(`[GameManager] Room ${room.id} Party created: 1 NPC Dungeon Master, ${humanPlayers.length} Human Explorers, ${neededNpcs} NPC Explorers.`);
         }
 
         // --- FINAL SETUP ---
-        // Log final roles for verification
-        Object.values(room.players).forEach(p => {
-            console.log(`[GameManager] Player: ${p.name}, ID: ${p.id}, Role: ${p.role}`);
-        });
+        Object.values(room.players).forEach(p => console.log(`[GameManager] Player: ${p.name}, ID: ${p.id}, Role: ${p.role}`));
 
-        // Assign stats to all players based on role and class
         Object.values(room.players).forEach(player => {
             if (player.role === 'DM') {
                 player.stats = { maxHp: 999, currentHp: 999, damageBonus: 99, shieldBonus: 99, ap: 99 };
@@ -287,48 +272,34 @@ class GameManager {
         });
         console.log(`[GameManager] Room ${room.id} - Assigned stats to all players.`);
 
-        // --- SHUFFLE DECKS ---
         console.log(`[GameManager] Room ${room.id} - Shuffling decks.`);
         room.gameState.decks.monster = [...gameData.monsterCards];
         shuffle(room.gameState.decks.monster);
 
-        // Create turn order: DM first, then all shuffled explorers
         const dmId = Object.values(room.players).find(p => p.role === 'DM').id;
-        const explorerIds = Object.values(room.players)
-            .filter(p => p.role === 'Explorer')
-            .map(p => p.id);
+        const explorerIds = Object.values(room.players).filter(p => p.role === 'Explorer').map(p => p.id);
         shuffle(explorerIds);
         room.gameState.turnOrder = [dmId, ...explorerIds];
-        room.gameState.currentPlayerIndex = -1; // Will be incremented to 0 by startNextTurn
+        room.gameState.currentPlayerIndex = -1;
         console.log(`[GameManager] Room ${room.id} - Turn order established: ${room.gameState.turnOrder.join(', ')}`);
         
         if (gameMode === 'Beginner') {
-            // --- BEGINNER MODE: Grant starting equipment to all explorers ---
-            console.log(`[GameManager] Room ${room.id} - Beginner Mode: Assigning starting equipment.`);
-            const equipableCards = [...gameData.weaponCards, ...gameData.armorCards];
-            shuffle(equipableCards);
-        
+            console.log(`[GameManager] Room ${room.id} - Beginner Mode: Assigning starting WEAPONS.`);
+            const weaponCards = [...gameData.weaponCards];
+            shuffle(weaponCards);
             const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
-        
             explorers.forEach(player => {
-                if (equipableCards.length > 0) {
-                    const cardToEquip = { ...equipableCards.pop(), id: this.generateUniqueCardId() };
-                    const itemType = cardToEquip.type.toLowerCase(); // 'weapon' or 'armor'
-        
-                    // Equip the item directly
-                    player.equipment[itemType] = cardToEquip;
-                    
-                    // Important: Recalculate stats after equipping
+                if (weaponCards.length > 0) {
+                    const cardToEquip = { ...weaponCards.pop(), id: this.generateUniqueCardId() };
+                    player.equipment.weapon = cardToEquip;
                     this.calculatePlayerStats(player.id, room);
-                    
                     this.broadcastToRoom(room.id, 'chatMessage', { 
                         senderName: 'Game Master', 
-                        message: `${player.name} finds some starting gear: a ${cardToEquip.name}!`, 
+                        message: `${player.name} starts their adventure with a ${cardToEquip.name}!`, 
                         channel: 'game' 
                     });
                 }
             });
-
             room.gameState.phase = 'active';
             this.broadcastToRoom(room.id, 'gameStarted', room);
             console.log(`[GameManager] Room ${room.id} - Game started. Beginning first turn.`);
@@ -407,9 +378,7 @@ class GameManager {
         }
 
         currentPlayer.currentAp = currentPlayer.stats.ap;
-
-        // --- HANDLE TURN-START EFFECTS ---
-        // Special logic for NPC DM's automated first turn
+        
         if (isDmTurn && currentPlayer.isNpc && room.gameState.turnCount === 1) {
             console.log(`[GameManager] Room ${roomId} - NPC DM is taking its automated first turn.`);
             this.playMonsterCard(roomId);
@@ -417,18 +386,15 @@ class GameManager {
                 console.log(`[GameManager] Room ${roomId} - Automatically ending NPC DM's first turn.`);
                 this.startNextTurn(roomId);
             }, 3000);
-            return; // Prevent other logic from running until the turn auto-ends
+            return;
         }
         
-        // Handle NPC Explorer turns
         if (currentPlayer.isNpc && currentPlayer.role === 'Explorer') {
             console.log(`[GameManager] Room ${roomId} - NPC Explorer ${currentPlayer.name}'s turn.`);
-            // Use setTimeout to give a brief pause before the NPC acts.
             setTimeout(() => this.executeNpcExplorerTurn(roomId, currentPlayer.id), 2000);
-            return; // Stop further execution for this turn, as NPC logic will handle the next step.
+            return;
         }
         
-        // Random event check every 3 explorer turns, triggered on subsequent DM turns
         if (isDmTurn && room.gameState.turnCount > 1 && (room.gameState.turnCount -1) % 3 === 0) {
              Object.values(room.players).forEach(p => {
                  if (p.role === 'Explorer' && !p.isNpc) {
@@ -449,7 +415,7 @@ class GameManager {
         const hasWeapon = npc.equipment.weapon;
     
         // --- PRIORITY 1: ATTACK ---
-        if (hasWeapon && monstersExist) {
+        if (monstersExist && hasWeapon) {
             const target = room.gameState.board.monsters[0]; // Simple AI: attack the first monster
             const narrative = this.getRandomDialogue('explorer', 'attack');
             this.broadcastToRoom(roomId, 'chatMessage', { senderName: npc.name, message: narrative, channel: 'game', isNarrative: true });
@@ -458,26 +424,24 @@ class GameManager {
                 this.resolveAttack(roomId, npc, target, hasWeapon);
                 setTimeout(() => this.startNextTurn(roomId), 4000); // Wait for animations/messages
             }, 1500);
-            return; // Action taken, end function
+            return;
         }
         
         // --- PRIORITY 2: HEAL ---
+        const healingCardIndex = npc.hand.findIndex(card => card.effect && card.effect.type === 'heal');
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
         const woundedAllies = explorers.filter(p => p.stats.currentHp < (p.stats.maxHp / 2));
-        
-        if (woundedAllies.length > 0) {
-            // Find a healing card in the NPC's hand
-            const healingCardIndex = npc.hand.findIndex(card => card.effect && card.effect.type === 'heal');
+
+        if (healingCardIndex !== -1 && (!monstersExist || woundedAllies.length > 0)) {
+            const healingCard = npc.hand[healingCardIndex];
+            const alliesToHeal = !monstersExist ? explorers.filter(p => p.stats.currentHp < p.stats.maxHp) : woundedAllies;
             
-            if (healingCardIndex !== -1) {
-                const healingCard = npc.hand[healingCardIndex];
-                // Find the most wounded ally
-                woundedAllies.sort((a, b) => (a.stats.currentHp / a.stats.maxHp) - (b.stats.currentHp / b.stats.maxHp));
-                const target = woundedAllies[0];
-                
+            if (alliesToHeal.length > 0) {
+                alliesToHeal.sort((a, b) => (a.stats.currentHp / a.stats.maxHp) - (b.stats.currentHp / b.stats.maxHp));
+                const target = alliesToHeal[0];
                 const healthGained = this.rollDice(healingCard.effect.dice);
                 target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healthGained);
-                npc.hand.splice(healingCardIndex, 1); // Remove card from hand
+                npc.hand.splice(healingCardIndex, 1);
                 
                 const narrative = this.getRandomDialogue('explorer', 'heal');
                 this.broadcastToRoom(roomId, 'chatMessage', { senderName: npc.name, message: narrative, channel: 'game', isNarrative: true });
@@ -485,7 +449,7 @@ class GameManager {
                 
                 this.broadcastToRoom(roomId, 'gameStateUpdate', room);
                 setTimeout(() => this.startNextTurn(roomId), 2000);
-                return; // Action taken, end function
+                return;
             }
         }
     
@@ -502,12 +466,10 @@ class GameManager {
     endTurn(socketId) {
         const room = this.getRoomBySocketId(socketId);
         if (!room) return;
-
-        // Simplified: always use the main turn order. Combat turn order is not in use.
+        
         const currentTurnTakerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
         const currentTurnTaker = room.players[currentTurnTakerId];
 
-        // Allow the host to end the NPC DM's turn if it gets stuck
         if (currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc && socketId === room.hostId) {
             this.startNextTurn(room.id);
             return;
@@ -523,8 +485,9 @@ class GameManager {
     
     resolveAttack(roomId, attacker, target, weapon) {
         const room = this.rooms[roomId];
-        const attackRoll = this.rollDice('1d20') + attacker.stats.damageBonus;
+        if (!room || !attacker || !target || !weapon) return;
         
+        const attackRoll = this.rollDice('1d20') + attacker.stats.damageBonus;
         const damageDice = weapon.effect.dice;
         const damageRoll = this.rollDice(damageDice) + attacker.stats.damageBonus;
         
@@ -535,7 +498,6 @@ class GameManager {
             message = `${attacker.name} rolls a ${attackRoll} to hit... Success! They roll a ${damageRoll} on their ${damageDice}, dealing ${damageRoll} damage to ${target.name}.`;
             if (target.currentHp <= 0) {
                 message += ` ${target.name} has been defeated!`;
-                // Handle monster death, remove from board etc.
                 room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== target.id);
             }
         } else {
@@ -543,7 +505,6 @@ class GameManager {
         }
         
         this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
-        // Send data for animation to ALL clients
         this.broadcastToRoom(roomId, 'attackAnimation', { attackerName: attacker.name, damageDice, damageRoll });
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
     }
@@ -564,7 +525,6 @@ class GameManager {
         if (outcome !== 'none') {
             player.pendingEventChoice = true;
             let deck;
-
             if (outcome === 'discovery') {
                 const allDiscoveryCards = [...room.gameState.decks.discovery];
                 const classSpecificDeck = allDiscoveryCards.filter(card => {
@@ -572,12 +532,10 @@ class GameManager {
                     if (Array.isArray(card.class)) return card.class.includes(player.class);
                     return card.class === player.class;
                 });
-                // Use specific deck if it has enough cards, otherwise fallback to the full deck
                 deck = classSpecificDeck.length >= 3 ? classSpecificDeck : allDiscoveryCards;
-            } else { // playerEvent
+            } else {
                 deck = [...room.gameState.decks.playerEvent];
             }
-            
             shuffle(deck);
             const cardOptions = deck.slice(0, 3).map(c => ({...c, id: this.generateUniqueCardId() }));
             io.to(socketId).emit('eventRollResult', { roll, outcome, cardOptions });
@@ -595,7 +553,7 @@ class GameManager {
         player.pendingEventChoice = false;
 
         const allEventCards = [...gameData.playerEventCards, ...gameData.discoveryCards];
-        const chosenCardTemplate = allEventCards.find(c => c.id === chosenCardId.split('-')[0] || c.name === allEventCards.find(c2 => c2.id === chosenCardId)?.name); // A bit fuzzy matching
+        const chosenCardTemplate = allEventCards.find(c => c.id === chosenCardId.split('-')[0] || c.name === allEventCards.find(c2 => c2.id === chosenCardId)?.name);
         const chosenCard = { ...chosenCardTemplate, id: chosenCardId };
 
         if (!chosenCard) return;
@@ -603,17 +561,15 @@ class GameManager {
         io.to(socketId).emit('eventCardReveal', { chosenCard });
 
         if (chosenCard.type === 'Player Event') {
-            // Resolve event immediately
             this.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message: `${player.name} triggered a Player Event: ${chosenCard.name}! ${chosenCard.description}`, channel: 'game' });
-            // Apply effect (simplified)
             if (chosenCard.effect.type === 'heal') player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + this.rollDice(chosenCard.effect.dice));
             if (chosenCard.effect.type === 'damage') player.stats.currentHp -= this.rollDice(chosenCard.effect.dice);
-        } else { // Discovery
+        } else {
             player.hand.push(chosenCard);
             this.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message: `${player.name} made a discovery! A new item has been found!`, channel: 'game' });
         }
 
-        setTimeout(() => this.broadcastToRoom(room.id, 'gameStateUpdate', room), 4000); // Wait for client to see card
+        setTimeout(() => this.broadcastToRoom(room.id, 'gameStateUpdate', room), 4000);
     }
 
     handlePlayerAbility(socketId, action) {
@@ -622,11 +578,11 @@ class GameManager {
         const player = room.players[socketId];
         const currentTurnTakerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
         
-        if (!player || player.id !== currentTurnTakerId) return; // Not their turn
+        if (!player || player.id !== currentTurnTakerId) return;
 
-        const actionCost = gameData.actionCosts[action] || 1; // Default cost to 1 if not specified
+        const actionCost = gameData.actionCosts[action] || 1;
         if (player.currentAp < actionCost) {
-            if (!player.isNpc) { // Don't send errors to NPCs
+            if (!player.isNpc) {
                 io.to(socketId).emit('actionError', "Not enough AP to perform this action.");
             }
             return;
@@ -644,7 +600,7 @@ class GameManager {
                     message = `${player.name} takes a brief respite, using one health die to recover ${healthGained} HP.`;
                 } else {
                     message = `${player.name} tries to rest, but has no health dice remaining.`;
-                    player.currentAp += actionCost; // Refund AP
+                    player.currentAp += actionCost;
                 }
                 break;
             }
@@ -656,16 +612,16 @@ class GameManager {
                     message = `${player.name} takes a full rest, using two health dice to recover ${healthGained} HP.`;
                 } else {
                     message = `${player.name} tries to take a full rest, but doesn't have enough health dice.`;
-                    player.currentAp += actionCost; // Refund AP
+                    player.currentAp += actionCost;
                 }
                 break;
             }
             case 'guard': {
                 const existingGuard = player.statusEffects.find(e => e.name === 'Guarded');
                 if (existingGuard) {
-                    existingGuard.duration = 2; // Refresh duration
+                    existingGuard.duration = 2;
                 } else {
-                    player.statusEffects.push({ name: 'Guarded', duration: 2 }); // Lasts until start of their next turn
+                    player.statusEffects.push({ name: 'Guarded', duration: 2 });
                 }
                 message = `${player.name} takes a defensive stance, guarding against incoming attacks.`;
                 break;
@@ -711,7 +667,7 @@ io.on('connection', (socket) => {
     
     socket.on('startGame', ({ gameMode }) => {
         const room = gameManager.getRoomBySocketId(socket.id);
-        if (room && socket.id === room.hostId) { // Check if the starter is the host
+        if (room && socket.id === room.hostId) {
             gameManager.startGame(socket.id, gameMode);
         }
     });
@@ -774,14 +730,12 @@ io.on('connection', (socket) => {
         if (cardIndex === -1) return;
         
         const cardToEquip = player.hand[cardIndex];
-        const itemType = cardToEquip.type.toLowerCase(); // 'weapon' or 'armor'
+        const itemType = cardToEquip.type.toLowerCase();
         
-        // Unequip current item if one exists and move it to hand
         if (player.equipment[itemType]) {
             player.hand.push(player.equipment[itemType]);
         }
         
-        // Equip new item
         player.equipment[itemType] = cardToEquip;
         player.hand.splice(cardIndex, 1);
         
@@ -818,15 +772,15 @@ io.on('connection', (socket) => {
             const playerName = room.players[socket.id]?.name || 'A player';
             delete room.players[socket.id];
             
-            // Voice chat cleanup
             room.voiceChatPeers = room.voiceChatPeers.filter(id => id !== socket.id);
             socket.to(room.id).emit('voice-peer-disconnect', { peerId: socket.id });
 
-            if (Object.keys(room.players).filter(id => !room.players[id].isNpc).length === 0) {
+            if (Object.values(room.players).filter(p => !p.isNpc).length === 0) {
                 delete gameManager.rooms[room.id];
                 console.log(`[GameManager] Room ${room.id} closed as all human players left.`);
             } else {
-                 io.to(room.id).emit('playerLeft', { room: { playerName, remainingPlayers: room.players } });
+                 io.to(room.id).emit('playerListUpdate', room);
+                 io.to(room.id).emit('chatMessage', { senderName: 'System', message: `${playerName} has left the game.`, channel: 'game'});
             }
         }
     });
