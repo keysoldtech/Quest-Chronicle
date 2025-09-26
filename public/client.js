@@ -9,6 +9,7 @@ let currentRoomState = {};
 let localStream;
 const peerConnections = {};
 let selectedTargetId = null; // For combat targeting
+let selectedWeaponId = null; // For selecting a weapon to attack with
 let pendingActionData = null; // For narrative modal
 let isMyTurnPreviously = false; // For "Your Turn" popup
 let tempSelectedClassId = null; // For temporary class selection in lobby
@@ -71,8 +72,13 @@ const narrativeInput = document.getElementById('narrative-input');
 const narrativeCancelBtn = document.getElementById('narrative-cancel-btn');
 const narrativeConfirmBtn = document.getElementById('narrative-confirm-btn');
 const yourTurnPopup = document.getElementById('your-turn-popup');
-const attackRollPopup = document.getElementById('attack-roll-popup');
 const confirmAttackBtn = document.getElementById('confirm-attack-btn');
+
+// Dice Roll Overlay DOM refs
+const diceRollOverlay = document.getElementById('dice-roll-overlay');
+const diceRollTitle = document.getElementById('dice-roll-title');
+const attackDice = document.getElementById('attack-dice');
+const diceRollResult = document.getElementById('dice-roll-result');
 
 // Event System DOM refs
 const eventOverlay = document.getElementById('event-overlay');
@@ -256,8 +262,12 @@ function renderGameState(room) {
     endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isHost && isNpcDmTurn)));
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     playerActionsContainer.classList.toggle('hidden', !isMyTurn);
-    confirmAttackBtn.classList.toggle('hidden', !(isMyTurn && myPlayerInfo.equipment.weapon && selectedTargetId));
     
+    // Confirm Attack Button Logic
+    const weapon = myPlayerInfo.equipment.weapon;
+    const hasEnoughAp = weapon && myPlayerInfo.currentAp >= (weapon.apCost || 1);
+    confirmAttackBtn.classList.toggle('hidden', !(isMyTurn && selectedTargetId && selectedWeaponId && hasEnoughAp));
+
     // Game mode selector should only be visible to the host in the lobby
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
 
@@ -265,6 +275,8 @@ function renderGameState(room) {
     // "Your Turn" popup
     if (isMyTurn && !isMyTurnPreviously) {
         pendingAbilityConfirmation = null; // Reset pending confirmations on turn start
+        selectedWeaponId = null; // Reset weapon selection on turn start
+        selectedTargetId = null; // Reset target on turn start
         yourTurnPopup.classList.remove('hidden');
         setTimeout(() => yourTurnPopup.classList.add('hidden'), 1500);
     }
@@ -378,6 +390,16 @@ function renderGameState(room) {
         const item = myPlayerInfo.equipment[type];
         if (item) {
             const cardEl = createCardElement(item, {}); // No direct actions on equipped cards
+            if (type === 'weapon' && isMyTurn) {
+                cardEl.classList.add('attackable-weapon');
+                if (item.id === selectedWeaponId) {
+                    cardEl.classList.add('selected-weapon');
+                }
+                cardEl.onclick = () => {
+                    selectedWeaponId = (selectedWeaponId === item.id) ? null : item.id;
+                    renderGameState(currentRoomState); // Re-render to show selection change
+                };
+            }
             equippedItemsDiv.appendChild(cardEl);
         }
     });
@@ -516,15 +538,18 @@ confirmAttackBtn.addEventListener('click', () => {
         const currentTurnTakerId = currentRoomState.gameState.turnOrder[currentRoomState.gameState.currentPlayerIndex];
         const isPlayerTurn = currentTurnTakerId === myId;
         
-        if (isPlayerTurn && player.equipment.weapon && selectedTargetId) {
-            openNarrativeModal(
-                {
-                    action: 'attack',
-                    cardId: player.equipment.weapon.id,
-                    targetId: selectedTargetId
-                },
-                player.equipment.weapon.name
-            );
+        if (isPlayerTurn && selectedWeaponId && selectedTargetId) {
+            const weapon = player.equipment.weapon;
+            if (weapon && weapon.id === selectedWeaponId) {
+                openNarrativeModal(
+                    {
+                        action: 'attack',
+                        cardId: selectedWeaponId,
+                        targetId: selectedTargetId
+                    },
+                    weapon.name
+                );
+            }
         }
     }
 });
@@ -546,6 +571,7 @@ narrativeConfirmBtn.addEventListener('click', () => {
         
         if (pendingActionData.action === 'attack') {
             selectedTargetId = null;
+            selectedWeaponId = null;
         }
         pendingAbilityConfirmation = null;
 
@@ -615,19 +641,42 @@ socket.on('actionError', (errorMessage) => {
     alert(errorMessage);
 });
 
-socket.on('attackAnimation', ({ attackerName, damageDice, rawDamageRoll, damageBonus, totalDamage }) => {
-    attackRollPopup.textContent = `Rolling ${damageDice}...`;
-    attackRollPopup.classList.remove('hidden');
+socket.on('attackAnimation', (data) => {
+    diceRollTitle.textContent = `${data.attackerName} attacks!`;
+    diceRollResult.innerHTML = '';
+    diceRollResult.classList.add('hidden');
+    diceRollOverlay.classList.remove('hidden');
 
-    // After a delay, show the result
-    setTimeout(() => {
-        attackRollPopup.textContent = `${attackerName} rolled ${rawDamageRoll} + ${damageBonus} Bonus = ${totalDamage} Damage!`;
-    }, 1200);
+    // Force animation restart
+    attackDice.classList.remove('is-rolling');
+    void attackDice.offsetWidth; 
+    attackDice.classList.add('is-rolling');
 
-    // Hide popup after animation is done
     setTimeout(() => {
-        attackRollPopup.classList.add('hidden');
-    }, 2400);
+        attackDice.classList.remove('is-rolling');
+        let resultHTML = '';
+        if (data.hit) {
+            resultHTML = `
+                <div class="result-line hit">Rolled ${data.totalRollToHit} to hit vs ${data.requiredRoll}... HIT!</div>
+                <div class="damage-breakdown">
+                    Rolled ${data.rawDamageRoll} on ${data.damageDice} + ${data.damageBonus} Bonus<br>
+                    for a total of ${data.totalDamage} damage!
+                </div>
+            `;
+        } else {
+            resultHTML = `
+                <div class="result-line miss">Rolled ${data.totalRollToHit} to hit vs ${data.requiredRoll}... MISS!</div>
+            `;
+        }
+        diceRollResult.innerHTML = resultHTML;
+        diceRollResult.classList.remove('hidden');
+
+        // Hide overlay after showing result
+        setTimeout(() => {
+            diceRollOverlay.classList.add('hidden');
+        }, 3000); // Show result for 3 seconds
+
+    }, 1500); // Wait for dice animation to finish
 });
 
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {

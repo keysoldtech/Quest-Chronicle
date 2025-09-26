@@ -552,13 +552,16 @@ body.fantasy-bg {
     box-shadow: 0 0 20px var(--color-special-hover);
 }
 .card.attackable-weapon {
-    border-color: var(--color-danger);
-    cursor: crosshair;
-    box-shadow: 0 0 15px var(--color-danger);
+    cursor: pointer;
 }
 .card.attackable-weapon:hover {
     transform: translateY(-5px);
-    box-shadow: 0 0 20px var(--color-danger-hover);
+    box-shadow: 0 0 15px var(--color-success-hover);
+}
+.card.selected-weapon {
+    border-color: var(--color-success);
+    box-shadow: 0 0 20px var(--color-success);
+    transform: translateY(-5px);
 }
 .card-title {
     font-family: var(--font-title);
@@ -674,29 +677,46 @@ body.fantasy-bg {
     animation: fadeInOut 1.5s ease-in-out forwards;
 }
 
-.attack-roll-popup {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: rgba(0,0,0,0.8);
-    color: var(--color-parchment);
-    font-family: var(--font-title);
-    font-size: 3rem;
-    padding: 1rem 2rem;
-    border-radius: 10px;
-    border: 3px solid var(--color-special);
-    z-index: 2000;
-    pointer-events: none;
-    animation: fadeInOut 2.5s ease-in-out forwards;
-}
-
 @keyframes fadeInOut {
     0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
     20% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
     80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
     100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2); }
 }
+
+/* New Dice Roll Overlay */
+.dice-roll-content {
+    background-color: var(--color-parchment);
+    padding: 2rem;
+    border: 10px solid var(--color-border);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+}
+.dice-roll-result-container {
+    color: var(--color-text-dark);
+    font-size: 1.2rem;
+    line-height: 1.6;
+    margin-top: 1rem;
+}
+.dice-roll-result-container .result-line {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+.dice-roll-result-container .result-line.hit {
+    color: var(--color-success);
+}
+.dice-roll-result-container .result-line.miss {
+    color: var(--color-danger);
+}
+.dice-roll-result-container .damage-breakdown {
+    margin-top: 1rem;
+    font-size: 1.2rem;
+    font-family: var(--font-body);
+    font-weight: bold;
+}
+
 
 /* Event Overlay */
 .event-overlay {
@@ -897,12 +917,12 @@ body.fantasy-bg {
     }
 
     /* Modal */
-    .modal-content, .event-step-container {
+    .modal-content, .event-step-container, .dice-roll-content {
         width: 95%;
         padding: 1rem;
     }
 
-    .your-turn-popup, .attack-roll-popup {
+    .your-turn-popup {
         font-size: 2.5rem;
         padding: 0.5rem 1.5rem;
     }

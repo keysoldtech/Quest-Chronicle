@@ -14,7 +14,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.39</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.40</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -160,8 +160,25 @@
     <!-- "Your Turn" Popup -->
     <div id="your-turn-popup" class="your-turn-popup hidden">YOUR TURN</div>
 
-    <!-- Attack Roll Animation Popup -->
-    <div id="attack-roll-popup" class="attack-roll-popup hidden"></div>
+    <!-- Dice Roll Overlay -->
+    <div id="dice-roll-overlay" class="modal-overlay hidden">
+        <div class="dice-roll-content">
+            <h2 id="dice-roll-title" class="header-font">Attacking...</h2>
+            <div class="dice-scene">
+                <div id="attack-dice" class="dice">
+                    <div class="face front"></div>
+                    <div class="face back"></div>
+                    <div class="face right"></div>
+                    <div class="face left"></div>
+                    <div class="face top"></div>
+                    <div class="face bottom"></div>
+                </div>
+            </div>
+            <div id="dice-roll-result" class="dice-roll-result-container hidden">
+                <!-- Results will be populated here by JS -->
+            </div>
+        </div>
+    </div>
 
     <!-- Event Overlay -->
     <div id="event-overlay" class="event-overlay hidden">

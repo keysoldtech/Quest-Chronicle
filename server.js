@@ -527,28 +527,52 @@ class GameManager {
     resolveAttack(roomId, attacker, target, weapon) {
         const room = this.rooms[roomId];
         if (!room || !attacker || !target || !weapon) return;
-        
+    
+        const apCost = weapon.apCost || 1;
+        if (attacker.currentAp < apCost) {
+            io.to(attacker.id).emit('actionError', "Not enough Action Points to attack!");
+            return;
+        }
+        attacker.currentAp -= apCost;
+    
         const hitRoll = this.rollDice('1d20');
         const attackRoll = hitRoll + attacker.stats.damageBonus;
         
-        const damageDice = weapon.effect.dice;
-        const rawDamageRoll = this.rollDice(damageDice);
-        const damageBonus = attacker.stats.damageBonus;
-        const totalDamage = rawDamageRoll + damageBonus;
-        
         let message = '';
-        
-        if (attackRoll >= target.requiredRollToHit) {
+        const requiredRoll = target.requiredRollToHit;
+    
+        if (attackRoll >= requiredRoll) {
+            const damageDice = weapon.effect.dice;
+            const rawDamageRoll = this.rollDice(damageDice);
+            const damageBonus = attacker.stats.damageBonus;
+            const totalDamage = rawDamageRoll + damageBonus;
+            
             target.currentHp -= totalDamage;
             message = `${attacker.name} rolls a ${rawDamageRoll} on their ${damageDice} + ${damageBonus} Bonus for a total of ${totalDamage} damage to ${target.name}!`;
+            
+            this.broadcastToRoom(roomId, 'attackAnimation', { 
+                hit: true,
+                attackerName: attacker.name, 
+                totalRollToHit: attackRoll,
+                requiredRoll,
+                damageDice, 
+                rawDamageRoll, 
+                damageBonus, 
+                totalDamage 
+            });
             
             if (target.currentHp <= 0) {
                 message += ` ${target.name} has been defeated!`;
                 room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== target.id);
             }
-            this.broadcastToRoom(roomId, 'attackAnimation', { attackerName: attacker.name, damageDice, rawDamageRoll, damageBonus, totalDamage });
         } else {
             message = `${attacker.name} rolls a ${attackRoll} to hit... Miss!`;
+            this.broadcastToRoom(roomId, 'attackAnimation', {
+                hit: false,
+                attackerName: attacker.name,
+                totalRollToHit: attackRoll,
+                requiredRoll
+            });
         }
         
         this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
@@ -740,12 +764,15 @@ io.on('connection', (socket) => {
         if (!room || !player) return;
 
         if (data.action === 'attack') {
-             const target = room.gameState.board.monsters.find(m => m.id === data.targetId);
-             const weapon = player.equipment.weapon;
-             if(target && weapon) {
-                 gameManager.resolveAttack(room.id, player, target, weapon);
-                 io.to(room.id).emit('chatMessage', { senderName: player.name, message: data.narrative, channel: 'game', isNarrative: true });
-             }
+            const target = room.gameState.board.monsters.find(m => m.id === data.targetId);
+            // Validate that the cardId sent is the equipped weapon
+            if (target && player.equipment.weapon && player.equipment.weapon.id === data.cardId) {
+                const weapon = player.equipment.weapon;
+                gameManager.resolveAttack(room.id, player, target, weapon);
+                io.to(room.id).emit('chatMessage', { senderName: player.name, message: data.narrative, channel: 'game', isNarrative: true });
+            } else {
+                console.log(`[GameManager] Invalid attack by ${player.name}: Weapon/Target mismatch.`);
+            }
         } else if (['briefRespite', 'fullRest', 'guard'].includes(data.action)) {
             gameManager.handlePlayerAbility(socket.id, data.action);
         }
