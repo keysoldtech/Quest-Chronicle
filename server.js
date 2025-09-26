@@ -165,9 +165,9 @@ class GameManager {
                 
                 // Auto-equip
                 const weapon = npc.hand.find(c => c.type === 'Weapon');
-                if (weapon) this.equipItem({ id: npc.id }, { cardId: weapon.id }, true);
+                if (weapon) this._internalEquipItem(room, npc, weapon.id);
                 const armor = npc.hand.find(c => c.type === 'Armor');
-                if (armor) this.equipItem({ id: npc.id }, { cardId: armor.id }, true);
+                if (armor) this._internalEquipItem(room, npc, armor.id);
                 
                 room.players[npc.id] = npc;
                 explorerNpcs.push(npc);
@@ -232,9 +232,9 @@ class GameManager {
             
             // Auto-equip first weapon/armor
             const weapon = player.hand.find(c => c.type === 'Weapon');
-            if (weapon) this.equipItem(socket, { cardId: weapon.id }, true);
+            if (weapon) this._internalEquipItem(room, player, weapon.id);
             const armor = player.hand.find(c => c.type === 'Armor');
-            if (armor) this.equipItem(socket, { cardId: armor.id }, true);
+            if (armor) this._internalEquipItem(room, player, armor.id);
             
         } else { // Advanced Mode
             player.madeAdvancedChoice = false;
@@ -289,20 +289,15 @@ class GameManager {
         }
     }
 
-    equipItem(socket, { cardId }, isAutoEquip = false) {
-        const room = this.findRoomBySocket(socket);
-        const player = room?.players[socket.id];
-        if (!player) return;
-
+    _internalEquipItem(room, player, cardId) {
+        if (!player) return false;
+    
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
-        if (cardIndex === -1) {
-            if (!isAutoEquip) socket.emit('actionError', 'Card not in hand.');
-            return;
-        }
+        if (cardIndex === -1) return false;
         
         const cardToEquip = player.hand[cardIndex];
         const itemType = cardToEquip.type.toLowerCase(); // 'weapon' or 'armor'
-
+    
         if (player.equipment[itemType]) {
             player.hand.push(player.equipment[itemType]); // Move old item to hand
         }
@@ -311,6 +306,20 @@ class GameManager {
         player.hand.splice(cardIndex, 1);
         
         player.stats = this.calculatePlayerStats(player);
+        return true;
+    }
+
+    equipItem(socket, { cardId }, isAutoEquip = false) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+    
+        const success = this._internalEquipItem(room, player, cardId);
+        
+        if (!success && !isAutoEquip) {
+            socket.emit('actionError', 'Card not in hand.');
+            return;
+        }
+        
         this.emitGameState(room.id);
     }
     

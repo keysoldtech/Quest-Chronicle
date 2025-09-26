@@ -15,7 +15,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.78</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.79</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -54,7 +54,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v3.78</p>
+                     <p class="build-number-font">v3.79</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -151,14 +151,14 @@
                  <div class="mobile-header-controls">
                     <button id="mobile-chat-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">chat</span></button>
                     <div id="mobile-header-action-buttons">
-                        <button id="mobile-leave-game-btn" class="btn btn-sm btn-icon btn-danger"><span class="material-symbols-outlined">logout</span></button>
+                        <button id="mobile-leave-game-btn" class="btn btn-sm btn-icon btn-danger hidden"><span class="material-symbols-outlined">logout</span></button>
                         <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
                     </div>
                 </div>
             </header>
             
             <main class="mobile-main">
-                <!-- Mobile Screens -->
+                <!-- Mobile Screen 1: Game (Board, Hand, Actions) -->
                 <div id="mobile-screen-game" class="mobile-screen active">
                     <div class="panel mobile-panel">
                         <h2 class="panel-header">Game Board</h2>
@@ -176,6 +176,7 @@
                     </div>
                 </div>
 
+                <!-- Mobile Screen 2: Character (Stats, Equipment, Class Selection) -->
                 <div id="mobile-screen-character" class="mobile-screen">
                     <div id="mobile-class-selection" class="panel-content panel">
                         <h2 class="panel-header">Choose Your Class</h2>
@@ -194,6 +195,7 @@
                     </div>
                 </div>
 
+                <!-- Mobile Screen 3: Party (Player List) -->
                 <div id="mobile-screen-party" class="mobile-screen">
                      <div class="panel mobile-panel">
                         <h2 class="panel-header">Players</h2>
@@ -201,6 +203,7 @@
                     </div>
                 </div>
                 
+                <!-- Mobile Screen 4: Info (World Events, Discoveries) -->
                  <div id="mobile-screen-info" class="mobile-screen">
                      <div class="panel mobile-panel">
                          <h2 class="panel-header">World Events</h2>

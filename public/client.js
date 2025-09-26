@@ -345,9 +345,24 @@ function renderGameState(room) {
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
     
     // Mobile specific
-    mobileClassSelection.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || isDM);
-    mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || isDM);
-    mobilePlayerEquipment.classList.toggle('hidden', !hasConfirmedClass || isDM);
+    const inMobileClassSelection = gameState.phase === 'class_selection' && !hasConfirmedClass && !isDM;
+    if (inMobileClassSelection) {
+        // If we are in class selection, force the character screen to be active
+        if (!get('mobile-screen-character').classList.contains('active')) {
+             document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+             get('mobile-screen-character').classList.add('active');
+             mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+             document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
+        }
+        mobileClassSelection.classList.remove('hidden');
+        mobilePlayerStats.classList.add('hidden');
+        mobilePlayerEquipment.classList.add('hidden');
+    } else {
+        mobileClassSelection.classList.add('hidden');
+        mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || isDM);
+        mobilePlayerEquipment.classList.toggle('hidden', !hasConfirmedClass || isDM);
+    }
+
 
     // --- Action Bar ---
     fixedActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer));
