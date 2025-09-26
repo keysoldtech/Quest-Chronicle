@@ -15,7 +15,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.71</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.72</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -54,7 +54,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v3.71</p>
+                     <p class="build-number-font">v3.72</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -62,8 +62,10 @@
                     </div>
                     <button id="chat-toggle-btn" class="btn btn-sm btn-secondary">Chat & Log</button>
                     <button id="join-voice-btn" class="btn btn-sm btn-success">Join Voice</button>
-                    <button id="leave-game-btn" class="btn btn-sm btn-danger hidden">Leave Game</button>
-                    <button id="startGameBtn" class="btn btn-primary hidden">Start Game</button>
+                    <div id="header-action-buttons">
+                        <button id="leave-game-btn" class="btn btn-sm btn-danger hidden">Leave Game</button>
+                        <button id="startGameBtn" class="btn btn-primary hidden">Start Game</button>
+                    </div>
                     <div class="room-code-display">
                         <p>Room Code:</p>
                         <p id="room-code">----</p>
@@ -148,8 +150,10 @@
                 </div>
                  <div class="mobile-header-controls">
                     <button id="mobile-chat-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">chat</span></button>
-                    <button id="mobile-leave-game-btn" class="btn btn-sm btn-icon btn-danger"><span class="material-symbols-outlined">logout</span></button>
-                    <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
+                    <div id="mobile-header-action-buttons">
+                        <button id="mobile-leave-game-btn" class="btn btn-sm btn-icon btn-danger"><span class="material-symbols-outlined">logout</span></button>
+                        <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
+                    </div>
                 </div>
             </header>
             

@@ -146,6 +146,12 @@ body {
     overflow: hidden;
 }
 .header-info, .header-controls { display: flex; align-items: center; gap: 1.5rem; }
+#header-action-buttons,
+#mobile-header-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
 .room-code-display p:last-child { font-family: var(--font-body); font-weight: 700; font-size: 1.5rem; background-color: var(--color-bg-dark); padding: 0.25rem 0.75rem; border-radius: 5px; letter-spacing: 2px; }
 .player-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; overflow-y: auto; }
 .panel-content { display: flex; flex-direction: column; overflow: hidden; flex: 1; }
