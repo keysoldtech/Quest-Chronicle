@@ -592,10 +592,11 @@ const worldEventCards = [
     },
     { 
         id: nextId(), name: "Corrosive Rain", type: "World Event", tags: "Hazard, Environmental",
-        description: "A strange, acidic rain begins to fall, eating away at armor.",
+        description: "A strange, acidic rain begins to fall, eating away at armor. All explorers must make a DC 12 Dexterity save to find cover or suffer the effects.",
+        saveInfo: { dc: 12, save: 'dex' },
         effect: { 
             type: 'stat_modifier', target: 'all_explorers', stat: 'shieldBonus', value: -1, duration: 2,
-            applyMessage: "Corrosive Rain falls! All explorers suffer -1 Shield Bonus.",
+            applyMessage: "Corrosive Rain falls! Explorers caught in the open suffer -1 Shield Bonus.",
             removeMessage: "The Corrosive Rain stops."
         }
     },

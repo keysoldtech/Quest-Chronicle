@@ -126,10 +126,10 @@ class GameManager {
     
         room.gameState.gameMode = gameMode;
         
-        const players = Object.values(room.players);
+        const players = Object.values(room.players).filter(p => !p.isNpc);
 
         if (players.length === 1) {
-            // Single Player: The player is an Explorer, create an NPC DM.
+            // Single Player: The player is an Explorer, create an NPC DM and 3 NPC Explorers.
             const player = players[0];
             player.role = 'Explorer';
 
@@ -138,7 +138,44 @@ class GameManager {
             dmNpc.isNpc = true;
             room.players[dmNpc.id] = dmNpc;
             
-            room.gameState.turnOrder = [dmNpc.id, player.id];
+            const npcNames = ["Grok", "Lyra", "Finn"];
+            const classKeys = Object.keys(gameData.classes);
+            const explorerNpcs = [];
+
+            for (const name of npcNames) {
+                const npcId = `npc-${name.toLowerCase()}`;
+                const npc = this.createPlayerObject(npcId, name);
+                npc.isNpc = true;
+                npc.role = 'Explorer';
+                
+                // Assign random class
+                const randomClassId = classKeys[Math.floor(Math.random() * classKeys.length)];
+                npc.class = randomClassId;
+                const classStats = gameData.classes[randomClassId];
+                npc.stats = this.calculatePlayerStats(npc);
+                npc.stats.currentHp = npc.stats.maxHp;
+                npc.healthDice.max = classStats.healthDice;
+                npc.healthDice.current = classStats.healthDice;
+
+                // Deal starting equipment
+                this.dealCard(room.id, npc.id, 'weapon', 1);
+                this.dealCard(room.id, npc.id, 'armor', 1);
+                this.dealCard(room.id, npc.id, 'item', 2);
+                this.dealCard(room.id, npc.id, 'spell', 2);
+                
+                // Auto-equip
+                const weapon = npc.hand.find(c => c.type === 'Weapon');
+                if (weapon) this.equipItem({ id: npc.id }, { cardId: weapon.id }, true);
+                const armor = npc.hand.find(c => c.type === 'Armor');
+                if (armor) this.equipItem({ id: npc.id }, { cardId: armor.id }, true);
+                
+                room.players[npc.id] = npc;
+                explorerNpcs.push(npc);
+            }
+            
+            const explorerIds = [player.id, ...explorerNpcs.map(n => n.id)];
+            shuffle(explorerIds); // Shuffle all explorers
+            room.gameState.turnOrder = [dmNpc.id, ...explorerIds];
 
         } else {
             // Multiplayer: Assign one human player as DM.
@@ -148,7 +185,9 @@ class GameManager {
                 if (p.id !== dm.id) p.role = 'Explorer';
             });
             // Setup turn order (DM first, then explorers)
-            room.gameState.turnOrder = [dm.id, ...players.filter(p => p.id !== dm.id && p.role === 'Explorer').map(p => p.id)];
+            const explorerIds = players.filter(p => p.id !== dm.id).map(p => p.id);
+            shuffle(explorerIds);
+            room.gameState.turnOrder = [dm.id, ...explorerIds];
         }
         
         // Prepare Decks
@@ -237,7 +276,7 @@ class GameManager {
     }
 
     checkAllPlayersReady(room) {
-        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
         const allReady = explorers.every(p => p.class);
         
         if (allReady) {
@@ -317,7 +356,7 @@ class GameManager {
         player.stats = this.calculatePlayerStats(player);
         player.currentAp = player.stats.ap;
         
-        if (player.role === 'Explorer') {
+        if (player.role === 'Explorer' && !player.isNpc) {
             player.pendingEventRoll = true;
         }
 
@@ -393,7 +432,7 @@ class GameManager {
 
         player.currentAp -= (weapon.apCost || 1);
         
-        this.sendMessage(socket, { channel: 'game', message: data.narrative, isNarrative: true });
+        this.sendMessage({ id: player.id }, { channel: 'game', message: data.narrative, isNarrative: true });
 
         const d20Roll = Math.floor(Math.random() * 20) + 1;
         const totalRollToHit = d20Roll + player.stats.damageBonus; // Assuming damageBonus also applies to hit
@@ -545,6 +584,101 @@ class GameManager {
         io.to(room.id).emit('playerLeft', { playerName: player.name });
     }
     
+    // --- EVENT HANDLING ---
+    rollForEvent(socket) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingEventRoll) return;
+
+        player.pendingEventRoll = false;
+        const roll = Math.floor(Math.random() * 20) + 1;
+        let outcome = 'none';
+        let cardOptions = [];
+
+        if (roll <= 8) { // Nothing
+            outcome = 'none';
+        } else if (roll <= 12) { // Player Event
+            outcome = 'player_event';
+            if (room.gameState.decks.playerEvent.length >= 2) {
+                cardOptions = [room.gameState.decks.playerEvent.pop(), room.gameState.decks.playerEvent.pop()];
+            }
+        } else if (roll <= 16) { // Discovery
+            outcome = 'discovery';
+            if (room.gameState.decks.discovery.length >= 2) {
+                cardOptions = [room.gameState.decks.discovery.pop(), room.gameState.decks.discovery.pop()];
+            }
+        } else { // World Event
+            outcome = 'world_event';
+            const worldEventCard = room.gameState.decks.worldEvent.pop();
+            if (worldEventCard) {
+                room.gameState.worldEvents.currentEvent = worldEventCard;
+                cardOptions.push(worldEventCard);
+                if (worldEventCard.saveInfo) {
+                    Object.values(room.players).forEach(p => {
+                        if (p.role === 'Explorer') {
+                            p.pendingWorldEventSave = {
+                                eventName: worldEventCard.name,
+                                ...worldEventCard.saveInfo
+                            };
+                        }
+                    });
+                }
+            }
+        }
+        
+        if (outcome === 'player_event' || outcome === 'discovery') {
+            player.pendingEventChoice = { outcome, cardOptions };
+        }
+
+        socket.emit('eventRollResult', { roll, outcome, cardOptions });
+        this.emitGameState(room.id);
+    }
+
+    selectEventCard(socket, { cardId }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingEventChoice) return;
+
+        const { outcome, cardOptions } = player.pendingEventChoice;
+        const choice = cardOptions.find(c => c.id === cardId);
+        if (!choice) return;
+
+        if (outcome === 'player_event') {
+            player.hand.push(choice);
+            this.sendMessageToRoom(room.id, { channel: 'game', message: `${player.name} drew a Player Event card: ${choice.name}.` });
+        } else if (outcome === 'discovery') {
+            room.gameState.lootPool.push(choice);
+            this.sendMessageToRoom(room.id, { channel: 'game', message: `The party made a Discovery: ${choice.name}!` });
+        }
+        
+        player.pendingEventChoice = null;
+        this.emitGameState(room.id);
+    }
+    
+    rollForWorldEventSave(socket) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingWorldEventSave) return;
+
+        const { dc, save } = player.pendingWorldEventSave;
+        const playerClassStats = gameData.classes[player.class]?.stats;
+        
+        const d20Roll = Math.floor(Math.random() * 20) + 1;
+        const bonus = playerClassStats ? (playerClassStats[save.toLowerCase()] || 0) : 0;
+        const totalRoll = d20Roll + bonus;
+        const success = totalRoll >= dc;
+        
+        if (success) {
+            this.sendMessageToRoom(room.id, { channel: 'game', message: `${player.name} succeeded their save against the ${player.pendingWorldEventSave.eventName}!` });
+        } else {
+            this.sendMessageToRoom(room.id, { channel: 'game', message: `${player.name} failed their save against the ${player.pendingWorldEventSave.eventName}!` });
+        }
+
+        player.pendingWorldEventSave = null;
+        socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc, success });
+        this.emitGameState(room.id);
+    }
+
     // Voice Chat Handlers
     handleVoiceJoin(socket) {
         const room = this.findRoomBySocket(socket);
@@ -578,6 +712,11 @@ io.on('connection', (socket) => {
     socket.on('endTurn', () => gameManager.endTurn(socket));
     socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));
     socket.on('dmAction', (data) => gameManager.handleDmAction(socket, data));
+    
+    // Event Handlers
+    socket.on('rollForEvent', () => gameManager.rollForEvent(socket));
+    socket.on('selectEventCard', (data) => gameManager.selectEventCard(socket, data));
+    socket.on('rollForWorldEventSave', () => gameManager.rollForWorldEventSave(socket));
     
     // Voice Chat
     socket.on('join-voice', () => gameManager.handleVoiceJoin(socket));
