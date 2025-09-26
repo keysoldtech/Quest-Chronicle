@@ -14,6 +14,7 @@ let pendingActionData = null; // For narrative modal
 let isMyTurnPreviously = false; // For "Your Turn" popup
 let tempSelectedClassId = null; // For temporary class selection in lobby
 let pendingAbilityConfirmation = null; // For non-attack ability confirmation
+let apModalShownThisTurn = false; // For AP management pop-up
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -73,6 +74,9 @@ const narrativeCancelBtn = document.getElementById('narrative-cancel-btn');
 const narrativeConfirmBtn = document.getElementById('narrative-confirm-btn');
 const yourTurnPopup = document.getElementById('your-turn-popup');
 const confirmAttackBtn = document.getElementById('confirm-attack-btn');
+const apModal = document.getElementById('ap-modal');
+const apModalCancelBtn = document.getElementById('ap-modal-cancel-btn');
+const apModalConfirmBtn = document.getElementById('ap-modal-confirm-btn');
 
 // Dice Roll Overlay DOM refs
 const diceRollOverlay = document.getElementById('dice-roll-overlay');
@@ -274,6 +278,7 @@ function renderGameState(room) {
 
     // "Your Turn" popup
     if (isMyTurn && !isMyTurnPreviously) {
+        apModalShownThisTurn = false; // Reset AP modal flag on new turn
         pendingAbilityConfirmation = null; // Reset pending confirmations on turn start
         selectedWeaponId = null; // Reset weapon selection on turn start
         selectedTargetId = null; // Reset target on turn start
@@ -469,6 +474,12 @@ function renderGameState(room) {
             playerActionsContainer.appendChild(btn);
         }
     }
+    
+    // --- AP Modal Logic ---
+    if (isMyTurn && myPlayerInfo.currentAp === 0 && !apModalShownThisTurn) {
+        apModal.classList.remove('hidden');
+        apModalShownThisTurn = true;
+    }
 }
 
 function renderEventCardChoices(cardOptions) {
@@ -587,6 +598,15 @@ rollDiceBtn.onclick = () => {
     eventDiceAnimationContainer.classList.remove('hidden');
     dice.classList.add('is-rolling'); // Start animation
 };
+
+apModalConfirmBtn.addEventListener('click', () => {
+    socket.emit('endTurn');
+    apModal.classList.add('hidden');
+});
+
+apModalCancelBtn.addEventListener('click', () => {
+    apModal.classList.add('hidden');
+});
 
 
 // --- SOCKET.IO EVENT HANDLERS ---

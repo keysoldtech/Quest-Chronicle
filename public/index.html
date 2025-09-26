@@ -14,7 +14,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.41</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.43</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -153,6 +153,18 @@
             <div class="modal-actions">
                 <button id="narrative-cancel-btn" class="fantasy-button-secondary">Cancel</button>
                 <button id="narrative-confirm-btn" class="fantasy-button-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- AP Modal -->
+    <div id="ap-modal" class="modal-overlay hidden">
+        <div class="modal-content ap-modal-content">
+            <h2 class="header-font">Out of Actions</h2>
+            <p>You have used all your Action Points for this turn. Do you want to end your turn now?</p>
+            <div class="modal-actions">
+                <button id="ap-modal-cancel-btn" class="fantasy-button-secondary">Not Yet</button>
+                <button id="ap-modal-confirm-btn" class="fantasy-button-danger">End Turn</button>
             </div>
         </div>
     </div>

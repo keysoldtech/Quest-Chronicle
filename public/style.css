@@ -649,6 +649,10 @@ body.fantasy-bg {
     width: 90%;
     max-width: 500px;
 }
+.ap-modal-content p {
+    margin: 1rem 0 1.5rem 0;
+    line-height: 1.5;
+}
 #narrative-prompt {
     margin-bottom: 1rem;
     font-style: italic;

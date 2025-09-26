@@ -392,43 +392,40 @@ class GameManager {
         
         if (!currentPlayer) return;
         const isDmTurn = currentPlayer.role === 'DM';
-
+        
         if (isDmTurn) {
             room.gameState.turnCount++;
             room.gameState.worldEvents.currentEvent = null; // Clear previous event
             console.log(`[GameManager] Room ${roomId} - DM Turn Start. Turn count: ${room.gameState.turnCount}`);
-            
-            // --- Post-Combat Flow ---
-            if (room.gameState.board.monsters.length === 0 && room.gameState.turnCount > 1) {
-                console.log(`[GameManager] Room ${roomId} - DM turn, no monsters. Starting post-combat flow.`);
+
+            if (room.gameState.turnCount === 1 && currentPlayer.isNpc) {
+                 console.log(`[GameManager] Room ${roomId} - NPC DM taking FIRST turn.`);
+                 this.playMonsterCard(roomId);
+                 setTimeout(() => this.startNextTurn(roomId), 3000);
+                 return;
+            }
+
+            // Post-combat or pre-combat flow for turns after the first
+            if (room.gameState.board.monsters.length === 0) {
+                console.log(`[GameManager] Room ${roomId} - DM turn, NO monsters. Starting post-combat flow.`);
                 this.playWorldEvent(roomId);
-                
                 setTimeout(() => {
-                    console.log(`[GameManager] Room ${roomId} - Spawning new monster post-event.`);
                     this.playMonsterCard(roomId);
-                    // Update state to clients after monster spawn
                     this.broadcastToRoom(roomId, 'gameStateUpdate', room);
-                }, 3000); 
-                
-                setTimeout(() => {
-                    console.log(`[GameManager] Room ${roomId} - Ending DM post-combat turn.`);
-                    this.startNextTurn(roomId);
-                }, 5000); 
-                return; // Stop further execution for this turn
+                }, 3000);
+                setTimeout(() => this.startNextTurn(roomId), 5000);
+                return;
+            } else {
+                // Active combat flow
+                if (currentPlayer.isNpc) {
+                    console.log(`[GameManager] Room ${roomId} - NPC DM taking automated COMBAT turn.`);
+                    setTimeout(() => this.executeDmCombatTurn(roomId), 2000);
+                    return;
+                }
             }
         }
-
-        currentPlayer.currentAp = currentPlayer.stats.ap;
         
-        if (isDmTurn && currentPlayer.isNpc && room.gameState.turnCount === 1) {
-            console.log(`[GameManager] Room ${roomId} - NPC DM is taking its automated first turn.`);
-            this.playMonsterCard(roomId);
-            setTimeout(() => {
-                console.log(`[GameManager] Room ${roomId} - Automatically ending NPC DM's first turn.`);
-                this.startNextTurn(roomId);
-            }, 3000);
-            return;
-        }
+        currentPlayer.currentAp = currentPlayer.stats.ap;
         
         if (currentPlayer.isNpc && currentPlayer.role === 'Explorer') {
             console.log(`[GameManager] Room ${roomId} - NPC Explorer ${currentPlayer.name}'s turn.`);
@@ -545,19 +542,16 @@ class GameManager {
             const damageDice = weapon.effect.dice;
             const rawDamageRoll = this.rollDice(damageDice);
             
-            // --- CRITICAL DAMAGE CALCULATION FIX ---
-            // Explicitly calculate total bonus from class and weapon to ensure accuracy.
-            const classBonus = (gameData.classes[attacker.class] && gameData.classes[attacker.class].baseDamageBonus) || 0;
-            const weaponBonus = (weapon.effect && weapon.effect.bonuses && weapon.effect.bonuses.damage) || 0;
+            const classBonus = (gameData.classes[attacker.class]?.baseDamageBonus) || 0;
+            const weaponBonus = (weapon.effect?.bonuses?.damage) || 0;
             const totalBonus = classBonus + weaponBonus;
             const totalDamage = rawDamageRoll + totalBonus;
 
-            // Server-side log for debugging, as requested.
             console.log(`[Damage Calc] Attacker: ${attacker.name}, Weapon: ${weapon.name}`);
             console.log(`DMG = [Dice Roll: ${rawDamageRoll}] + [Class Bonus: ${classBonus}] + [Weapon Bonus: ${weaponBonus}] = Total: ${totalDamage}`);
             
             target.currentHp -= totalDamage;
-            message = `${attacker.name} rolls a ${rawDamageRoll} on their ${damageDice} + ${totalBonus} Bonus for a total of ${totalDamage} damage to ${target.name}!`;
+            message = `${attacker.name} attacks ${target.name} for ${totalDamage} damage! (${rawDamageRoll} + ${totalBonus} Bonus)`;
             
             this.broadcastToRoom(roomId, 'attackAnimation', { 
                 hit: true,
@@ -566,7 +560,7 @@ class GameManager {
                 requiredRoll,
                 damageDice, 
                 rawDamageRoll, 
-                damageBonus: totalBonus, // Send the correct, newly calculated total bonus
+                damageBonus: totalBonus,
                 totalDamage 
             });
             
@@ -586,6 +580,64 @@ class GameManager {
         
         this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+    }
+    
+    resolveMonsterAttack(room, monster, target) {
+        if (!room || !monster || !target) return;
+
+        const playerDefense = 10 + (target.stats.shieldBonus || 0);
+        const hitRoll = this.rollDice('1d20') + monster.attackBonus;
+        
+        let message = '';
+        if (hitRoll >= playerDefense) {
+            const damage = this.rollDice(monster.effect.dice);
+            target.stats.currentHp = Math.max(0, target.stats.currentHp - damage); // Prevent negative HP
+            message = `${monster.name} attacks ${target.name} and hits, dealing ${damage} damage!`;
+            
+            if (target.stats.currentHp === 0) {
+                target.lifeCount -= 1;
+                message += ` ${target.name} has been defeated! They have ${target.lifeCount} lives remaining.`;
+                if(target.lifeCount > 0) {
+                    // Future respawn logic can go here
+                } else {
+                    message += ` ${target.name} is out of the fight!`;
+                }
+            }
+        } else {
+            message = `${monster.name} attacks ${target.name} but misses!`;
+        }
+        
+        this.broadcastToRoom(room.id, 'chatMessage', { senderName: 'Game Master', message, channel: 'game' });
+    }
+    
+    executeDmCombatTurn(roomId) {
+        const room = this.rooms[roomId];
+        if (!room) return;
+        
+        const monsters = room.gameState.board.monsters;
+        const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0 && !p.isNpc);
+        
+        if (monsters.length === 0 || livingExplorers.length === 0) {
+            this.startNextTurn(roomId); // No monsters or no one to attack, end turn
+            return;
+        }
+
+        const processAttack = (index) => {
+            if (index >= monsters.length) {
+                setTimeout(() => this.startNextTurn(roomId), 1000); // All monsters have attacked
+                return;
+            }
+            
+            const monster = monsters[index];
+            const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
+            
+            this.resolveMonsterAttack(room, monster, target);
+            this.broadcastToRoom(roomId, 'gameStateUpdate', room);
+
+            setTimeout(() => processAttack(index + 1), 2500); // 2.5s between monster attacks
+        };
+
+        processAttack(0); // Start the attack sequence
     }
 
     rollForEvent(socketId) {
