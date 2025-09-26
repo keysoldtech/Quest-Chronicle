@@ -315,7 +315,7 @@ class GameManager {
             console.log(`[GameManager] Room ${room.id} Party created: 1 NPC Dungeon Master, ${humanPlayers.length} Human Explorers, ${neededNpcs} NPC Explorers.`);
         }
 
-        // --- FINAL SETUP ---
+        // --- FINAL SETUP & STATS ---
         Object.values(room.players).forEach(p => console.log(`[GameManager] Player: ${p.name}, ID: ${p.id}, Role: ${p.role}`));
 
         Object.values(room.players).forEach(player => {
@@ -325,8 +325,74 @@ class GameManager {
                 this.calculatePlayerStats(player.id, room);
             }
         });
-        console.log(`[GameManager] Room ${room.id} - Assigned stats to all players.`);
+        console.log(`[GameManager] Room ${room.id} - Assigned base stats to all players.`);
 
+        // --- STARTING EQUIPMENT ---
+        if (gameMode === 'Beginner') {
+            console.log(`[GameManager] Room ${room.id} - Beginner Mode: Assigning starting equipment.`);
+            const weaponCards = [...gameData.weaponCards];
+            const armorCards = [...gameData.armorCards];
+            shuffle(weaponCards);
+            shuffle(armorCards);
+            const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+
+            explorers.forEach(player => {
+                // Assign Weapon
+                if (weaponCards.length > 0) {
+                    const cardToEquip = { ...weaponCards.pop(), id: this.generateUniqueCardId() };
+                    player.equipment.weapon = cardToEquip;
+                    this.broadcastToRoom(room.id, 'chatMessage', { 
+                        senderName: 'Game Master', 
+                        message: `${player.name} starts their adventure with a ${cardToEquip.name}!`, 
+                        channel: 'game' 
+                    });
+                }
+                // Assign Armor
+                if (armorCards.length > 0) {
+                    const cardToEquip = { ...armorCards.pop(), id: this.generateUniqueCardId() };
+                    player.equipment.armor = cardToEquip;
+                     this.broadcastToRoom(room.id, 'chatMessage', { 
+                        senderName: 'Game Master', 
+                        message: `${player.name} dons a sturdy ${cardToEquip.name}!`, 
+                        channel: 'game' 
+                    });
+                }
+                this.calculatePlayerStats(player.id, room); // Recalculate stats after equipment
+            });
+        } else if (gameMode === 'Advanced') {
+            console.log(`[GameManager] Room ${room.id} - Advanced Mode: Rolling for bonus starting equipment.`);
+            const weaponCards = [...gameData.weaponCards];
+            const armorCards = [...gameData.armorCards];
+            shuffle(weaponCards);
+            shuffle(armorCards);
+            const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+        
+            explorers.forEach(player => {
+                // 25% chance for a Weapon
+                if (Math.random() < 0.25 && weaponCards.length > 0) {
+                    const cardToEquip = { ...weaponCards.pop(), id: this.generateUniqueCardId() };
+                    player.equipment.weapon = cardToEquip;
+                    this.broadcastToRoom(room.id, 'chatMessage', { 
+                        senderName: 'Game Master', 
+                        message: `Fate smiles upon ${player.name}, who finds a ${cardToEquip.name}!`, 
+                        channel: 'game' 
+                    });
+                }
+                // 25% chance for Armor
+                if (Math.random() < 0.25 && armorCards.length > 0) {
+                    const cardToEquip = { ...armorCards.pop(), id: this.generateUniqueCardId() };
+                    player.equipment.armor = cardToEquip;
+                     this.broadcastToRoom(room.id, 'chatMessage', { 
+                        senderName: 'Game Master', 
+                        message: `${player.name} discovers a well-made ${cardToEquip.name}!`, 
+                        channel: 'game' 
+                    });
+                }
+                this.calculatePlayerStats(player.id, room); // Recalculate stats after potential equipment
+            });
+        }
+
+        // --- DECKS & TURN ORDER ---
         console.log(`[GameManager] Room ${room.id} - Shuffling decks.`);
         room.gameState.decks.monster = [...gameData.monsterCards];
         shuffle(room.gameState.decks.monster);
@@ -340,30 +406,15 @@ class GameManager {
         room.gameState.currentPlayerIndex = -1;
         console.log(`[GameManager] Room ${room.id} - Turn order established: ${room.gameState.turnOrder.join(', ')}`);
         
-        if (gameMode === 'Beginner') {
-            console.log(`[GameManager] Room ${room.id} - Beginner Mode: Assigning starting WEAPONS.`);
-            const weaponCards = [...gameData.weaponCards];
-            shuffle(weaponCards);
-            const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
-            explorers.forEach(player => {
-                if (weaponCards.length > 0) {
-                    const cardToEquip = { ...weaponCards.pop(), id: this.generateUniqueCardId() };
-                    player.equipment.weapon = cardToEquip;
-                    this.calculatePlayerStats(player.id, room);
-                    this.broadcastToRoom(room.id, 'chatMessage', { 
-                        senderName: 'Game Master', 
-                        message: `${player.name} starts their adventure with a ${cardToEquip.name}!`, 
-                        channel: 'game' 
-                    });
-                }
-            });
+        // --- START GAME FLOW ---
+        if (gameMode === 'Advanced') {
+            room.gameState.phase = 'advanced_setup_choice';
+            this.broadcastToRoom(room.id, 'gameStarted', room);
+        } else { // Beginner Mode
             room.gameState.phase = 'active';
             this.broadcastToRoom(room.id, 'gameStarted', room);
             console.log(`[GameManager] Room ${room.id} - Game started. Beginning first turn.`);
             setTimeout(() => this.startNextTurn(room.id), 500);
-        } else if (gameMode === 'Advanced') {
-            room.gameState.phase = 'advanced_setup_choice';
-            this.broadcastToRoom(room.id, 'gameStarted', room);
         }
     }
     
@@ -772,15 +823,20 @@ class GameManager {
             return; // Still waiting for other players
         }
 
-        // All saves are done. Now continue the DM's turn.
+        // All saves are done. Now continue the DM's turn robustly.
         this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: 'All players have reacted to the event. The journey continues...', channel: 'game' });
         
-        // This mirrors the logic that was previously after playWorldEvent in startNextTurn
+        // This is the core continuation of the DM's turn to prevent freezes.
         setTimeout(() => {
+            console.log(`[GameManager] Room ${roomId} - World event resolved. DM is now playing a monster.`);
             this.playMonsterCard(roomId);
-            this.broadcastToRoom(roomId, 'gameStateUpdate', room);
-        }, 2000);
-        setTimeout(() => this.startNextTurn(roomId), 4000);
+            
+            // After the monster is played, end the DM's turn to pass to the next player.
+            setTimeout(() => {
+                console.log(`[GameManager] Room ${roomId} - DM turn ending after World Event resolution.`);
+                this.startNextTurn(roomId); 
+            }, 2000); // Wait for monster card animation/display
+        }, 1000); // Short delay after event resolution message
     }
 
     applyEffect(targetId, effect, roomId) {

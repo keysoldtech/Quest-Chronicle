@@ -423,6 +423,11 @@ body.fantasy-bg {
 }
 .player-stats span { color: var(--color-text-dark); opacity: 0.8; }
 .player-stats .stat-value { font-weight: bold; opacity: 1; }
+.stat-bonus-highlight {
+    color: var(--color-primary);
+    font-weight: bold;
+    margin-left: 0.25rem;
+}
 
 .chat-box {
     flex-grow: 1;

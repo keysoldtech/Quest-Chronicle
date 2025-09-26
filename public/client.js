@@ -404,17 +404,38 @@ function renderGameState(room) {
         }
     }
     
-    // --- Render Player Stats ---
-    if (myPlayerInfo.stats) {
+    // --- Render Player Stats with Bonus Highlighting ---
+    if (myPlayerInfo.stats && myPlayerInfo.class) {
+        const classDataClient = classData[myPlayerInfo.class];
+        let damageBonusHTML = `<span>DMG Bonus:</span><span class="stat-value">${myPlayerInfo.stats.damageBonus}</span>`;
+        let shieldBonusHTML = `<span>SHIELD Bonus:</span><span class="stat-value">${myPlayerInfo.stats.shieldBonus}</span>`;
+
+        if (classDataClient) {
+            const baseDamageBonus = classDataClient.baseDamageBonus;
+            const totalDamageBonus = myPlayerInfo.stats.damageBonus;
+            const equipmentDamageBonus = totalDamageBonus - baseDamageBonus;
+            if (equipmentDamageBonus !== 0) {
+                damageBonusHTML = `<span>DMG Bonus:</span><span class="stat-value">${baseDamageBonus} <span class="stat-bonus-highlight">${equipmentDamageBonus > 0 ? '+' : ''}${equipmentDamageBonus}</span></span>`;
+            }
+
+            const baseShieldBonus = classDataClient.baseShieldBonus;
+            const totalShieldBonus = myPlayerInfo.stats.shieldBonus;
+            const equipmentShieldBonus = totalShieldBonus - baseShieldBonus;
+            if (equipmentShieldBonus !== 0) {
+                shieldBonusHTML = `<span>SHIELD Bonus:</span><span class="stat-value">${baseShieldBonus} <span class="stat-bonus-highlight">${equipmentShieldBonus > 0 ? '+' : ''}${equipmentShieldBonus}</span></span>`;
+            }
+        }
+
         playerStatsDiv.innerHTML = `
             <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${myPlayerInfo.stats.maxHp}</span>
             <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}</span>
-            <span>DMG Bonus:</span><span class="stat-value">${myPlayerInfo.stats.damageBonus}</span>
-            <span>SHIELD Bonus:</span><span class="stat-value">${myPlayerInfo.stats.shieldBonus}</span>
+            ${damageBonusHTML}
+            ${shieldBonusHTML}
             <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
             <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
         `;
     }
+
 
     // --- Render Player Hand & Equipment ---
     playerHandDiv.innerHTML = '';
