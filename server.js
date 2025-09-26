@@ -203,11 +203,20 @@ class GameManager {
             if(p.role !== 'DM') this.calculatePlayerStats(p.id, room);
         });
 
-        // Create turn order (DM not included)
-        room.gameState.turnOrder = Object.values(room.players)
-            .filter(p => p.role !== 'DM')
+        // Create a dedicated NPC for the DM's turn to prevent crashes and ensure a DM turn
+        const dmNpcId = 'dm-npc';
+        const dmNpc = this.createPlayerObject(dmNpcId, 'Dungeon Master', 'Explorer', true);
+        dmNpc.stats = { maxHp: 999, currentHp: 999, damageBonus: 99, shieldBonus: 99, ap: 99 };
+        dmNpc.class = 'DM'; // For client display purposes
+        room.players[dmNpcId] = dmNpc;
+
+        // Create turn order with DM NPC first, followed by shuffled explorers
+        const explorerIds = Object.values(room.players)
+            .filter(p => p.role === 'Explorer' && !p.isNpc)
             .map(p => p.id);
-        shuffle(room.gameState.turnOrder);
+        shuffle(explorerIds);
+        room.gameState.turnOrder = [dmNpcId, ...explorerIds];
+        room.gameState.currentPlayerIndex = -1; // Will be incremented to 0 by startNextTurn
         
         const allCards = [
             ...gameData.itemCards,
@@ -218,7 +227,7 @@ class GameManager {
         
         if (gameMode === 'Beginner') {
             Object.values(room.players).forEach(player => {
-                if (player.role !== 'DM' && player.class) {
+                if (player.role !== 'DM' && player.class && !player.isNpc) {
                     const classSpecificDeck = allCards.filter(card => {
                         if (!card.class || card.class === 'Any') return true;
                         if (Array.isArray(card.class)) return card.class.includes(player.class);
@@ -265,7 +274,7 @@ class GameManager {
         player.madeAdvancedChoice = true;
         
         const allExplorersMadeChoice = Object.values(room.players)
-            .filter(p => p.role !== 'DM')
+            .filter(p => p.role !== 'DM' && !p.isNpc)
             .every(p => p.madeAdvancedChoice);
             
         if (allExplorersMadeChoice) {
@@ -278,7 +287,7 @@ class GameManager {
 
     startNextTurn(roomId) {
         const room = this.rooms[roomId];
-        if (!room) return;
+        if (!room || room.gameState.turnOrder.length === 0) return;
         
         if (room.gameState.combatState.isActive) {
              // Combat turn logic handled by endTurn
@@ -287,17 +296,20 @@ class GameManager {
             const currentPlayerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
             const currentPlayer = room.players[currentPlayerId];
             
-            if (room.gameState.currentPlayerIndex === 0) {
+            // Increment turn count only when the DM NPC's turn starts
+            if (currentPlayerId === 'dm-npc') {
                 room.gameState.turnCount++;
             }
             
-            // Random event check every 3 explorer turns
-            if (room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0 && room.gameState.currentPlayerIndex === 0) {
-                 Object.values(room.players).forEach(p => p.pendingEventRoll = (p.role !== 'DM'));
+            // Random event check every 3 explorer turns, triggered on the DM's turn
+            if (room.gameState.turnCount > 1 && (room.gameState.turnCount -1) % 3 === 0 && currentPlayerId === 'dm-npc') {
+                 Object.values(room.players).forEach(p => p.pendingEventRoll = (p.role === 'Explorer' && !p.isNpc));
             }
             
             // Reset AP
-            currentPlayer.currentAp = currentPlayer.stats.ap;
+            if (currentPlayer) {
+                currentPlayer.currentAp = currentPlayer.stats.ap;
+            }
         }
 
         this.broadcastToRoom(roomId, 'gameStateUpdate', room);
@@ -309,6 +321,14 @@ class GameManager {
         
         const isCombat = room.gameState.combatState.isActive;
         const currentTurnTakerId = isCombat ? room.gameState.combatState.turnOrder[room.gameState.combatState.currentTurnIndex] : room.gameState.turnOrder[room.gameState.currentPlayerIndex];
+        const playerEndingTurn = room.players[socketId];
+
+        // Allow the human DM to end the DM-NPC's turn
+        if (currentTurnTakerId === 'dm-npc' && playerEndingTurn && playerEndingTurn.role === 'DM') {
+            this.startNextTurn(room.id);
+            this.broadcastToRoom(room.id, 'gameStateUpdate', room);
+            return;
+        }
         
         if (socketId !== currentTurnTakerId) return; // Not their turn
         

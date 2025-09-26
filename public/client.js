@@ -226,14 +226,24 @@ function renderGameState(room) {
     
     // --- Phase-specific UI rendering ---
     const isCombat = gameState.combatState.isActive;
-    const isMyTurn = isCombat ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] === myId : (gameState.currentPlayerIndex !== -1 ? gameState.turnOrder[gameState.currentPlayerIndex] === myId : false);
     const isDm = myPlayerInfo.role === 'DM';
+    
+    // Determine whose turn it is
+    let currentTurnTakerId;
+    if (isCombat && gameState.combatState.currentTurnIndex > -1) {
+        currentTurnTakerId = gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex];
+    } else if (!isCombat && gameState.currentPlayerIndex > -1) {
+        currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
+    }
+    
+    const isMyTurn = currentTurnTakerId === myId;
+    const isDmNpcTurn = currentTurnTakerId === 'dm-npc';
     const canPlayTargetedCard = gameState.board.monsters.length > 0;
     
     classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || isDm || myPlayerInfo.class);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || isDm);
     playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
-    endTurnBtn.classList.toggle('hidden', !isMyTurn);
+    endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isDm && isDmNpcTurn)));
     dmControls.classList.toggle('hidden', !isDm || gameState.phase === 'lobby');
     playerActionsContainer.classList.toggle('hidden', !isMyTurn);
     
@@ -285,16 +295,7 @@ function renderGameState(room) {
     // --- Active Game & Turn Indicator ---
     turnCounter.textContent = gameState.turnCount;
     if (gameState.phase !== 'lobby' && gameState.phase !== 'advanced_setup_choice') {
-        let turnTakerId = null;
-        // Determine the current turn taker based on game phase (combat vs. exploration)
-        if (isCombat) {
-            turnTakerId = gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex];
-        } else if (gameState.currentPlayerIndex > -1 && gameState.turnOrder[gameState.currentPlayerIndex]) {
-            // Non-combat turn order is based on the main turnOrder array
-            turnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
-        }
-
-        const turnTaker = players[turnTakerId] || gameState.board.monsters.find(m => m.id === turnTakerId);
+        const turnTaker = players[currentTurnTakerId] || gameState.board.monsters.find(m => m.id === currentTurnTakerId);
         
         if (turnTaker) {
             turnIndicator.textContent = `Current Turn: ${turnTaker.name}`;

@@ -260,7 +260,8 @@ body.fantasy-bg {
 .game-main {
     flex-grow: 1;
     display: grid;
-    grid-template-columns: 300px 1fr;
+    /* Use clamp for a fluid left panel width on larger screens */
+    grid-template-columns: clamp(280px, 25vw, 400px) 1fr;
     gap: 1rem;
     overflow: hidden;
 }
