@@ -742,11 +742,29 @@ class GameManager {
 
         const combatState = room.gameState.combatState;
 
-        // FIX: Add logging for NPC turn execution
         console.log(`[Game Flow] Executing NPC turn for ${npc.name} (${npc.role || 'Monster'}) in room ${roomId}. Combat: ${combatState.isActive}`);
         
         if (combatState.isActive) {
-            if (npc.role === 'Explorer') { // NPC Explorer AI
+            // --- MONSTER AI ---
+            // Monsters are identified by not having a 'role' property.
+            if (!npc.role) {
+                console.log(`[NPC AI | Monster] Turn begins for: ${npc.name}.`);
+                const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0 && p.lifeCount > 0);
+
+                if (livingExplorers.length > 0) {
+                    const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
+                    console.log(`[NPC AI | Monster] ${npc.name} is targeting: ${target.name}.`);
+                    
+                    // The resolveAttack function logs the damage outcome internally
+                    this.resolveAttack(roomId, npcId, target.id, npc);
+                    
+                    console.log(`[NPC AI | Monster] Attack action completed.`);
+                } else {
+                    console.log(`[NPC AI | Monster] ${npc.name} has no valid targets to attack. Skipping action.`);
+                }
+            } 
+            // --- NPC EXPLORER AI ---
+            else if (npc.role === 'Explorer') {
                 const isInjured = npc.stats.currentHp / npc.stats.maxHp < 0.5;
                 const healingCard = npc.hand.find(c => c.effect?.type === 'heal');
 
@@ -766,27 +784,21 @@ class GameManager {
                         this.resolveAttack(roomId, npcId, target.id, npc.equipment.weapon || { effect: { dice: '1d4' } });
                     }
                 }
-            } else { // Monster AI
-                // FIX: Implement Monster AI turn logic to prevent game from getting stuck.
-                console.log(`[NPC AI] Monster turn for: ${npc.name}`);
-                const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0 && p.lifeCount > 0);
-
-                if (livingExplorers.length > 0) {
-                    const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
-                    console.log(`[NPC AI] ${npc.name} is targeting random player: ${target.name}`);
-                    this.resolveAttack(roomId, npcId, target.id, npc);
-                } else {
-                    console.log(`[NPC AI] ${npc.name} has no valid targets to attack.`);
-                }
             }
-            setTimeout(() => this.nextTurn(roomId), 1500);
+            
+            // This is the crucial part: the turn always ends after an NPC action.
+            console.log(`[Game Flow] NPC action for ${npc.name} is complete. Scheduling next turn.`);
+            setTimeout(() => {
+                console.log(`[Game Flow] Calling nextTurn() for room ${roomId}.`);
+                this.nextTurn(roomId);
+            }, 1500);
             return;
         }
 
         // --- NON-COMBAT LOGIC ---
 
         if (npc.role === 'Explorer') {
-            // FIX: NPC Explorers had no logic for non-combat turns, causing the game to stall.
+            // NPC Explorers had no logic for non-combat turns, causing the game to stall.
             // Now, they will simply wait a moment and end their turn.
             io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${npc.name} pauses for a moment...`, channel: 'game' });
             setTimeout(() => {
@@ -796,7 +808,7 @@ class GameManager {
         }
 
         if (npc.role === 'DM') {
-            // FIX: Overhaul DM AI to be more proactive and ensure game progression.
+            // Overhaul DM AI to be more proactive and ensure game progression.
             console.log(`[NPC AI] Executing DM turn. Phase: ${room.gameState.phase}, Monsters on Board: ${room.gameState.board.monsters.length}`);
             console.log(`[NPC AI] DM Hand:`, npc.hand.map(c => c.name).join(', '));
 
@@ -888,7 +900,8 @@ class GameManager {
         
         if (card.type === 'Monster') {
             if (cardIndex > -1) player.hand.splice(cardIndex, 1);
-            const monsterData = { ...card, currentHp: card.maxHp, id: `${card.id}-${Math.random()}`, statusEffects: [] };
+            // FIX: Monsters must be flagged as isNpc so the game loop can trigger their turn automatically.
+            const monsterData = { ...card, currentHp: card.maxHp, id: `${card.id}-${Math.random()}`, statusEffects: [], isNpc: true };
             room.gameState.board.monsters.push(monsterData);
             io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} summons a ${monsterData.name}!`, channel: 'game' });
             if (!room.gameState.combatState.isActive) {
