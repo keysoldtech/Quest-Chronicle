@@ -64,7 +64,8 @@ class GameManager {
                 turnOrder: [],
                 currentPlayerIndex: -1,
                 board: { monsters: [] },
-                worldEvents: { currentEvent: null, currentSequence: [], sequenceActive: false, pendingSaves: [] },
+                lootPool: [],
+                worldEvents: { currentEvent: null, pendingSaves: [], resolved: false },
                 monstersDefeatedSinceLastTurn: false,
                 advancedChoicesPending: [],
                 combatState: {
@@ -89,7 +90,7 @@ class GameManager {
             class: null,
             hand: [],
             equipment: { weapon: null, armor: null },
-            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
             lifeCount: 3,
             healthDice: { max: 0, current: 0 },
             statusEffects: [], // e.g., { name: 'Poisoned', duration: 3 }
@@ -480,6 +481,7 @@ class GameManager {
         
         const eventCard = room.gameState.decks.worldEvent.pop();
         room.gameState.worldEvents.currentEvent = eventCard;
+        room.gameState.worldEvents.resolved = false;
         
         this.broadcastToRoom(roomId, 'chatMessage', { 
             senderName: 'Game Master', 
@@ -519,6 +521,7 @@ class GameManager {
             room.gameState.turnCount++;
             room.gameState.worldEvents.currentEvent = null; // Clear previous event
             room.gameState.worldEvents.pendingSaves = []; // Clear pending saves for new turn
+            room.gameState.worldEvents.resolved = false; // Reset resolution flag
             console.log(`[GameManager] Room ${roomId} - DM Turn Start. Turn count: ${room.gameState.turnCount}`);
 
             if (room.gameState.turnCount === 1 && currentPlayer.isNpc) {
@@ -552,6 +555,12 @@ class GameManager {
                 }
             }
         } else { // It's an Explorer's turn
+             // Reset temporary shield HP at the start of the turn
+            if (currentPlayer.stats.shieldHp > 0) {
+                this.broadcastToRoom(roomId, 'chatMessage', { senderName: 'Game Master', message: `${currentPlayer.name}'s temporary shield fades.`, channel: 'game' });
+                currentPlayer.stats.shieldHp = 0;
+            }
+            
             // --- Handle Status Effects at Turn Start ---
             currentPlayer.statusEffects.forEach(effect => {
                 const effectDef = gameData.statusEffectDefinitions[effect.name];
@@ -663,6 +672,50 @@ class GameManager {
         this.startNextTurn(room.id);
     }
     
+    triggerRewardSequence(roomId) {
+        const room = this.rooms[roomId];
+        if (!room) return;
+    
+        const rewardPool = [
+            ...gameData.weaponCards,
+            ...gameData.armorCards,
+            ...gameData.spellCards,
+            ...gameData.itemCards,
+            ...gameData.playerEventCards,
+            ...gameData.discoveryCards // High-tier rewards
+        ];
+        shuffle(rewardPool);
+    
+        const chances = [0.60, 0.40, 0.20]; // 60% for 1st, 40% for 2nd, 20% for 3rd
+        let rewardsFound = 0;
+    
+        for (const chance of chances) {
+            if (Math.random() < chance) {
+                if (rewardPool.length > 0) {
+                    const card = rewardPool.pop();
+                    const cardInstance = { ...card, id: this.generateUniqueCardId() };
+                    room.gameState.lootPool.push(cardInstance);
+                    rewardsFound++;
+                    this.broadcastToRoom(roomId, 'chatMessage', { 
+                        senderName: 'Game Master', 
+                        message: `The party has discovered a reward! A "${cardInstance.name}" has been added to the party loot.`, 
+                        channel: 'game' 
+                    });
+                }
+            } else {
+                break; // Stop if a roll fails
+            }
+        }
+    
+        if (rewardsFound === 0) {
+            this.broadcastToRoom(roomId, 'chatMessage', { 
+                senderName: 'Game Master', 
+                message: `The party searches the area but finds nothing of value this time.`, 
+                channel: 'game' 
+            });
+        }
+    }
+
     resolveAttack(roomId, attacker, target, weapon) {
         const room = this.rooms[roomId];
         if (!room || !attacker || !target || !weapon) return;
@@ -711,6 +764,7 @@ class GameManager {
             if (target.currentHp <= 0) {
                 message += ` ${target.name} has been defeated!`;
                 room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== target.id);
+                this.triggerRewardSequence(roomId);
             }
         } else {
             message = `${attacker.name} rolls a ${attackRoll} to hit... Miss!`;
@@ -734,9 +788,23 @@ class GameManager {
         
         let message = '';
         if (hitRoll >= playerDefense) {
-            const damage = this.rollDice(monster.effect.dice);
-            target.stats.currentHp = Math.max(0, target.stats.currentHp - damage); // Prevent negative HP
-            message = `${monster.name} attacks ${target.name} and hits, dealing ${damage} damage!`;
+            let damage = this.rollDice(monster.effect.dice);
+            let damageAbsorbed = 0;
+            
+            if (target.stats.shieldHp > 0) {
+                damageAbsorbed = Math.min(damage, target.stats.shieldHp);
+                target.stats.shieldHp -= damageAbsorbed;
+                damage -= damageAbsorbed;
+            }
+
+            target.stats.currentHp = Math.max(0, target.stats.currentHp - damage);
+            
+            const totalDealt = damage + damageAbsorbed;
+            let damageMessage = `dealing ${totalDealt} damage!`;
+            if (damageAbsorbed > 0) {
+                damageMessage = `dealing ${totalDealt} damage! (${damageAbsorbed} absorbed by their shield.)`;
+            }
+            message = `${monster.name} attacks ${target.name} and hits, ${damageMessage}`;
             
             if (target.stats.currentHp === 0) {
                 target.lifeCount -= 1;
@@ -821,6 +889,11 @@ class GameManager {
         const room = this.rooms[roomId];
         if (!room || room.gameState.worldEvents.pendingSaves.length > 0) {
             return; // Still waiting for other players
+        }
+
+        if (!room.gameState.worldEvents.resolved) {
+            room.gameState.worldEvents.resolved = true;
+            this.triggerRewardSequence(roomId);
         }
 
         // All saves are done. Now continue the DM's turn robustly.
@@ -979,13 +1052,20 @@ class GameManager {
                 break;
             }
             case 'guard': {
-                const existingGuard = player.statusEffects.find(e => e.name === 'Guarded');
-                if (existingGuard) {
-                    existingGuard.duration = 2;
+                const armor = player.equipment.armor;
+                if (armor && armor.guardBonus > 0) {
+                    player.stats.shieldHp = armor.guardBonus;
+                    message = `${player.name} raises their shield, gaining ${armor.guardBonus} temporary Shield HP!`;
                 } else {
-                    player.statusEffects.push({ name: 'Guarded', duration: 2 });
+                    // Fallback for players without shields or guardBonus
+                    const existingGuard = player.statusEffects.find(e => e.name === 'Guarded');
+                    if (existingGuard) {
+                        existingGuard.duration = 2; // Refresh duration
+                    } else {
+                        player.statusEffects.push({ name: 'Guarded', duration: 2 });
+                    }
+                    message = `${player.name} takes a defensive stance, guarding against incoming attacks.`;
                 }
-                message = `${player.name} takes a defensive stance, guarding against incoming attacks.`;
                 break;
             }
         }

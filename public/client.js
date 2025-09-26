@@ -77,6 +77,7 @@ const confirmAttackBtn = document.getElementById('confirm-attack-btn');
 const apModal = document.getElementById('ap-modal');
 const apModalCancelBtn = document.getElementById('ap-modal-cancel-btn');
 const apModalConfirmBtn = document.getElementById('ap-modal-confirm-btn');
+const partyLootContainer = document.getElementById('party-loot-container');
 
 // End Turn Modal refs
 const endTurnConfirmModal = document.getElementById('end-turn-confirm-modal');
@@ -425,9 +426,15 @@ function renderGameState(room) {
                 shieldBonusHTML = `<span>SHIELD Bonus:</span><span class="stat-value">${baseShieldBonus} <span class="stat-bonus-highlight">${equipmentShieldBonus > 0 ? '+' : ''}${equipmentShieldBonus}</span></span>`;
             }
         }
+        
+        let shieldHpHTML = '';
+        if (myPlayerInfo.stats.shieldHp > 0) {
+            shieldHpHTML = `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>`;
+        }
 
         playerStatsDiv.innerHTML = `
             <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${myPlayerInfo.stats.maxHp}</span>
+            ${shieldHpHTML}
             <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}</span>
             ${damageBonusHTML}
             ${shieldBonusHTML}
@@ -468,13 +475,23 @@ function renderGameState(room) {
         playerHandDiv.appendChild(cardEl);
     });
 
-    // --- Render Board & World Event ---
+    // --- Render Board, Loot & World Event ---
     worldEventsContainer.innerHTML = '';
     if (gameState.worldEvents.currentEvent) {
         const cardEl = createCardElement(gameState.worldEvents.currentEvent);
         worldEventsContainer.appendChild(cardEl);
     }
     
+    partyLootContainer.innerHTML = '';
+    if (gameState.lootPool && gameState.lootPool.length > 0) {
+        gameState.lootPool.forEach(card => {
+            const cardEl = createCardElement(card, {}); // No actions on loot cards for now
+            partyLootContainer.appendChild(cardEl);
+        });
+    } else {
+        partyLootContainer.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>';
+    }
+
     gameBoardDiv.innerHTML = '';
     gameState.board.monsters.forEach(monster => {
         const cardEl = createCardElement({ ...monster, currentHp: monster.currentHp }, { isTargetable: isMyTurn });
@@ -823,7 +840,7 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
         
         setTimeout(() => {
             worldEventSaveModal.classList.add('hidden');
-        }, 2500);
+        }, 4000);
     }, 1500);
 });
 
