@@ -703,4 +703,32 @@ const playerEventCards = [
     { id: nextId(), name: "Sensory Muffle", type: "Player Event", requiredRoll: "Constitution Save DC 12", outcome: "Success: Your hearing is muffled. Failure: You are deafened for 1d4 rounds.", description: "The world goes silent as your senses are muted." },
     { id: nextId(), name: "Unwell Spell", type: "Player Event", requiredRoll: "Constitution Save DC 14", outcome: "Success: You feel unwell but recover quickly. Failure: You contract a Minor Affliction (GM chooses one).", description: "A wave of nausea and weakness washes over you..." },
     { id: nextId(), name: "Unwell Spell", type: "Player Event", requiredRoll: "Constitution Save DC 14", outcome: "Success: You feel unwell but recover quickly. Failure: You contract a Minor Affliction (GM chooses one).", description: "A wave of nausea and weakness washes over you..." },
-    { id: nextId(), name: "Unwell Spell", type: "Player Event", requiredRoll: "Constitution Save DC 14", outcome: "Success: You feel unwell but recover quickly. Failure: You contract a Minor Affliction (GM chooses one).", description: "A wave of
+    { id: nextId(), name: "Unwell Spell", type: "Player Event", requiredRoll: "Constitution Save DC 14", outcome: "Success: You feel unwell but recover quickly. Failure: You contract a Minor Affliction (GM chooses one).", description: "A wave of nausea and weakness washes over you..." },
+    { id: nextId(), name: "Equipment Malfunction", type: "Player Event", requiredRoll: "Dexterity Check DC 12", outcome: "The player's weapon is disabled for 1 turn.", description: "A strap breaks, a string snaps, or a mechanism jams. Your equipment fails you at a critical moment." },
+];
+
+const discoveryCards = [
+    { id: nextId(), name: "Aegis of the Stalwart", type: "Discovery", class: ["Warrior", "Cleric"], category: "Armor", effect: { description: "Once per combat, you can negate all damage from a single attack.", bonuses: { shield: 2 } } },
+    { id: nextId(), name: "Boots of Haste", type: "Discovery", class: "Any", category: "Utility", effect: { description: "Once per combat, gain an extra Action Point for one turn.", bonuses: { ap: 1 } } },
+    { id: nextId(), name: "Crown of the Intellect", type: "Discovery", class: ["Mage", "Cleric"], category: "Utility", effect: { description: "You have advantage on all Intelligence and Wisdom saving throws.", bonuses: { int: 2, wis: 2 } } },
+    { id: nextId(), name: "Gauntlets of Ogre Power", type: "Discovery", class: ["Barbarian", "Warrior"], category: "Utility", effect: { description: "Your Strength score becomes 19. If your Strength is already 19 or higher, this item has no effect on you.", bonuses: { str: 2 } } },
+    { id: nextId(), name: "Vorpal Blade", type: "Discovery", class: ["Rogue", "Warrior", "Ranger"], category: "Weapon", apCost: 1, effect: { type: "damage", dice: "1d10", description: "On a natural 20 attack roll, you cut off one of the creature's heads. Some creatures are immune to this effect." , bonuses: { damage: 3 } } },
+    { id: nextId(), name: "Ring of Spell Storing", type: "Discovery", class: ["Mage", "Cleric"], category: "Utility", effect: { description: "This ring stores spells cast into it, holding them until the wearer uses them. The ring can store up to 5 levels of spells at a time." } },
+    { id: nextId(), name: "Tome of Leadership", type: "Discovery", class: "Any", category: "Utility", effect: { description: "Reading this tome grants you a permanent +1 to your Charisma score and you gain proficiency in the Persuasion skill.", bonuses: { cha: 1 } } },
+];
+
+
+module.exports = {
+    classes,
+    statusEffectDefinitions,
+    actionCosts,
+    npcDialogue,
+    itemCards,
+    spellCards,
+    monsterCards,
+    weaponCards,
+    armorCards,
+    worldEventCards,
+    playerEventCards,
+    discoveryCards
+};

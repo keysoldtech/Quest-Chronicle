@@ -278,8 +278,8 @@ body.fantasy-bg {
     overflow-y: auto;
 }
 .right-panel {
-    display: grid;
-    grid-template-rows: 1fr auto;
+    display: flex;
+    flex-direction: column;
     gap: 1rem;
     overflow: hidden;
 }
@@ -501,11 +501,12 @@ body.fantasy-bg {
 
 /* --- RIGHT PANEL COMPONENTS --- */
 .upper-board-area {
+    flex: 1; /* Make this area grow and push the hand section down */
     display: flex;
     flex-direction: column;
     gap: 1rem;
     overflow-y: auto;
-    min-height: 0; /* Magic flexbox/grid property */
+    min-height: 0; /* Crucial for scrolling within a flex container */
     padding-right: 0.5rem; /* Space for scrollbar */
 }
 .party-loot-section {
