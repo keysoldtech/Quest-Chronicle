@@ -52,6 +52,7 @@ const joinVoiceBtn = document.getElementById('join-voice-btn');
 const voiceChatContainer = document.getElementById('voice-chat-container');
 const gameModeSelector = document.getElementById('game-mode-selector');
 const dmControls = document.getElementById('dm-controls');
+const dmPlayMonsterBtn = document.getElementById('dm-play-monster-btn');
 const worldEventsContainer = document.getElementById('world-events-container');
 const classSelectionDiv = document.getElementById('class-selection');
 const classCardsContainer = document.getElementById('class-cards-container');
@@ -201,9 +202,6 @@ function renderPlayerList(players, gameState) {
     const currentPlayerId = gameState.combatState.isActive ? gameState.combatState.turnOrder[gameState.combatState.currentTurnIndex] : (gameState.turnOrder[gameState.currentPlayerIndex] || null);
     playerList.innerHTML = ''; 
     Object.values(players).forEach(player => {
-        // Don't show the DM NPC in the player list
-        if (player.id === 'dm-npc') return;
-
         const isCurrentTurn = player.id === currentPlayerId;
         const li = document.createElement('li');
         li.id = `player-${player.id}`;
@@ -211,7 +209,7 @@ function renderPlayerList(players, gameState) {
         
         const npcTag = player.isNpc ? '<span class="npc-tag">[NPC]</span> ' : '';
         const roleClass = player.role === 'DM' ? 'dm' : 'explorer';
-        const classText = player.class ? `<span class="player-class"> - ${player.class}</span>` : '';
+        const classText = player.class && player.role !== 'DM' ? `<span class="player-class"> - ${player.class}</span>` : '';
         
         const statusEffectsHTML = (player.statusEffects || [])
             .map(e => `<span class="status-effect-sm">${e.name}</span>`)
@@ -240,6 +238,7 @@ function renderGameState(room) {
     // --- Phase-specific UI rendering ---
     const isCombat = gameState.combatState.isActive;
     const isHost = myId === hostId;
+    const isDM = myPlayerInfo.role === 'DM';
     
     // Determine whose turn it is
     let currentTurnTakerId;
@@ -249,15 +248,16 @@ function renderGameState(room) {
         currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
     }
     
+    const currentTurnTaker = players[currentTurnTakerId];
     const isMyTurn = currentTurnTakerId === myId;
-    const isDmNpcTurn = currentTurnTakerId === 'dm-npc';
+    const isNpcDmTurn = currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc;
     const canPlayTargetedCard = gameState.board.monsters.length > 0;
     
     classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || !!myPlayerInfo.class);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
     playerStatsContainer.classList.toggle('hidden', gameState.phase === 'lobby');
-    endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isHost && isDmNpcTurn)));
-    dmControls.classList.toggle('hidden', !isHost || gameState.phase === 'lobby');
+    endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isHost && isNpcDmTurn)));
+    dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     playerActionsContainer.classList.toggle('hidden', !isMyTurn);
     
     // Game mode selector should only be visible to the host in the lobby
@@ -332,12 +332,12 @@ function renderGameState(room) {
         const turnTaker = players[currentTurnTakerId] || gameState.board.monsters.find(m => m.id === currentTurnTakerId);
         
         if (turnTaker) {
-            if(isDmNpcTurn) {
+            if (turnTaker.role === 'DM') {
                 turnIndicator.textContent = "Dungeon Master's Turn";
             } else {
                  turnIndicator.textContent = `Current Turn: ${turnTaker.name}`;
-                 if(isMyTurn) turnIndicator.textContent += ' (Your Turn)';
             }
+            if(isMyTurn) turnIndicator.textContent += ' (Your Turn)';
         } else {
             turnIndicator.textContent = 'Waiting for next turn...';
         }
@@ -451,6 +451,10 @@ startGameBtn.addEventListener('click', () => {
 
 endTurnBtn.addEventListener('click', () => {
     socket.emit('endTurn');
+});
+
+dmPlayMonsterBtn.addEventListener('click', () => {
+    socket.emit('dmAction', { action: 'playMonster' });
 });
 
 chatForm.addEventListener('submit', (e) => {
