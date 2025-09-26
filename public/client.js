@@ -12,6 +12,7 @@ let selectedTargetId = null; // For combat targeting
 let pendingActionData = null; // For narrative modal
 let isMyTurnPreviously = false; // For "Your Turn" popup
 let tempSelectedClassId = null; // For temporary class selection in lobby
+let pendingAbilityConfirmation = null; // For non-attack ability confirmation
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -71,6 +72,7 @@ const narrativeCancelBtn = document.getElementById('narrative-cancel-btn');
 const narrativeConfirmBtn = document.getElementById('narrative-confirm-btn');
 const yourTurnPopup = document.getElementById('your-turn-popup');
 const attackRollPopup = document.getElementById('attack-roll-popup');
+const confirmAttackBtn = document.getElementById('confirm-attack-btn');
 
 // Event System DOM refs
 const eventOverlay = document.getElementById('event-overlay');
@@ -247,7 +249,6 @@ function renderGameState(room) {
     const currentTurnTaker = players[currentTurnTakerId];
     const isMyTurn = currentTurnTakerId === myId;
     const isNpcDmTurn = currentTurnTaker?.role === 'DM' && currentTurnTaker.isNpc;
-    const canPlayTargetedCard = gameState.board.monsters.length > 0;
     
     classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'lobby' || hasConfirmedClass);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
@@ -255,6 +256,7 @@ function renderGameState(room) {
     endTurnBtn.classList.toggle('hidden', !(isMyTurn || (isHost && isNpcDmTurn)));
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     playerActionsContainer.classList.toggle('hidden', !isMyTurn);
+    confirmAttackBtn.classList.toggle('hidden', !(isMyTurn && myPlayerInfo.equipment.weapon && selectedTargetId));
     
     // Game mode selector should only be visible to the host in the lobby
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
@@ -262,6 +264,7 @@ function renderGameState(room) {
 
     // "Your Turn" popup
     if (isMyTurn && !isMyTurnPreviously) {
+        pendingAbilityConfirmation = null; // Reset pending confirmations on turn start
         yourTurnPopup.classList.remove('hidden');
         setTimeout(() => yourTurnPopup.classList.add('hidden'), 1500);
     }
@@ -374,9 +377,7 @@ function renderGameState(room) {
     ['weapon', 'armor'].forEach(type => {
         const item = myPlayerInfo.equipment[type];
         if (item) {
-            const actions = { isPlayable: isMyTurn && type === 'weapon' && canPlayTargetedCard };
-            const cardEl = createCardElement(item, actions);
-            if (actions.isPlayable) cardEl.classList.add('attackable-weapon');
+            const cardEl = createCardElement(item, {}); // No direct actions on equipped cards
             equippedItemsDiv.appendChild(cardEl);
         }
     });
@@ -396,6 +397,7 @@ function renderGameState(room) {
         cardEl.addEventListener('click', () => {
             if (isMyTurn) {
                 selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
+                pendingAbilityConfirmation = null; // Cancel ability confirmation when targeting
                 renderGameState(currentRoomState); // Re-render to show selection
             }
         });
@@ -415,8 +417,26 @@ function renderGameState(room) {
             const btn = document.createElement('button');
             btn.textContent = label;
             btn.className = 'fantasy-button-sm fantasy-button-secondary';
+
+            if (pendingAbilityConfirmation === action) {
+                btn.textContent = `Confirm ${label.split(' ')[0]}?`;
+                btn.classList.remove('fantasy-button-secondary');
+                btn.classList.add('fantasy-button-danger');
+            }
+
             btn.onclick = () => {
-                socket.emit('playerAction', { action });
+                if (selectedTargetId) {
+                    selectedTargetId = null;
+                }
+
+                if (pendingAbilityConfirmation === action) {
+                    socket.emit('playerAction', { action });
+                    pendingAbilityConfirmation = null;
+                    // Server response will trigger the next render
+                } else {
+                    pendingAbilityConfirmation = action;
+                    renderGameState(currentRoomState); // Re-render to show confirmation state
+                }
             };
             playerActionsContainer.appendChild(btn);
         }
@@ -484,6 +504,25 @@ confirmClassBtn.addEventListener('click', () => {
     }
 });
 
+confirmAttackBtn.addEventListener('click', () => {
+    if (currentRoomState && currentRoomState.players[myId]) {
+        const player = currentRoomState.players[myId];
+        const currentTurnTakerId = currentRoomState.gameState.turnOrder[currentRoomState.gameState.currentPlayerIndex];
+        const isPlayerTurn = currentTurnTakerId === myId;
+        
+        if (isPlayerTurn && player.equipment.weapon && selectedTargetId) {
+            openNarrativeModal(
+                {
+                    action: 'attack',
+                    cardId: player.equipment.weapon.id,
+                    targetId: selectedTargetId
+                },
+                player.equipment.weapon.name
+            );
+        }
+    }
+});
+
 chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const message = chatInput.value.trim();
@@ -498,6 +537,12 @@ narrativeConfirmBtn.addEventListener('click', () => {
     if (pendingActionData) {
         const narrative = narrativeInput.value.trim();
         socket.emit('playerAction', { ...pendingActionData, narrative });
+        
+        if (pendingActionData.action === 'attack') {
+            selectedTargetId = null;
+        }
+        pendingAbilityConfirmation = null;
+
         closeNarrativeModal();
     }
 });
