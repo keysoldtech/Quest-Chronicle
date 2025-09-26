@@ -84,6 +84,8 @@ class GameManager {
             healthDice: { max: 0, current: 0 },
             statusEffects: [], // e.g., { name: 'Poisoned', duration: 3 }
             currentAp: 0,
+            pendingEventRoll: false,
+            pendingEventChoice: false,
         };
     }
 
@@ -404,10 +406,15 @@ class GameManager {
         this.processTurnEffects(roomId, currentId, 'end');
         
         // --- Event System Trigger ---
-        if (room.players[currentId]) { // Only trigger events for players, not monsters
+        if (room.players[currentId] && room.players[currentId].role === 'Explorer') { // Only trigger events for players, not monsters
             room.gameState.turnCount++;
-            if (room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0) {
-                this.randomEvent(roomId, currentId);
+            
+            const nextPlayerId = combatState.turnOrder[(combatState.currentTurnIndex + 1) % combatState.turnOrder.length];
+            const nextPlayer = room.players[nextPlayerId];
+
+            if (nextPlayer && !nextPlayer.isNpc && nextPlayer.role === 'Explorer' && room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0) {
+                nextPlayer.pendingEventRoll = true;
+                console.log(`[Event System] Pending event roll set for ${nextPlayer.name}.`);
             }
         }
 
@@ -559,8 +566,10 @@ class GameManager {
         const combatState = room.gameState.combatState;
 
         const isPlayerTurn = !combatState.isActive ? room.gameState.turnOrder[room.gameState.currentPlayerIndex] === playerId : combatState.turnOrder[combatState.currentTurnIndex] === playerId;
+        const canAct = !player.pendingEventRoll && !player.pendingEventChoice;
 
         if (!isPlayerTurn) return { error: "It's not your turn!" };
+        if (!canAct) return { error: "You must resolve the current event first!" };
         if (player.statusEffects.some(e => e.name === 'Stunned')) return { error: "You are stunned and cannot act!" };
 
         let card = cardId ? player.hand.find(c => c.id === cardId) : null;
@@ -752,49 +761,22 @@ class GameManager {
     resolvePlayerEvent(roomId, playerId, card) {
         if (!card.effect) return;
         const { type, dice, status, duration } = card.effect;
+        const player = this.rooms[roomId].players[playerId];
         
         switch(type) {
             case 'damage':
                 this.applyDamage(roomId, playerId, this.rollDice(dice));
+                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} takes damage from the event!`, channel: 'game' });
                 break;
             case 'heal':
                 this.applyHealing(roomId, playerId, this.rollDice(dice));
+                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} is healed by the event!`, channel: 'game' });
                 break;
             case 'status':
                 this.applyStatusEffect(roomId, playerId, status, duration);
+                io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} is afflicted with ${status}!`, channel: 'game' });
                 break;
         }
-    }
-
-    randomEvent(roomId, playerId) {
-        const room = this.rooms[roomId];
-        const player = room.players[playerId];
-        if (!room || !player) return;
-
-        const roll = this.rollDice('1d20');
-        console.log(`[Event System] Turn counter triggered for room ${roomId}. Player ${player.name} is active. Rolled a ${roll}.`);
-
-        if (roll >= 15) { // Player Event
-            const eventCard = room.gameState.decks.playerEvent.pop();
-            if (!eventCard) return;
-            console.log(`[Event System] Player Event: '${eventCard.name}' for ${player.name}.`);
-            io.to(roomId).emit('chatMessage', { senderName: 'System', message: `A strange energy envelops ${player.name}... ${eventCard.description}`, channel: 'game' });
-            this.resolvePlayerEvent(roomId, playerId, eventCard);
-            room.gameState.decks.playerEvent.unshift(eventCard);
-            shuffle(room.gameState.decks.playerEvent);
-        } else if (roll >= 10) { // Discovery Event
-            const lootCard = this.lootScaling(room);
-            if (!lootCard) {
-                console.log(`[Event System] Discovery Event triggered, but no suitable loot found.`);
-                return;
-            }
-            console.log(`[Event System] Discovery Event: ${player.name} found '${lootCard.name}'.`);
-            player.hand.push(lootCard);
-            io.to(roomId).emit('chatMessage', { senderName: 'System', message: `${player.name} makes a discovery! Found: ${lootCard.name}.`, channel: 'game' });
-        } else { // No event
-            console.log(`[Event System] No event occurred.`);
-        }
-        io.to(roomId).emit('gameStateUpdate', room);
     }
     
     // --- NPC AND GAME FLOW ---
@@ -812,9 +794,9 @@ class GameManager {
             console.log(`[Game Flow] ${room.players[playerId].name}'s turn ended in room ${roomId}.`);
             
             // --- Event System Trigger ---
-            room.gameState.turnCount++;
-            if (room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0) {
-                this.randomEvent(roomId, playerId);
+            const currentPlayer = room.players[playerId];
+            if(currentPlayer.role === 'Explorer') {
+                room.gameState.turnCount++;
             }
             
             const nextIndex = room.gameState.currentPlayerIndex + 1;
@@ -834,6 +816,12 @@ class GameManager {
                 room.gameState.currentPlayerIndex = nextIndex;
                 const nextPlayerId = room.gameState.turnOrder[nextIndex];
                 const nextPlayer = room.players[nextPlayerId];
+                
+                if (nextPlayer && !nextPlayer.isNpc && nextPlayer.role === 'Explorer' && room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0) {
+                    nextPlayer.pendingEventRoll = true;
+                    console.log(`[Event System] Pending event roll set for ${nextPlayer.name}.`);
+                }
+
                 console.log(`[Game Flow] Turn passed to ${nextPlayer.name} in room ${roomId}.`);
                 io.to(roomId).emit('chatMessage', { senderName: 'System', message: `It is now ${nextPlayer.name}'s turn.`, channel: 'game' });
                 io.to(roomId).emit('gameStateUpdate', room);
@@ -1154,6 +1142,80 @@ io.on('connection', (socket) => {
         if (result) {
             const room = gameManager.endTurn(result.room.id, socket.id);
         }
+    });
+
+    socket.on('rollForEvent', () => {
+        const result = gameManager.getPlayer(socket.id);
+        if (!result) return;
+        const { player, room } = result;
+
+        if (!player.pendingEventRoll) return;
+        player.pendingEventRoll = false;
+
+        const roll = gameManager.rollDice('1d20');
+        let outcome = 'none';
+        let drawnCards = [];
+
+        if (roll >= 15) { // Player Event
+            outcome = 'playerEvent';
+            for (let i = 0; i < 3; i++) {
+                if (room.gameState.decks.playerEvent.length > 0) drawnCards.push(room.gameState.decks.playerEvent.pop());
+            }
+        } else if (roll >= 10) { // Discovery
+            outcome = 'discovery';
+            for (let i = 0; i < 3; i++) {
+                const loot = gameManager.lootScaling(room);
+                if (loot) drawnCards.push(loot);
+            }
+        }
+
+        if (drawnCards.length > 0) {
+            room.gameState.pendingEventCards = drawnCards;
+            const cardOptions = drawnCards.map(c => ({ id: c.id }));
+            player.pendingEventChoice = true;
+            socket.emit('eventRollResult', { roll, outcome, cardOptions });
+        } else {
+            socket.emit('eventRollResult', { roll, outcome: 'none' });
+            io.to(room.id).emit('gameStateUpdate', room);
+        }
+    });
+    
+    socket.on('selectEventCard', ({ cardId }) => {
+        const result = gameManager.getPlayer(socket.id);
+        if (!result) return;
+        const { player, room } = result;
+
+        if (!player.pendingEventChoice || !room.gameState.pendingEventCards) return;
+
+        const chosenCard = room.gameState.pendingEventCards.find(c => c.id === cardId);
+        const otherCards = room.gameState.pendingEventCards.filter(c => c.id !== cardId);
+
+        if (!chosenCard) return;
+
+        // Put other cards back at the bottom of the deck
+        const deckName = chosenCard.type === 'Player Event' ? 'playerEvent' : 'discovery';
+        room.gameState.decks[deckName].unshift(...otherCards);
+
+        let message = '';
+        if (chosenCard.type === 'Player Event') {
+            message = `${player.name} drew an event card: ${chosenCard.name}! ${chosen-card.description}`;
+            gameManager.resolvePlayerEvent(room.id, player.id, chosenCard);
+            // Put the resolved card back in its deck and shuffle
+            room.gameState.decks.playerEvent.unshift(chosenCard);
+            shuffle(room.gameState.decks.playerEvent);
+        } else { // Discovery
+            message = `${player.name} made a discovery! Found: ${chosenCard.name}.`;
+            player.hand.push(chosenCard);
+        }
+
+        io.to(room.id).emit('chatMessage', { senderName: 'System', message, channel: 'game' });
+
+        // Cleanup state
+        player.pendingEventChoice = false;
+        delete room.gameState.pendingEventCards;
+
+        socket.emit('eventCardReveal', { chosenCard });
+        io.to(room.id).emit('gameStateUpdate', room);
     });
     
     socket.on('disconnect', () => {

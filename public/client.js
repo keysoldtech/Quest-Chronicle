@@ -10,6 +10,7 @@ let localStream;
 const peerConnections = {};
 let selectedTargetId = null; // For combat targeting
 let pendingActionData = null; // For narrative modal
+let isMyTurnPreviously = false; // For "Your Turn" popup
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -33,6 +34,7 @@ const chatInput = document.getElementById('chat-input');
 const startGameBtn = document.getElementById('startGameBtn');
 const endTurnBtn = document.getElementById('endTurnBtn');
 const turnIndicator = document.getElementById('turn-indicator');
+const turnCounter = document.getElementById('turn-counter');
 const playerHandDiv = document.getElementById('player-hand');
 const gameBoardDiv = document.getElementById('board-cards');
 const joinVoiceBtn = document.getElementById('join-voice-btn');
@@ -54,6 +56,17 @@ const narrativePrompt = document.getElementById('narrative-prompt');
 const narrativeInput = document.getElementById('narrative-input');
 const narrativeCancelBtn = document.getElementById('narrative-cancel-btn');
 const narrativeConfirmBtn = document.getElementById('narrative-confirm-btn');
+const yourTurnPopup = document.getElementById('your-turn-popup');
+
+// Event System DOM refs
+const eventOverlay = document.getElementById('event-overlay');
+const eventRollContainer = document.getElementById('event-roll-container');
+const rollDiceBtn = document.getElementById('roll-dice-btn');
+const eventDiceAnimationContainer = document.getElementById('event-dice-animation-container');
+const eventResultContainer = document.getElementById('event-result-container');
+const eventResultTitle = document.getElementById('event-result-title');
+const eventResultSubtitle = document.getElementById('event-result-subtitle');
+const eventCardSelection = document.getElementById('event-card-selection');
 
 
 // --- Helper Functions ---
@@ -221,6 +234,23 @@ function renderGameState(room) {
     dmControls.classList.toggle('hidden', !isDm || gameState.phase === 'lobby');
     playerActionsContainer.classList.toggle('hidden', !isMyTurn);
     
+    // "Your Turn" popup
+    if (isMyTurn && !isMyTurnPreviously) {
+        yourTurnPopup.classList.remove('hidden');
+        setTimeout(() => yourTurnPopup.classList.add('hidden'), 1500);
+    }
+    isMyTurnPreviously = isMyTurn;
+    
+    // Event Roll UI
+    if (isMyTurn && myPlayerInfo.pendingEventRoll) {
+        eventOverlay.classList.remove('hidden');
+        eventRollContainer.classList.remove('hidden');
+        eventDiceAnimationContainer.classList.add('hidden');
+        eventResultContainer.classList.add('hidden');
+    } else if (!myPlayerInfo.pendingEventChoice) {
+        eventOverlay.classList.add('hidden');
+    }
+
     // --- Lobby Phase ---
     if (gameState.phase === 'lobby' && !isDm) {
         if (classButtonsDiv.children.length === 0) {
@@ -250,6 +280,7 @@ function renderGameState(room) {
     }
     
     // --- Active Game & Turn Indicator ---
+    turnCounter.textContent = gameState.turnCount;
     if (gameState.phase !== 'lobby' && gameState.phase !== 'advanced_setup_choice') {
         let turnTakerId = null;
         // Determine the current turn taker based on game phase (combat vs. exploration)
@@ -404,6 +435,11 @@ narrativeConfirmBtn.addEventListener('click', () => {
 });
 narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
 
+rollDiceBtn.addEventListener('click', () => {
+    eventRollContainer.classList.add('hidden');
+    eventDiceAnimationContainer.classList.remove('hidden');
+    socket.emit('rollForEvent');
+});
 
 
 // --- Socket.IO Event Handlers ---
@@ -456,6 +492,55 @@ socket.on('gameStateUpdate', (room) => {
 socket.on('actionError', (message) => { 
     alert(`Action Failed: ${message}`);
     logMessage(message, { type: 'system' });
+});
+
+socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
+    setTimeout(() => {
+        eventDiceAnimationContainer.classList.add('hidden');
+        eventResultContainer.classList.remove('hidden');
+        eventCardSelection.innerHTML = '';
+
+        if (outcome === 'none') {
+            eventResultTitle.textContent = `You rolled a ${roll}.`;
+            eventResultSubtitle.textContent = "The winds of fate are calm... for now.";
+            setTimeout(() => {
+                eventOverlay.classList.add('hidden');
+            }, 2500);
+        } else {
+            const eventType = outcome === 'playerEvent' ? 'Player Event' : 'Discovery';
+            eventResultTitle.textContent = `You rolled a ${roll}!`;
+            eventResultSubtitle.textContent = `A ${eventType} occurs! Choose a card to reveal your fate.`;
+            cardOptions.forEach(cardInfo => {
+                const cardBack = document.createElement('div');
+                cardBack.className = 'card';
+                cardBack.dataset.cardId = cardInfo.id;
+                cardBack.onclick = () => {
+                    eventResultSubtitle.textContent = "Revealing your choice...";
+                    document.querySelectorAll('#event-card-selection .card').forEach(c => c.onclick = null); // Disable further clicks
+                    socket.emit('selectEventCard', { cardId: cardInfo.id });
+                };
+                eventCardSelection.appendChild(cardBack);
+            });
+        }
+    }, 2000); // Wait for dice animation to finish
+});
+
+socket.on('eventCardReveal', ({ chosenCard }) => {
+    const chosenCardElem = document.querySelector(`#event-card-selection .card[data-card-id="${chosenCard.id}"]`);
+    const otherCardElems = document.querySelectorAll(`#event-card-selection .card:not([data-card-id="${chosenCard.id}"])`);
+    
+    if (chosenCardElem) {
+        // Replace card back with revealed card
+        const newCard = createCardElement(chosenCard);
+        chosenCardElem.replaceWith(newCard);
+
+        // Make other cards disappear
+        otherCardElems.forEach(c => c.style.opacity = '0');
+        
+        setTimeout(() => {
+            eventOverlay.classList.add('hidden');
+        }, 4000); // Give player time to read the card
+    }
 });
 
 

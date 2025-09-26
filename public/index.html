@@ -49,7 +49,7 @@
         <header class="game-header">
             <div>
                  <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
-                 <p>You are connected.</p>
+                 <p>Turn: <span id="turn-counter">0</span></p>
             </div>
              <div class="header-controls">
                 <div id="dm-controls" class="dm-controls hidden">
@@ -150,6 +150,42 @@
             <div class="modal-actions">
                 <button id="narrative-cancel-btn" class="fantasy-button-secondary">Cancel</button>
                 <button id="narrative-confirm-btn" class="fantasy-button-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- "Your Turn" Popup -->
+    <div id="your-turn-popup" class="your-turn-popup hidden">YOUR TURN</div>
+
+    <!-- Event Overlay -->
+    <div id="event-overlay" class="event-overlay hidden">
+        <!-- Step 1: Roll Button -->
+        <div id="event-roll-container" class="event-step-container">
+            <h2 class="header-font">An Event is Triggered!</h2>
+            <p>Your actions have drawn the attention of fate. Roll the dice to see what happens.</p>
+            <button id="roll-dice-btn" class="fantasy-button-special">Roll Dice</button>
+        </div>
+
+        <!-- Step 2: Dice Animation -->
+        <div id="event-dice-animation-container" class="event-step-container hidden">
+            <div class="dice-scene">
+                <div id="dice" class="dice">
+                    <div class="face front"></div>
+                    <div class="face back"></div>
+                    <div class="face right"></div>
+                    <div class="face left"></div>
+                    <div class="face top"></div>
+                    <div class="face bottom"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Result and Card Choice -->
+        <div id="event-result-container" class="event-step-container hidden">
+            <h2 class="header-font" id="event-result-title"></h2>
+            <p id="event-result-subtitle"></p>
+            <div id="event-card-selection" class="card-container-row">
+                <!-- Card backs will be generated here -->
             </div>
         </div>
     </div>
