@@ -184,7 +184,7 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 0.5rem;
-    padding-bottom: calc(60px + 0.5rem); /* Space for bottom nav */
+    padding-bottom: 125px; /* Space for bottom nav AND action bar */
 }
 .mobile-screen {
     display: none; /* Hidden by default */
@@ -275,6 +275,15 @@ body {
 }
 .class-confirm-container { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--color-border); text-align: center; }
 
+.player-class-header {
+    text-align: center;
+    font-family: var(--font-title);
+    color: var(--color-special);
+    font-size: 1.5rem;
+    border-bottom: none;
+    margin-bottom: 1rem;
+    padding-bottom: 0;
+}
 .player-stats { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; font-size: 0.9rem; }
 .player-stats span { color: var(--color-text-secondary); }
 .player-stats .stat-value { font-weight: bold; color: var(--color-text-primary); }
@@ -289,7 +298,6 @@ body {
 .empty-pool-text { color: var(--color-text-secondary); font-style: italic; align-self: center; margin: auto; }
 .player-hand-header { display: flex; justify-content: space-between; align-items: center; }
 .player-hand-header .panel-header { margin-bottom: 0.5rem; border: none; }
-.player-turn-controls { display: flex; align-items: center; gap: 0.75rem; }
 .equipped-items-container { border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 0.75rem; transition: box-shadow 0.3s ease; }
 
 /* CARD STYLING */
@@ -357,19 +365,34 @@ body {
 /* FIXED ACTION BAR */
 .fixed-action-bar {
     position: fixed;
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    z-index: 500;
     background-color: var(--color-surface);
     padding: 0.75rem 1.5rem;
     border: 1px solid var(--color-border);
     border-radius: 12px;
     box-shadow: 0 5px 20px rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    z-index: 500;
 }
+/* Desktop */
+#fixed-action-bar {
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+/* Mobile */
+#mobile-action-bar {
+    bottom: 60px; /* Height of the nav bar */
+    left: 0;
+    width: 100%;
+    border-radius: 0;
+    justify-content: space-around;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+}
+
 
 /* DICE & EVENT ANIMATIONS */
 #dice-roll-overlay, #world-event-save-modal { transform: translateZ(0); -webkit-transform: translateZ(0); }

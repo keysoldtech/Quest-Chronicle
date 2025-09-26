@@ -15,7 +15,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.79</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.80</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -54,7 +54,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v3.79</p>
+                     <p class="build-number-font">v3.80</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -92,7 +92,7 @@
                     <div id="advanced-choice-buttons" class="button-grid"></div>
                 </div>
                 <div id="player-stats-container" class="panel-content hidden">
-                     <h2 class="panel-header">Your Stats</h2>
+                     <h2 id="player-class-name" class="panel-header player-class-header hidden">Your Class</h2>
                      <div id="player-stats" class="player-stats"></div>
                 </div>
             </aside>
@@ -149,7 +149,6 @@
                      <p class="turn-counter">Turn: <span id="mobile-turn-counter">0</span></p>
                 </div>
                  <div class="mobile-header-controls">
-                    <button id="mobile-chat-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">chat</span></button>
                     <div id="mobile-header-action-buttons">
                         <button id="mobile-leave-game-btn" class="btn btn-sm btn-icon btn-danger hidden"><span class="material-symbols-outlined">logout</span></button>
                         <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
@@ -167,10 +166,6 @@
                     <div class="panel mobile-panel">
                         <div class="player-hand-header">
                              <h2 class="panel-header">Your Hand</h2>
-                             <div class="player-turn-controls">
-                                <button id="mobile-confirm-attack-btn" class="btn btn-sm btn-primary hidden">Attack</button>
-                                <button id="mobile-endTurnBtn" class="btn btn-sm btn-primary hidden">End Turn</button>
-                            </div>
                         </div>
                         <div id="mobile-player-hand" class="card-container-row"></div>
                     </div>
@@ -186,7 +181,7 @@
                         </div>
                     </div>
                     <div id="mobile-player-stats" class="panel mobile-panel">
-                         <h2 class="panel-header">Your Stats</h2>
+                         <h2 id="mobile-player-class-name" class="panel-header player-class-header hidden">Your Class</h2>
                          <div id="mobile-stats-display" class="player-stats"></div>
                     </div>
                     <div id="mobile-player-equipment" class="panel mobile-panel">
@@ -214,13 +209,38 @@
                         <div id="mobile-party-loot-container" class="card-container-row"></div>
                     </div>
                 </div>
+
+                <!-- Mobile Screen 5: Log -->
+                <div id="mobile-screen-log" class="mobile-screen">
+                    <div class="panel mobile-panel" style="flex: 1; display: flex; flex-direction: column;">
+                        <div class="chat-header" style="margin-bottom: 0.5rem;">
+                            <h2 class="panel-header" style="margin: 0; border: none;">Chat & Log</h2>
+                        </div>
+                        <div id="mobile-chat-log" class="chat-log" style="flex-grow: 1;"></div>
+                        <form id="mobile-chat-form" class="chat-form" style="padding-top: 0.5rem; border-top: 1px solid var(--color-border)">
+                            <select id="mobile-chat-channel" class="select-field">
+                                <option value="game">Game</option>
+                                <option value="party">Party</option>
+                            </select>
+                            <input type="text" id="mobile-chat-input" class="input-field" placeholder="Type..." autocomplete="off">
+                            <button type="submit" class="btn btn-sm btn-primary">Send</button>
+                        </form>
+                    </div>
+                </div>
             </main>
+
+            <div id="mobile-action-bar" class="fixed-action-bar hidden">
+                <button id="mobile-action-attack-btn" class="btn btn-danger hidden">Confirm Attack</button>
+                <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard</button>
+                <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
+            </div>
 
             <nav class="mobile-bottom-nav">
                 <button class="nav-btn active" data-screen="game"><span class="material-symbols-outlined">swords</span>Game</button>
                 <button class="nav-btn" data-screen="character"><span class="material-symbols-outlined">person</span>Character</button>
                 <button class="nav-btn" data-screen="party"><span class="material-symbols-outlined">groups</span>Party</button>
                 <button class="nav-btn" data-screen="info"><span class="material-symbols-outlined">public</span>Info</button>
+                <button class="nav-btn" data-screen="log"><span class="material-symbols-outlined">chat</span>Log</button>
             </nav>
         </div>
 
