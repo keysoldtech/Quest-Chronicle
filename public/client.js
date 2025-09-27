@@ -126,6 +126,7 @@ const narrativeInput = get('narrative-input');
 const narrativeCancelBtn = get('narrative-cancel-btn');
 const narrativeConfirmBtn = get('narrative-confirm-btn');
 const yourTurnPopup = get('your-turn-popup');
+const rollResultPopup = get('roll-result-popup');
 const apModal = get('ap-modal');
 const apModalCancelBtn = get('ap-modal-cancel-btn');
 const apModalConfirmBtn = get('ap-modal-confirm-btn');
@@ -156,6 +157,17 @@ const voiceChatContainer = get('voice-chat-container');
 
 
 // --- Helper Functions ---
+function showRollResult(rollValue, type = 'd20') {
+    if (!rollResultPopup) return;
+    
+    rollResultPopup.textContent = `${type}: ${rollValue}`;
+    rollResultPopup.classList.add('visible');
+    
+    setTimeout(() => {
+        rollResultPopup.classList.remove('visible');
+    }, 1500); // Display for 1.5 seconds
+}
+
 function logMessage(message, options = {}) {
     const { type = 'system', channel, senderName, isNarrative = false } = options;
     const p = document.createElement('p');
@@ -771,6 +783,7 @@ socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left t
 socket.on('actionError', (errorMessage) => alert(errorMessage));
 
 socket.on('attackAnimation', (data) => {
+    showRollResult(data.d20Roll, 'd20');
     diceRollTitle.textContent = `${data.attackerName} attacks!`;
     diceRollResult.innerHTML = '';
     diceRollResult.classList.add('hidden');
@@ -795,6 +808,7 @@ socket.on('attackAnimation', (data) => {
 });
 
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
+    showRollResult(roll, 'd20');
     setTimeout(() => {
         dice.classList.remove('is-rolling');
         eventDiceAnimationContainer.classList.add('hidden');
@@ -827,6 +841,7 @@ socket.on('eventCardReveal', ({ chosenCard }) => {
     eventCardSelection.appendChild(createCardElement(chosenCard));
 });
 socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
+    showRollResult(d20Roll, 'd20');
     worldEventRollResult.textContent = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. ${success ? 'Success!' : 'Failure!'}`;
     worldEventRollResult.classList.remove('hidden');
     setTimeout(() => {

@@ -184,7 +184,7 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 0.5rem;
-    padding-bottom: 120px; /* Space for bottom nav and action bar */
+    padding-bottom: 180px; /* Space for bottom nav and action bar */
 }
 .mobile-screen {
     display: none; /* Hidden by default */
@@ -382,7 +382,18 @@ textarea.input-field { resize: vertical; min-height: 80px; }
 }
 .game-area-mobile .fixed-action-bar {
     bottom: 60px; /* Position above mobile nav bar */
+    gap: 0.2rem;
+    padding: 0.5rem;
 }
+
+.game-area-mobile .fixed-action-bar .btn {
+    flex-grow: 1;
+    flex-basis: 0;
+    padding: 0.6rem 0.1rem;
+    font-size: 0.65rem;
+    white-space: nowrap;
+}
+
 
 /* --- ANIMATIONS & SPECIAL STATES --- */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -392,6 +403,28 @@ textarea.input-field { resize: vertical; min-height: 80px; }
     font-family: var(--font-title); font-size: 3rem; padding: 1rem 3rem;
     border-radius: 12px; z-index: 1000; animation: fadeIn 0.3s ease-out;
 }
+.roll-result-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 1rem 2rem;
+    background-color: rgba(18, 24, 27, 0.9);
+    border: 2px solid var(--color-special);
+    border-radius: 12px;
+    color: var(--color-special);
+    font-family: var(--font-title);
+    font-size: 3rem;
+    z-index: 1001; /* Above your-turn-popup */
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.roll-result-popup.visible {
+    opacity: 1;
+}
+
 .pulse-highlight {
     box-shadow: 0 0 25px var(--color-special);
     border-color: var(--color-special);

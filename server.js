@@ -575,6 +575,7 @@ class GameManager {
             targetName: target.name,
             weaponName: weapon.name,
             hit,
+            d20Roll,
             totalRollToHit,
             requiredRoll: target.requiredRollToHit,
             rawDamageRoll,
