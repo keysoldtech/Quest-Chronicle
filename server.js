@@ -165,9 +165,9 @@ class GameManager {
                 
                 // Auto-equip
                 const weapon = npc.hand.find(c => c.type === 'Weapon');
-                if (weapon) this.equipItem({ id: npc.id }, { cardId: weapon.id }, true);
+                if (weapon) this._internalEquipItem(room, npc, weapon.id);
                 const armor = npc.hand.find(c => c.type === 'Armor');
-                if (armor) this.equipItem({ id: npc.id }, { cardId: armor.id }, true);
+                if (armor) this._internalEquipItem(room, npc, armor.id);
                 
                 room.players[npc.id] = npc;
                 explorerNpcs.push(npc);
@@ -232,9 +232,9 @@ class GameManager {
             
             // Auto-equip first weapon/armor
             const weapon = player.hand.find(c => c.type === 'Weapon');
-            if (weapon) this.equipItem(socket, { cardId: weapon.id }, true);
+            if (weapon) this._internalEquipItem(room, player, weapon.id);
             const armor = player.hand.find(c => c.type === 'Armor');
-            if (armor) this.equipItem(socket, { cardId: armor.id }, true);
+            if (armor) this._internalEquipItem(room, player, armor.id);
             
         } else { // Advanced Mode
             player.madeAdvancedChoice = false;
@@ -289,20 +289,15 @@ class GameManager {
         }
     }
 
-    equipItem(socket, { cardId }, isAutoEquip = false) {
-        const room = this.findRoomBySocket(socket);
-        const player = room?.players[socket.id];
-        if (!player) return;
-
+    _internalEquipItem(room, player, cardId) {
+        if (!player) return false;
+    
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
-        if (cardIndex === -1) {
-            if (!isAutoEquip) socket.emit('actionError', 'Card not in hand.');
-            return;
-        }
+        if (cardIndex === -1) return false;
         
         const cardToEquip = player.hand[cardIndex];
         const itemType = cardToEquip.type.toLowerCase(); // 'weapon' or 'armor'
-
+    
         if (player.equipment[itemType]) {
             player.hand.push(player.equipment[itemType]); // Move old item to hand
         }
@@ -311,6 +306,20 @@ class GameManager {
         player.hand.splice(cardIndex, 1);
         
         player.stats = this.calculatePlayerStats(player);
+        return true;
+    }
+
+    equipItem(socket, { cardId }, isAutoEquip = false) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+    
+        const success = this._internalEquipItem(room, player, cardId);
+        
+        if (!success && !isAutoEquip) {
+            socket.emit('actionError', 'Card not in hand.');
+            return;
+        }
+        
         this.emitGameState(room.id);
     }
     
@@ -323,19 +332,43 @@ class GameManager {
 
     handleNpcExplorerTurn(room, player) {
         setTimeout(() => {
-            // Simple AI: if there's a monster, attack it.
+            let actionTaken = false;
+    
+            // Action Priority 1: Attack
             const target = room.gameState.board.monsters[0];
             const weapon = player.equipment.weapon;
-    
             if (target && weapon && player.currentAp >= (weapon.apCost || 1)) {
                 const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
                 this.handleAttack(room, player, {
                     targetId: target.id,
                     narrative: narrative
                 });
+                actionTaken = true;
+            } 
+            // Action Priority 2: Guard if low on health
+            else if (player.stats.currentHp < player.stats.maxHp / 2 && player.currentAp >= gameData.actionCosts.guard) {
+                player.currentAp -= gameData.actionCosts.guard;
+                const guardBonus = player.equipment.armor?.guardBonus || 2;
+                player.stats.shieldHp += guardBonus;
+                this.sendMessageToRoom(room.id, { 
+                    channel: 'game', 
+                    type: 'system', 
+                    message: `${player.name} is wounded and takes a defensive stance, gaining ${guardBonus} Shield HP.` 
+                });
+                this.emitGameState(room.id);
+                actionTaken = true;
             }
     
-            // End the NPC's turn by advancing the turn order and starting the next turn
+            // If no action was taken, log a message
+            if (!actionTaken) {
+                 this.sendMessageToRoom(room.id, { 
+                    channel: 'game', 
+                    type: 'system', 
+                    message: `${player.name} considers their options and prepares for the next move.` 
+                });
+            }
+    
+            // Always end the turn after the action (or inaction)
             room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             if (room.gameState.currentPlayerIndex === 0) {
                 room.gameState.turnCount++;
@@ -352,21 +385,48 @@ class GameManager {
 
         // If it's an automated DM's turn (in single player), take action and pass turn.
         if (player.isNpc && player.role === 'DM') {
-            // On the first turn, play a monster to start the game
-            if (room.gameState.turnCount === 1) {
-                const monsterCard = room.gameState.decks.monster.pop();
-                if (monsterCard) {
-                    monsterCard.currentHp = monsterCard.maxHp;
-                    room.gameState.board.monsters.push(monsterCard);
-                    this.sendMessageToRoom(room.id, {
-                        channel: 'game',
-                        senderName: 'Dungeon Master',
-                        message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
-                        isNarrative: true
-                    });
+            // If there are no monsters on the board, the DM acts.
+            if (room.gameState.board.monsters.length === 0) {
+                // 25% chance to play a World Event if the deck has cards.
+                const roll = Math.random();
+                if (roll < 0.25 && room.gameState.decks.worldEvent.length > 0) {
+                    const worldEventCard = room.gameState.decks.worldEvent.pop();
+                    if (worldEventCard) {
+                        room.gameState.worldEvents.currentEvent = worldEventCard;
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game', senderName: 'Dungeon Master',
+                            message: gameData.npcDialogue.dm.worldEvent[Math.floor(Math.random() * gameData.npcDialogue.dm.worldEvent.length)],
+                            isNarrative: true
+                        });
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game', type: 'system',
+                            message: `A new World Event is active: ${worldEventCard.name}.`
+                        });
+                    }
+                } else {
+                    // Otherwise, play a monster.
+                    const monsterCard = room.gameState.decks.monster.pop();
+                    if (monsterCard) {
+                        monsterCard.currentHp = monsterCard.maxHp;
+                        room.gameState.board.monsters.push(monsterCard);
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game',
+                            senderName: 'Dungeon Master',
+                            message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
+                            isNarrative: true
+                        });
+                    }
                 }
+            } else {
+                 // If there are monsters, the DM's "action" is just narrative for now.
+                this.sendMessageToRoom(room.id, {
+                    channel: 'game',
+                    senderName: 'Dungeon Master',
+                    message: `The monsters continue their assault!`,
+                    isNarrative: true
+                });
             }
-            
+
             this.emitGameState(roomId); // Show the new state
             
             // Pass the turn after a short delay to simulate a real turn
@@ -441,18 +501,20 @@ class GameManager {
                     const oldHp = player.stats.currentHp;
                     player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
                     const actualHeal = player.stats.currentHp - oldHp;
-                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Brief Respite, healing for ${actualHeal} HP.` });
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Brief Respite, rolling 1d8 for ${healAmount} and healing for ${actualHeal} HP.` });
                 }
                 break;
             case 'fullRest':
                  if (player.currentAp >= gameData.actionCosts.fullRest && player.healthDice.current >= 2) {
                     player.currentAp -= gameData.actionCosts.fullRest;
                     player.healthDice.current -= 2;
-                    const healAmount = (Math.floor(Math.random() * 8) + 1) + (Math.floor(Math.random() * 8) + 1); // 2d8
+                    const healRoll1 = Math.floor(Math.random() * 8) + 1;
+                    const healRoll2 = Math.floor(Math.random() * 8) + 1;
+                    const healAmount = healRoll1 + healRoll2;
                     const oldHp = player.stats.currentHp;
                     player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
                     const actualHeal = player.stats.currentHp - oldHp;
-                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Full Rest, healing for ${actualHeal} HP.` });
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} uses Full Rest, rolling 2d8 for ${healAmount} (${healRoll1}+${healRoll2}) and healing for ${actualHeal} HP.` });
                 }
                 break;
         }
@@ -729,7 +791,7 @@ class GameManager {
         const player = room?.players[socket.id];
         if (!player || !player.pendingWorldEventSave) return;
 
-        const { dc, save, eventName } = player.pendingWorldEventSave;
+        const { dc, save } = player.pendingWorldEventSave;
         const playerClassStats = gameData.classes[player.class]?.stats;
         
         const d20Roll = Math.floor(Math.random() * 20) + 1;
@@ -737,30 +799,14 @@ class GameManager {
         const totalRoll = d20Roll + bonus;
         const success = totalRoll >= dc;
         
-        let outcomeMessage = '';
-        
-        if (success) {
-            outcomeMessage = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. Success!`;
-        } else {
-            outcomeMessage = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. Failure!`;
-            // Apply the consequence of the failure
-            const worldEvent = room.gameState.worldEvents.currentEvent;
-            if (worldEvent && worldEvent.name === eventName && worldEvent.effect?.type === 'stat_modifier') {
-                const { stat, value } = worldEvent.effect;
-                if (player.stats[stat] !== undefined) {
-                    player.stats[stat] += value;
-                    // Recalculate just in case, though direct modification is key here
-                    player.stats = this.calculatePlayerStats(player); 
-                    outcomeMessage += ` Your ${stat.replace(/([A-Z])/g, ' $1').toLowerCase()} is reduced by ${Math.abs(value)}!`;
-                }
-            }
-        }
-
-        const logMessage = `${player.name} rolls a save for ${eventName}: ${d20Roll} + ${bonus} bonus = ${totalRoll} (vs DC ${dc}) - ${success ? 'SUCCESS' : 'FAILURE'}!`;
-        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessage });
+        const outcomeText = success ? 'SUCCESS' : 'FAILURE';
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', type: 'system',
+            message: `${player.name} rolls a save for ${player.pendingWorldEventSave.eventName}: ${d20Roll} + ${bonus} bonus = ${totalRoll} (vs DC ${dc}) - ${outcomeText}!`
+        });
 
         player.pendingWorldEventSave = null;
-        socket.emit('worldEventSaveResult', { outcomeMessage });
+        socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc, success });
         this.emitGameState(room.id);
     }
 

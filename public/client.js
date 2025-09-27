@@ -60,6 +60,7 @@ const classSelectionDiv = get('class-selection');
 const classCardsContainer = get('class-cards-container');
 const confirmClassBtn = get('confirm-class-btn');
 const playerStatsContainer = get('player-stats-container');
+const playerClassName = get('player-class-name');
 const playerStatsDiv = get('player-stats');
 const equippedItemsDiv = get('equipped-items');
 const advancedCardChoiceDiv = get('advanced-card-choice');
@@ -84,14 +85,13 @@ const actionEndTurnBtn = get('action-end-turn-btn');
 const mobileTurnIndicator = get('mobile-turn-indicator');
 const mobileTurnCounter = get('mobile-turn-counter');
 const mobileStartGameBtn = get('mobile-startGameBtn');
-const mobileEndTurnBtn = get('mobile-endTurnBtn');
 const mobileBoardCards = get('mobile-board-cards');
 const mobilePlayerHand = get('mobile-player-hand');
-const mobileConfirmAttackBtn = get('mobile-confirm-attack-btn');
 const mobileClassSelection = get('mobile-class-selection');
 const mobileClassCardsContainer = get('mobile-class-cards-container');
 const mobileConfirmClassBtn = get('mobile-confirm-class-btn');
 const mobilePlayerStats = get('mobile-player-stats');
+const mobilePlayerClassName = get('mobile-player-class-name');
 const mobileStatsDisplay = get('mobile-stats-display');
 const mobilePlayerEquipment = get('mobile-player-equipment');
 const mobileEquippedItems = get('mobile-equipped-items');
@@ -100,11 +100,21 @@ const mobileWorldEventsContainer = get('mobile-world-events-container');
 const mobilePartyLootContainer = get('mobile-party-loot-container');
 const mobileLeaveGameBtn = get('mobile-leave-game-btn');
 const mobileBottomNav = document.querySelector('.mobile-bottom-nav');
+const mobileChatLog = get('mobile-chat-log');
+const mobileChatForm = get('mobile-chat-form');
+const mobileChatChannel = get('mobile-chat-channel');
+const mobileChatInput = get('mobile-chat-input');
+const mobileActionBar = get('mobile-action-bar');
+const mobileActionAttackBtn = get('mobile-action-attack-btn');
+const mobileActionGuardBtn = get('mobile-action-guard-btn');
+const mobileActionBriefRespiteBtn = get('mobile-action-brief-respite-btn');
+const mobileActionFullRestBtn = get('mobile-action-full-rest-btn');
+const mobileActionEndTurnBtn = get('mobile-action-end-turn-btn');
+
 
 // Shared Overlays & Modals
 const chatOverlay = get('chat-overlay');
 const chatToggleBtn = get('chat-toggle-btn');
-const mobileChatToggleBtn = get('mobile-chat-toggle-btn');
 const chatCloseBtn = get('chat-close-btn');
 const chatLog = get('chat-log');
 const chatForm = get('chat-form');
@@ -143,8 +153,6 @@ const worldEventDice = get('world-event-dice');
 const worldEventRollResult = get('world-event-roll-result');
 const worldEventSaveRollBtn = get('world-event-save-roll-btn');
 const voiceChatContainer = get('voice-chat-container');
-const cardDetailModal = get('card-detail-modal');
-const cardDetailContent = get('card-detail-content');
 
 
 // --- Helper Functions ---
@@ -176,8 +184,14 @@ function logMessage(message, options = {}) {
         }
     }
 
-    chatLog.appendChild(p);
+    // Append to all relevant chat logs
+    chatLog.appendChild(p.cloneNode(true));
     chatLog.scrollTop = chatLog.scrollHeight;
+    
+    if (mobileChatLog) {
+        mobileChatLog.appendChild(p.cloneNode(true));
+        mobileChatLog.scrollTop = mobileChatLog.scrollHeight;
+    }
 }
 
 function openNarrativeModal(actionData, cardName) {
@@ -193,107 +207,17 @@ function closeNarrativeModal() {
     narrativeModal.classList.add('hidden');
 }
 
-function showCardDetailModal(card, context) {
-    const { location } = context;
-    const isMyTurn = currentRoomState.gameState.turnOrder[currentRoomState.gameState.currentPlayerIndex] === myId;
-    
-    cardDetailContent.innerHTML = ''; // Clear previous content
-
-    const cardEl = createCardElement(card, { isDetailedView: true });
-    
-    const actionsContainer = document.createElement('div');
-    actionsContainer.className = 'card-detail-actions';
-    
-    // --- Determine available actions based on context ---
-    if (isMyTurn) {
-        if (location === 'hand' && (card.type === 'Weapon' || card.type === 'Armor')) {
-            const equipBtn = document.createElement('button');
-            equipBtn.textContent = 'Equip';
-            equipBtn.className = 'btn btn-sm btn-success';
-            equipBtn.onclick = () => {
-                socket.emit('equipItem', { cardId: card.id });
-                cardDetailModal.classList.add('hidden');
-            };
-            actionsContainer.appendChild(equipBtn);
-        }
-        if (location === 'hand' && (card.type === 'Consumable' || card.type === 'Spell' || card.type === 'Item' || card.type === 'Scroll')) {
-             const useBtn = document.createElement('button');
-            useBtn.textContent = card.type === 'Spell' ? 'Cast' : 'Use';
-            useBtn.className = 'btn btn-sm btn-primary';
-            useBtn.onclick = () => {
-                const cardEffect = card.effect || {};
-                 if ((cardEffect.type === 'damage' || cardEffect.target === 'any-monster') && !selectedTargetId) {
-                    alert("You must first select a monster to target!");
-                    return;
-                }
-                const action = card.type === 'Spell' ? 'castSpell' : 'useItem';
-                openNarrativeModal({ action, cardId: card.id, targetId: selectedTargetId }, card.name);
-                cardDetailModal.classList.add('hidden');
-                selectedTargetId = null; 
-            };
-            actionsContainer.appendChild(useBtn);
-        }
-        if (location === 'equipped' && card.type === 'Weapon') {
-            const selectBtn = document.createElement('button');
-            selectBtn.textContent = 'Select for Attack';
-            selectBtn.className = 'btn btn-sm btn-secondary';
-            selectBtn.onclick = () => {
-                selectedWeaponId = (selectedWeaponId === card.id) ? null : card.id;
-                cardDetailModal.classList.add('hidden');
-                renderGameState(currentRoomState);
-            };
-            actionsContainer.appendChild(selectBtn);
-        }
-        if (location === 'board' && card.type === 'Monster') {
-            const targetBtn = document.createElement('button');
-            targetBtn.textContent = 'Set as Target';
-            targetBtn.className = 'btn btn-sm btn-danger';
-            targetBtn.onclick = () => {
-                 if (!selectedWeaponId) {
-                    logMessage("Select your equipped weapon before choosing a target.", { channel: 'game' });
-                    const equippedContainer = get('equipped-items-container');
-                    equippedContainer.classList.add('pulse-highlight');
-                    setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
-                    cardDetailModal.classList.add('hidden');
-                    return;
-                }
-                selectedTargetId = selectedTargetId === card.id ? null : card.id;
-                cardDetailModal.classList.add('hidden');
-                renderGameState(currentRoomState);
-            };
-             actionsContainer.appendChild(targetBtn);
-        }
-    }
-    
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'btn btn-sm btn-secondary';
-    closeBtn.textContent = 'Close';
-    closeBtn.onclick = () => cardDetailModal.classList.add('hidden');
-    actionsContainer.appendChild(closeBtn);
-
-    cardDetailContent.appendChild(cardEl);
-    cardDetailContent.appendChild(actionsContainer);
-    cardDetailModal.classList.remove('hidden');
-}
-
-
-function createCardElement(card, options = {}) {
-    const { isDetailedView = false } = options;
+function createCardElement(card, actions = {}) {
+    const { isPlayable = false, isEquippable = false, isTargetable = false } = actions;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
 
     if (card.type === 'Monster') {
         cardDiv.dataset.monsterId = card.id;
-        if(currentRoomState.gameState?.turnOrder[currentRoomState.gameState.currentPlayerIndex] === myId) {
-            cardDiv.classList.add('targetable');
-        }
+        if(isTargetable) cardDiv.classList.add('targetable');
         if(selectedTargetId === card.id) cardDiv.classList.add('selected-target');
     }
-
-     if (card.type === 'Weapon' && myPlayerInfo?.equipment?.weapon?.id === card.id) {
-        if(selectedWeaponId === card.id) cardDiv.classList.add('selected-weapon');
-     }
     
     let typeInfo = card.type;
     if (card.category && card.category !== 'General') typeInfo += ` / ${card.category}`;
@@ -330,7 +254,34 @@ function createCardElement(card, options = {}) {
             <p class="card-type">${typeInfo}</p>
         </div>
     `;
+    
+    const actionContainer = document.createElement('div');
+    actionContainer.className = 'card-actions';
 
+    if (isPlayable) {
+        const playBtn = document.createElement('button');
+        const cardEffect = card.effect || {};
+        playBtn.textContent = card.type === 'Spell' ? 'Cast' : 'Use';
+        playBtn.className = 'btn btn-xs btn-primary';
+        playBtn.onclick = () => {
+            if ((cardEffect.type === 'damage' || cardEffect.target === 'any-monster') && !selectedTargetId) {
+                alert("You must select a monster to target!");
+                return;
+            }
+            const action = card.type === 'Spell' ? 'castSpell' : 'useItem';
+            openNarrativeModal({ action, cardId: card.id, targetId: selectedTargetId }, card.name);
+            selectedTargetId = null; // Reset target after opening modal
+        };
+        actionContainer.appendChild(playBtn);
+    }
+    if (isEquippable) {
+        const equipBtn = document.createElement('button');
+        equipBtn.textContent = 'Equip';
+        equipBtn.className = 'btn btn-xs btn-success';
+        equipBtn.onclick = () => socket.emit('equipItem', { cardId: card.id });
+        actionContainer.appendChild(equipBtn);
+    }
+    cardDiv.appendChild(actionContainer);
     return cardDiv;
 }
 
@@ -399,7 +350,6 @@ function renderGameState(room) {
     
     // --- Universal UI state ---
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby'));
-    mobileEndTurnBtn.classList.toggle('hidden', !isMyTurn);
     [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.classList.toggle('hidden', gameState.phase === 'lobby'));
     
     // Desktop specific
@@ -410,23 +360,43 @@ function renderGameState(room) {
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
     
     // Mobile specific
-    mobileClassSelection.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || isDM);
-    mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || isDM);
-    mobilePlayerEquipment.classList.toggle('hidden', !hasConfirmedClass || isDM);
+    const inMobileClassSelection = gameState.phase === 'class_selection' && !hasConfirmedClass && !isDM;
+    if (inMobileClassSelection) {
+        // If we are in class selection, force the character screen to be active
+        if (!get('mobile-screen-character').classList.contains('active')) {
+             document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+             get('mobile-screen-character').classList.add('active');
+             mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+             document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
+        }
+        mobileClassSelection.classList.remove('hidden');
+        mobilePlayerStats.classList.add('hidden');
+    } else {
+        mobileClassSelection.classList.add('hidden');
+        mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || isDM);
+    }
 
-    // --- Action Bar ---
+
+    // --- Action Bars ---
     fixedActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer));
+    mobileActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer));
+
     if(isMyTurn && isExplorer) {
         const weapon = myPlayerInfo.equipment.weapon;
         const hasEnoughApForAttack = weapon && myPlayerInfo.currentAp >= (weapon.apCost || 1);
-        actionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
         
+        // Desktop
+        actionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
         actionGuardBtn.disabled = myPlayerInfo.currentAp < 1;
         actionBriefRespiteBtn.disabled = myPlayerInfo.currentAp < 1 || myPlayerInfo.healthDice.current < 1;
         actionFullRestBtn.disabled = myPlayerInfo.currentAp < 2 || myPlayerInfo.healthDice.current < 2;
+
+        // Mobile
+        mobileActionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
+        mobileActionGuardBtn.disabled = myPlayerInfo.currentAp < 1;
+        mobileActionBriefRespiteBtn.disabled = myPlayerInfo.currentAp < 1 || myPlayerInfo.healthDice.current < 1;
+        mobileActionFullRestBtn.disabled = myPlayerInfo.currentAp < 2 || myPlayerInfo.healthDice.current < 2;
     }
-    
-    mobileConfirmAttackBtn.classList.toggle('hidden', !(isMyTurn && selectedTargetId && selectedWeaponId));
 
 
     if (isMyTurn && !isMyTurnPreviously) {
@@ -434,6 +404,7 @@ function renderGameState(room) {
         pendingAbilityConfirmation = null;
         selectedWeaponId = null;
         selectedTargetId = null;
+        pendingActionData = null;
         yourTurnPopup.classList.remove('hidden');
         setTimeout(() => yourTurnPopup.classList.add('hidden'), 1500);
     }
@@ -513,41 +484,45 @@ function renderGameState(room) {
         mobileTurnIndicator.textContent = isMyTurn ? "Your Turn" : turnTaker?.name || "Waiting...";
     }
     
-    // --- Render Player Stats with Bonus Highlighting ---
+    // --- Render Class Name & Player Stats ---
+    if (myPlayerInfo.class && isExplorer) {
+        const className = myPlayerInfo.class;
+        playerClassName.textContent = `The ${className}`;
+        mobilePlayerClassName.textContent = `The ${className}`;
+        playerClassName.classList.remove('hidden');
+        mobilePlayerClassName.classList.remove('hidden');
+    } else {
+        playerClassName.classList.add('hidden');
+        mobilePlayerClassName.classList.add('hidden');
+    }
+
+    let statsHTML = '';
     if (myPlayerInfo.stats && myPlayerInfo.class) {
         const classDataClient = classData[myPlayerInfo.class];
-        
-        const renderStatWithBonus = (baseValue, totalValue) => {
-            const bonus = totalValue - baseValue;
-            if (bonus !== 0) {
-                const sign = bonus > 0 ? '+' : '';
-                return `${baseValue} <span class="stat-bonus">${sign}${bonus}</span>`;
-            }
-            return `${baseValue}`;
-        };
-        
-        let statsHTML = `
-            <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${myPlayerInfo.stats.maxHp}</span>
-            ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
-            <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}</span>
-            <span>DMG Bonus:</span><span class="stat-value">${myPlayerInfo.stats.damageBonus}</span>
-            <span>SHIELD Bonus:</span><span class="stat-value">${myPlayerInfo.stats.shieldBonus}</span>
-            <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
-            <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
-        `;
-
         if (classDataClient) {
+            const hpBonus = myPlayerInfo.stats.maxHp - classDataClient.baseHp;
+            const dmgBonusBonus = myPlayerInfo.stats.damageBonus - classDataClient.baseDamageBonus;
+            const shieldBonusBonus = myPlayerInfo.stats.shieldBonus - classDataClient.baseShieldBonus;
+            const apBonus = myPlayerInfo.stats.ap - classDataClient.baseAp;
+
+            const formatBonus = (bonus) => {
+                if (bonus > 0) return `<span class="stat-bonus">+${bonus}</span>`;
+                if (bonus < 0) return `<span class="stat-bonus" style="color: var(--color-danger);">${bonus}</span>`;
+                return '';
+            };
+
             statsHTML = `
-                <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${renderStatWithBonus(classDataClient.baseHp, myPlayerInfo.stats.maxHp)}</span>
+                <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${classDataClient.baseHp}${formatBonus(hpBonus)}</span>
                 ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
-                <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${renderStatWithBonus(classDataClient.baseAp, myPlayerInfo.stats.ap)}</span>
-                <span>DMG Bonus:</span><span class="stat-value">${renderStatWithBonus(classDataClient.baseDamageBonus, myPlayerInfo.stats.damageBonus)}</span>
-                <span>SHIELD Bonus:</span><span class="stat-value">${renderStatWithBonus(classDataClient.baseShieldBonus, myPlayerInfo.stats.shieldBonus)}</span>
+                <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${classDataClient.baseAp}${formatBonus(apBonus)}</span>
+                <span>DMG Bonus:</span><span class="stat-value">${classDataClient.baseDamageBonus}${formatBonus(dmgBonusBonus)}</span>
+                <span>SHIELD Bonus:</span><span class="stat-value">${classDataClient.baseShieldBonus}${formatBonus(shieldBonusBonus)}</span>
                 <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
                 <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
             `;
+        } else {
+            statsHTML = `<span>Stats loading...</span>`;
         }
-        
         playerStatsDiv.innerHTML = statsHTML;
         mobileStatsDisplay.innerHTML = statsHTML;
     }
@@ -559,8 +534,16 @@ function renderGameState(room) {
         ['weapon', 'armor'].forEach(type => {
             const item = myPlayerInfo.equipment[type];
             if (item) {
-                const cardEl = createCardElement(item);
-                cardEl.onclick = () => showCardDetailModal(item, { location: 'equipped' });
+                const cardEl = createCardElement(item, {});
+                if (type === 'weapon' && isMyTurn) {
+                    cardEl.classList.add('attackable-weapon');
+                    if (item.id === selectedWeaponId) cardEl.classList.add('selected-weapon');
+                    cardEl.onclick = () => {
+                        selectedWeaponId = (selectedWeaponId === item.id) ? null : item.id;
+                        selectedTargetId = null; // Also reset target when changing weapon selection
+                        renderGameState(currentRoomState);
+                    };
+                }
                 container.appendChild(cardEl);
             }
         });
@@ -569,8 +552,9 @@ function renderGameState(room) {
     [playerHandDiv, mobilePlayerHand].forEach(container => {
         container.innerHTML = '';
         myPlayerInfo.hand.forEach(card => {
-            const cardEl = createCardElement(card);
-            cardEl.onclick = () => showCardDetailModal(card, { location: 'hand' });
+            const isEquippable = card.type === 'Weapon' || card.type === 'Armor';
+            const isPlayable = isMyTurn && !isEquippable;
+            const cardEl = createCardElement(card, { isPlayable, isEquippable });
             container.appendChild(cardEl);
         });
     });
@@ -579,34 +563,41 @@ function renderGameState(room) {
     [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, gameBoardDiv, mobileBoardCards].forEach(c => c.innerHTML = '');
 
     if (gameState.worldEvents.currentEvent) {
-         const cardEl = createCardElement(gameState.worldEvents.currentEvent);
-         cardEl.onclick = () => showCardDetailModal(gameState.worldEvents.currentEvent, { location: 'world' });
-        [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.appendChild(cardEl.cloneNode(true)));
+        [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.appendChild(createCardElement(gameState.worldEvents.currentEvent)));
     }
     if (gameState.lootPool && gameState.lootPool.length > 0) {
         gameState.lootPool.forEach(card => {
-             const cardEl = createCardElement(card);
-             cardEl.onclick = () => showCardDetailModal(card, { location: 'loot' });
-            [partyLootContainer, mobilePartyLootContainer].forEach(c => c.appendChild(cardEl.cloneNode(true)));
+            [partyLootContainer, mobilePartyLootContainer].forEach(c => c.appendChild(createCardElement(card, {})));
         });
     } else {
         [partyLootContainer, mobilePartyLootContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>');
     }
     
     gameState.board.monsters.forEach(monster => {
-        const cardEl = createCardElement(monster);
-        cardEl.onclick = () => showCardDetailModal(monster, { location: 'board' });
+        const clickHandler = () => {
+            if (!isMyTurn) return;
+
+            if (!selectedWeaponId) {
+                logMessage("Select your equipped weapon before choosing a target.", { channel: 'game' });
+                const equippedContainer = get('equipped-items-container');
+                equippedContainer.classList.add('pulse-highlight');
+                setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
+                return;
+            }
+            
+            selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
+            renderGameState(currentRoomState);
+        };
+
+        const desktopCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
+        desktopCardEl.addEventListener('click', clickHandler);
+        gameBoardDiv.appendChild(desktopCardEl);
         
-        // Create and setup desktop card
-        gameBoardDiv.appendChild(cardEl.cloneNode(true));
-        get(gameBoardDiv.id).lastChild.onclick = () => showCardDetailModal(monster, { location: 'board' });
-        
-        // Create and setup mobile card
-        mobileBoardCards.appendChild(cardEl.cloneNode(true));
-        get(mobileBoardCards.id).lastChild.onclick = () => showCardDetailModal(monster, { location: 'board' });
+        const mobileCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
+        mobileCardEl.addEventListener('click', clickHandler);
+        mobileBoardCards.appendChild(mobileCardEl);
     });
     
-    // AP Modal Logic
     if (isMyTurn && myPlayerInfo.currentAp === 0 && !apModalShownThisTurn) {
         apModal.classList.remove('hidden');
         apModalShownThisTurn = true;
@@ -648,36 +639,28 @@ joinRoomBtn.addEventListener('click', () => {
 }));
 
 // Turn Controls
-actionEndTurnBtn.addEventListener('click', () => endTurnConfirmModal.classList.remove('hidden'));
-mobileEndTurnBtn.addEventListener('click', () => endTurnConfirmModal.classList.remove('hidden'));
-
-actionAttackBtn.addEventListener('click', () => {
+[actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => endTurnConfirmModal.classList.remove('hidden')));
+[actionAttackBtn, mobileActionAttackBtn].forEach(btn => btn.addEventListener('click', () => {
     if (isMyTurnPreviously && selectedWeaponId && selectedTargetId) {
         const weapon = myPlayerInfo.equipment.weapon;
         if (weapon && weapon.id === selectedWeaponId) {
             openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
         }
     }
-});
-mobileConfirmAttackBtn.addEventListener('click', () => {
-    if (isMyTurnPreviously && selectedWeaponId && selectedTargetId) {
-        const weapon = myPlayerInfo.equipment.weapon;
-        if (weapon && weapon.id === selectedWeaponId) {
-            openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
-        }
-    }
-});
-
-actionGuardBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' }));
+}));
+[actionGuardBtn, mobileActionGuardBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
 actionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
 actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
+mobileActionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
+mobileActionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
+
 
 dmPlayMonsterBtn.addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
 
 // Navigation (Mobile & Desktop)
 mobileBottomNav.addEventListener('click', (e) => {
     const navBtn = e.target.closest('.nav-btn');
-    if (!navBtn) return;
+    if (!navBtn || !navBtn.dataset.screen) return;
 
     mobileBottomNav.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     navBtn.classList.add('active');
@@ -703,7 +686,7 @@ desktopTabButtons.forEach(button => {
 
 
 // Chat, Modals, etc.
-[chatToggleBtn, mobileChatToggleBtn].forEach(btn => btn.addEventListener('click', () => chatOverlay.classList.toggle('hidden')));
+chatToggleBtn.addEventListener('click', () => chatOverlay.classList.toggle('hidden'));
 chatCloseBtn.addEventListener('click', () => chatOverlay.classList.add('hidden'));
 chatForm.addEventListener('submit', (e) => { 
     e.preventDefault();
@@ -712,6 +695,15 @@ chatForm.addEventListener('submit', (e) => {
     if (message) {
         socket.emit('sendMessage', { channel, message });
         chatInput.value = '';
+    }
+});
+mobileChatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const message = mobileChatInput.value.trim();
+    const channel = mobileChatChannel.value;
+    if (message) {
+        socket.emit('sendMessage', { channel, message });
+        mobileChatInput.value = '';
     }
 });
 [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.addEventListener('click', () => {
@@ -726,16 +718,11 @@ endTurnCancelBtn.addEventListener('click', () => endTurnConfirmModal.classList.a
 narrativeConfirmBtn.addEventListener('click', () => {
     if (pendingActionData) {
         socket.emit('playerAction', { ...pendingActionData, narrative: narrativeInput.value });
-        
-        // After sending an attack, immediately reset the selections to prevent resubmission
-        // and to clean up the UI before the server responds.
         if (pendingActionData.action === 'attack') {
             selectedWeaponId = null;
             selectedTargetId = null;
         }
-
         closeNarrativeModal();
-        // A gameStateUpdate from the server will trigger the final re-render.
     }
 });
 
@@ -839,8 +826,8 @@ socket.on('eventCardReveal', ({ chosenCard }) => {
     eventCardSelection.innerHTML = '';
     eventCardSelection.appendChild(createCardElement(chosenCard));
 });
-socket.on('worldEventSaveResult', ({ outcomeMessage }) => {
-    worldEventRollResult.innerHTML = outcomeMessage;
+socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
+    worldEventRollResult.textContent = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. ${success ? 'Success!' : 'Failure!'}`;
     worldEventRollResult.classList.remove('hidden');
     setTimeout(() => {
         worldEventSaveModal.classList.add('hidden');
