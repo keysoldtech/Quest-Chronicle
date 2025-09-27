@@ -812,8 +812,15 @@ endTurnCancelBtn.addEventListener('click', () => {
 });
 
 narrativeConfirmBtn.addEventListener('click', () => {
+    const narrativeText = narrativeInput.value.trim();
+    if (narrativeText === "") {
+        alert("Please describe your action before confirming.");
+        narrativeInput.focus();
+        return;
+    }
+
     if (pendingActionData) {
-        socket.emit('playerAction', { ...pendingActionData, narrative: narrativeInput.value });
+        socket.emit('playerAction', { ...pendingActionData, narrative: narrativeText });
         if (pendingActionData.action === 'attack') {
             selectedWeaponId = null;
             selectedTargetId = null;
