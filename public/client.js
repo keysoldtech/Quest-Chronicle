@@ -249,6 +249,14 @@ function openNarrativeModal(actionData, cardName) {
 function closeNarrativeModal() {
     pendingActionData = null;
     narrativeModal.classList.add('hidden');
+    
+    // On any close, reset selections to prevent dangling state.
+    selectedWeaponId = null;
+    selectedTargetId = null;
+    if (currentRoomState.id) {
+        renderGameState(currentRoomState);
+    }
+    
     finishModal();
 }
 
@@ -261,7 +269,6 @@ function createCardElement(card, actions = {}) {
     if (card.type === 'Monster') {
         cardDiv.dataset.monsterId = card.id;
         if(isTargetable) cardDiv.classList.add('targetable');
-        if(selectedTargetId === card.id) cardDiv.classList.add('selected-target');
     }
     
     let typeInfo = card.type;
@@ -429,22 +436,18 @@ function renderGameState(room) {
     mobileActionBar.classList.toggle('hidden', !showActionBar);
 
     if (showActionBar) {
-        const weapon = myPlayerInfo.equipment.weapon;
-        const hasEnoughApForAttack = weapon && myPlayerInfo.currentAp >= (weapon.apCost || 1);
         const canGuard = myPlayerInfo.currentAp >= 1;
         const canBriefRespite = myPlayerInfo.currentAp >= 1 && myPlayerInfo.healthDice.current > 0;
         const canFullRest = myPlayerInfo.currentAp >= 2 && myPlayerInfo.healthDice.current >= 2;
 
         // Desktop
-        actionAttackBtn.classList.remove('hidden');
-        actionAttackBtn.disabled = !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack);
+        actionAttackBtn.classList.add('hidden');
         actionGuardBtn.disabled = !canGuard;
         actionBriefRespiteBtn.disabled = !canBriefRespite;
         actionFullRestBtn.disabled = !canFullRest;
 
         // Mobile
-        mobileActionAttackBtn.classList.remove('hidden');
-        mobileActionAttackBtn.disabled = !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack);
+        mobileActionAttackBtn.classList.add('hidden');
         mobileActionGuardBtn.disabled = !canGuard;
         mobileActionBriefRespiteBtn.disabled = !canBriefRespite;
         mobileActionFullRestBtn.disabled = !canFullRest;
@@ -675,8 +678,16 @@ function renderGameState(room) {
                 return;
             }
             
-            selectedTargetId = selectedTargetId === monster.id ? null : monster.id;
-            renderGameState(currentRoomState);
+            const weapon = myPlayerInfo.equipment.weapon;
+            if (weapon && weapon.id === selectedWeaponId) {
+                const apCost = weapon.apCost || 1;
+                if (myPlayerInfo.currentAp < apCost) {
+                    logMessage('Not enough Action Points to attack.', { channel: 'game' });
+                    return;
+                }
+                // A weapon is selected, a monster was clicked. Open narrative modal directly.
+                openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: monster.id }, weapon.name);
+            }
         };
 
         const desktopCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
@@ -732,18 +743,9 @@ joinRoomBtn.addEventListener('click', () => {
 
 // Turn Controls
 [actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => {
-    addToModalQueue(() => {
-        endTurnConfirmModal.classList.remove('hidden');
-    }, 'end-turn-confirm');
+    socket.emit('endTurn');
 }));
-[actionAttackBtn, mobileActionAttackBtn].forEach(btn => btn.addEventListener('click', () => {
-    if (selectedWeaponId && selectedTargetId) {
-        const weapon = myPlayerInfo.equipment.weapon;
-        if (weapon && weapon.id === selectedWeaponId) {
-            openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
-        }
-    }
-}));
+
 [actionGuardBtn, mobileActionGuardBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
 actionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
 actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
@@ -828,10 +830,6 @@ narrativeConfirmBtn.addEventListener('click', () => {
 
     if (pendingActionData) {
         socket.emit('playerAction', { ...pendingActionData, narrative: narrativeText });
-        if (pendingActionData.action === 'attack') {
-            selectedWeaponId = null;
-            selectedTargetId = null;
-        }
         closeNarrativeModal();
     }
 });
