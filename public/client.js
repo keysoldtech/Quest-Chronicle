@@ -893,13 +893,6 @@ worldEventSaveRollBtn.addEventListener('click', () => {
     worldEventSaveRollBtn.disabled = true;
     worldEventDice.className = 'dice is-rolling';
 });
-worldEventSaveContinueBtn.addEventListener('click', () => {
-    isResolvingWorldEvent = false;
-    worldEventSaveModal.classList.add('hidden');
-    finishModal();
-});
-
-
 // Skip functionality
 document.body.addEventListener('click', (e) => {
     if (currentSkipHandler && !e.target.closest('#skip-popup-btn')) {
@@ -1059,20 +1052,29 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
         // Stop the dice animation
         worldEventDice.classList.remove('is-rolling');
         
-        // Hide the roll button, show the result and continue button
+        // Hide the roll button, show the result.
         worldEventSaveRollBtn.classList.add('hidden');
         worldEventRollResult.textContent = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. ${success ? 'Success!' : 'Failure!'}`;
         worldEventRollResult.classList.remove('hidden');
         
-        // Show the continue button to allow faster closing, but also set a timeout.
+        // Show the continue button to allow faster closing, but also set a timeout as a failsafe.
         worldEventSaveContinueBtn.classList.remove('hidden');
-        setTimeout(() => {
+        
+        const closeTimeout = setTimeout(() => {
             if (!worldEventSaveModal.classList.contains('hidden')) {
                  isResolvingWorldEvent = false;
                  worldEventSaveModal.classList.add('hidden');
                  finishModal();
             }
         }, 3500);
+
+        // Overwrite onclick to ensure we have a clean handler that also manages the timeout
+        worldEventSaveContinueBtn.onclick = () => {
+            clearTimeout(closeTimeout);
+            isResolvingWorldEvent = false;
+            worldEventSaveModal.classList.add('hidden');
+            finishModal();
+        };
 
         // Show the small popup at the top
         showRollResult(d20Roll, 'd20');
