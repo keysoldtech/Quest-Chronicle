@@ -15,7 +15,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 3.81</p>
+        <p class="subtitle-font">Multiplayer Prototype 3.82</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -54,7 +54,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v3.81</p>
+                     <p class="build-number-font">v3.82</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -157,11 +157,15 @@
             </header>
             
             <main class="mobile-main">
-                <!-- Mobile Screen 1: Game (Board, Hand, Actions) -->
+                <!-- Mobile Screen 1: Game (Board, Equipment, Hand, Actions) -->
                 <div id="mobile-screen-game" class="mobile-screen active">
                     <div class="panel mobile-panel">
                         <h2 class="panel-header">Game Board</h2>
                         <div id="mobile-board-cards" class="card-container-row"></div>
+                    </div>
+                    <div id="mobile-player-equipment" class="panel mobile-panel">
+                         <h2 class="panel-header">Your Equipment</h2>
+                         <div id="mobile-equipped-items" class="card-container-row"></div>
                     </div>
                     <div class="panel mobile-panel">
                         <div class="player-hand-header">
@@ -171,7 +175,7 @@
                     </div>
                 </div>
 
-                <!-- Mobile Screen 2: Character (Stats, Equipment, Class Selection) -->
+                <!-- Mobile Screen 2: Character (Stats, Class Selection) -->
                 <div id="mobile-screen-character" class="mobile-screen">
                     <div id="mobile-class-selection" class="panel-content panel">
                         <h2 class="panel-header">Choose Your Class</h2>
@@ -183,10 +187,6 @@
                     <div id="mobile-player-stats" class="panel mobile-panel">
                          <h2 id="mobile-player-class-name" class="panel-header player-class-header hidden">Your Class</h2>
                          <div id="mobile-stats-display" class="player-stats"></div>
-                    </div>
-                    <div id="mobile-player-equipment" class="panel mobile-panel">
-                         <h2 class="panel-header">Your Equipment</h2>
-                         <div id="mobile-equipped-items" class="card-container-row"></div>
                     </div>
                 </div>
 
@@ -236,6 +236,8 @@
                 <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest</button>
                 <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
             </div>
+            
+            <div id="mobile-persistent-log" class="mobile-persistent-log"></div>
 
             <nav class="mobile-bottom-nav">
                 <button class="nav-btn active" data-screen="game"><span class="material-symbols-outlined">swords</span>Game</button>

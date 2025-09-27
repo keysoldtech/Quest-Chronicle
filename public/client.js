@@ -29,7 +29,7 @@ const classData = {
     Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, description: "Wielder of arcane energies.", abilities: ["Arcane Recovery", "Spell Mastery"] },
     Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, description: "A peerless hunter and scout.", abilities: ["Favored Enemy", "Hunter's Mark"] },
     Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
-    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
 };
 
 
@@ -110,6 +110,7 @@ const mobileActionGuardBtn = get('mobile-action-guard-btn');
 const mobileActionBriefRespiteBtn = get('mobile-action-brief-respite-btn');
 const mobileActionFullRestBtn = get('mobile-action-full-rest-btn');
 const mobileActionEndTurnBtn = get('mobile-action-end-turn-btn');
+const mobilePersistentLog = get('mobile-persistent-log');
 
 
 // Shared Overlays & Modals
@@ -189,8 +190,16 @@ function logMessage(message, options = {}) {
     chatLog.scrollTop = chatLog.scrollHeight;
     
     if (mobileChatLog) {
-        mobileChatLog.appendChild(p);
+        mobileChatLog.appendChild(p.cloneNode(true));
         mobileChatLog.scrollTop = mobileChatLog.scrollHeight;
+    }
+
+    if (mobilePersistentLog) {
+        mobilePersistentLog.appendChild(p);
+        while (mobilePersistentLog.children.length > 3) {
+            mobilePersistentLog.firstChild.remove();
+        }
+        mobilePersistentLog.scrollTop = mobilePersistentLog.scrollHeight;
     }
 }
 
@@ -371,11 +380,9 @@ function renderGameState(room) {
         }
         mobileClassSelection.classList.remove('hidden');
         mobilePlayerStats.classList.add('hidden');
-        mobilePlayerEquipment.classList.add('hidden');
     } else {
         mobileClassSelection.classList.add('hidden');
         mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || isDM);
-        mobilePlayerEquipment.classList.toggle('hidden', !hasConfirmedClass || isDM);
     }
 
 
@@ -497,19 +504,33 @@ function renderGameState(room) {
         mobilePlayerClassName.classList.add('hidden');
     }
 
+    let statsHTML = '';
     if (myPlayerInfo.stats && myPlayerInfo.class) {
         const classDataClient = classData[myPlayerInfo.class];
-        
-        let statsHTML = `
-            <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${myPlayerInfo.stats.maxHp}</span>
-            ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
-            <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}</span>
-            <span>DMG Bonus:</span><span class="stat-value">${myPlayerInfo.stats.damageBonus}</span>
-            <span>SHIELD Bonus:</span><span class="stat-value">${myPlayerInfo.stats.shieldBonus}</span>
-            <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
-            <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
-        `;
-        
+        if (classDataClient) {
+            const hpBonus = myPlayerInfo.stats.maxHp - classDataClient.baseHp;
+            const dmgBonusBonus = myPlayerInfo.stats.damageBonus - classDataClient.baseDamageBonus;
+            const shieldBonusBonus = myPlayerInfo.stats.shieldBonus - classDataClient.baseShieldBonus;
+            const apBonus = myPlayerInfo.stats.ap - classDataClient.baseAp;
+
+            const formatBonus = (bonus) => {
+                if (bonus > 0) return `<span class="stat-bonus">+${bonus}</span>`;
+                if (bonus < 0) return `<span class="stat-bonus" style="color: var(--color-danger);">${bonus}</span>`;
+                return '';
+            };
+
+            statsHTML = `
+                <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${classDataClient.baseHp}${formatBonus(hpBonus)}</span>
+                ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
+                <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${classDataClient.baseAp}${formatBonus(apBonus)}</span>
+                <span>DMG Bonus:</span><span class="stat-value">${classDataClient.baseDamageBonus}${formatBonus(dmgBonusBonus)}</span>
+                <span>SHIELD Bonus:</span><span class="stat-value">${classDataClient.baseShieldBonus}${formatBonus(shieldBonusBonus)}</span>
+                <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
+                <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
+            `;
+        } else {
+            statsHTML = `<span>Stats loading...</span>`;
+        }
         playerStatsDiv.innerHTML = statsHTML;
         mobileStatsDisplay.innerHTML = statsHTML;
     }

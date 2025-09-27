@@ -184,16 +184,20 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 0.5rem;
-    padding-bottom: 125px; /* Space for bottom nav AND action bar */
+    padding-bottom: 135px; /* Space for bottom nav, log, and action bar */
 }
 .mobile-screen {
     display: none; /* Hidden by default */
     flex-direction: column;
     gap: 0.5rem;
+    height: 100%;
 }
 .mobile-screen.active {
     display: flex; /* Shown when active */
 }
+#mobile-screen-game .panel:nth-child(1) { flex: 2; } /* Board */
+#mobile-screen-game .panel:nth-child(2) { flex: 1; } /* Equipment */
+#mobile-screen-game .panel:nth-child(3) { flex: 1; } /* Hand */
 .mobile-bottom-nav {
     position: fixed;
     bottom: 0;
@@ -223,7 +227,7 @@ body {
     font-size: 1.5rem;
 }
 .mobile-panel {
-    min-height: 200px;
+    min-height: 150px;
 }
 #mobile-class-selection.panel { /* Special case for showing class selection screen */
     display: flex;
@@ -234,6 +238,31 @@ body {
 #mobile-screen-info .panel {
     flex: 1;
 }
+.mobile-persistent-log {
+    position: fixed;
+    bottom: 60px; /* Above nav bar */
+    left: 0;
+    width: 100%;
+    height: 65px;
+    background: rgba(26, 34, 38, 0.9);
+    backdrop-filter: blur(3px);
+    border-top: 1px solid var(--color-border);
+    padding: 0.25rem 0.5rem;
+    z-index: 99;
+    overflow-y: scroll;
+}
+.mobile-persistent-log .chat-message {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    padding: 0;
+}
+.mobile-persistent-log .chat-message.narrative {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
 
 /* --- SHARED & REUSED COMPONENTS --- */
 .player-list-item { background-color: var(--color-surface-light); border: 1px solid var(--color-border); padding: 0.75rem; border-radius: 6px; transition: all 0.2s ease; }
@@ -288,7 +317,7 @@ body {
 .player-stats span { color: var(--color-text-secondary); }
 .player-stats .stat-value { font-weight: bold; color: var(--color-text-primary); }
 .stat-bonus {
-    color: var(--color-primary);
+    color: var(--color-success);
     font-weight: bold;
     margin-left: 0.25rem;
 }
@@ -383,7 +412,7 @@ body {
 }
 /* Mobile */
 #mobile-action-bar {
-    bottom: 60px; /* Height of the nav bar */
+    bottom: 125px; /* Height of the nav bar + persistent log */
     left: 0;
     width: 100%;
     border-radius: 0;
