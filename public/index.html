@@ -9,13 +9,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=MedievalSharp&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <link rel="stylesheet" href="/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quest & Chronicle">
 </head>
 <body>
 
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font">Quest & Chronicle</h1>
-        <p class="subtitle-font">Multiplayer Prototype 4.0.1</p>
+        <p class="subtitle-font">Multiplayer Prototype 4.1.0</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -54,7 +58,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.0.1</p>
+                     <p class="build-number-font">v4.1.0</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -276,7 +280,7 @@
             </div>
         </div>
     </div>
-    
+
     <div id="ap-modal" class="modal-overlay hidden">
         <div class="modal-content ap-modal-content">
             <h2 class="panel-header">Out of Actions</h2>

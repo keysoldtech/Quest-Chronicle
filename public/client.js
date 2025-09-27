@@ -815,6 +815,7 @@ narrativeConfirmBtn.addEventListener('click', () => {
 });
 
 narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
+
 rollDiceBtn.onclick = () => {
     socket.emit('rollForEvent');
     eventRollContainer.classList.add('hidden');
@@ -1130,3 +1131,14 @@ document.querySelector('.radio-group').addEventListener('change', (e) => {
         e.target.closest('.radio-label').classList.add('active');
     }
 });
+
+// PWA Service Worker Registration
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('SW registered: ', registration);
+        }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+        });
+    });
+}
