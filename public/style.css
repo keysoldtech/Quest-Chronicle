@@ -81,31 +81,23 @@ body {
 .lobby-container .title-font::before {
     color: var(--color-special);
     filter: blur(2px);
-    animation: flicker 3s linear infinite alternate 0.5s;
+    animation: title-glow 3s ease-in-out infinite alternate 0.5s;
 }
 
 .lobby-container .title-font::after {
     color: var(--color-primary);
     filter: blur(4px);
-    animation: flicker 3s linear infinite alternate;
+    animation: title-glow 3s ease-in-out infinite alternate;
 }
 
-@keyframes flicker {
-  0%, 100% {
-    opacity: 0.9;
-    text-shadow: 0 0 10px currentColor, 0 0 25px currentColor;
+@keyframes title-glow {
+  from {
+    opacity: 0.7;
+    text-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
   }
-  25% {
-    opacity: 0.4;
-    text-shadow: 0 0 8px currentColor, 0 0 20px currentColor;
-  }
-  50% {
+  to {
     opacity: 1;
     text-shadow: 0 0 12px currentColor, 0 0 30px currentColor;
-  }
-  75% {
-    opacity: 0.6;
-    text-shadow: 0 0 10px currentColor, 0 0 22px currentColor;
   }
 }
 
