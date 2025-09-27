@@ -272,7 +272,7 @@ body {
 .game-area-desktop {
     display: grid;
     grid-template-columns: 280px 1fr 320px;
-    grid-template-rows: auto minmax(0, 1fr) 250px;
+    grid-template-rows: auto minmax(0, 1fr) 280px;
     grid-template-areas:
         "header header header"
         "players board info"
@@ -531,7 +531,7 @@ textarea.input-field { resize: vertical; }
 .event-step-container { text-align: center; background: var(--color-surface); padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; }
 
 /* --- MOBILE LAYOUT --- */
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
     body { height: 100dvh; }
     .game-area-desktop { display: none; }
     .game-area-mobile {
