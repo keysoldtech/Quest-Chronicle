@@ -19,6 +19,7 @@ const modalQueue = [];
 let isModalActive = false;
 let currentSkipHandler = null; // Holds the function to skip the current skippable modal
 let isResolvingWorldEvent = false;
+let modalWatchdog = null;
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -163,11 +164,36 @@ const skipPopupBtn = get('skip-popup-btn');
 
 
 // --- Helper Functions ---
+function closeAllModals() {
+    console.error("Force-closing all modals due to watchdog timer.");
+    narrativeModal.classList.add('hidden');
+    apModal.classList.add('hidden');
+    endTurnConfirmModal.classList.add('hidden');
+    diceRollOverlay.classList.add('hidden');
+    eventOverlay.classList.add('hidden');
+    worldEventSaveModal.classList.add('hidden');
+    modalQueue.length = 0; // Clear the queue
+    finishModal(); // Reset state, including watchdog
+}
+
+function startModalWatchdog() {
+    clearModalWatchdog();
+    modalWatchdog = setTimeout(closeAllModals, 10000); // 10 second failsafe
+}
+
+function clearModalWatchdog() {
+    if (modalWatchdog) {
+        clearTimeout(modalWatchdog);
+        modalWatchdog = null;
+    }
+}
+
 function processModalQueue() {
     if (isModalActive || modalQueue.length === 0) {
         return;
     }
     isModalActive = true;
+    startModalWatchdog();
     const { showFunction } = modalQueue.shift();
     showFunction();
 }
@@ -181,6 +207,7 @@ function addToModalQueue(showFunction, id) {
 
 function finishModal() {
     isModalActive = false;
+    clearModalWatchdog();
     currentSkipHandler = null; // Clear any active skip handler
     skipPopupBtn.classList.add('hidden'); // Ensure skip button is hidden
     setTimeout(processModalQueue, 200); // Small delay for smoother transitions
@@ -439,15 +466,16 @@ function renderGameState(room) {
         const canGuard = myPlayerInfo.currentAp >= 1;
         const canBriefRespite = myPlayerInfo.currentAp >= 1 && myPlayerInfo.healthDice.current > 0;
         const canFullRest = myPlayerInfo.currentAp >= 2 && myPlayerInfo.healthDice.current >= 2;
+        const showAttackButton = selectedWeaponId && selectedTargetId;
 
         // Desktop
-        actionAttackBtn.classList.add('hidden');
+        actionAttackBtn.classList.toggle('hidden', !showAttackButton);
         actionGuardBtn.disabled = !canGuard;
         actionBriefRespiteBtn.disabled = !canBriefRespite;
         actionFullRestBtn.disabled = !canFullRest;
 
         // Mobile
-        mobileActionAttackBtn.classList.add('hidden');
+        mobileActionAttackBtn.classList.toggle('hidden', !showAttackButton);
         mobileActionGuardBtn.disabled = !canGuard;
         mobileActionBriefRespiteBtn.disabled = !canBriefRespite;
         mobileActionFullRestBtn.disabled = !canFullRest;
@@ -678,23 +706,18 @@ function renderGameState(room) {
                 return;
             }
             
-            const weapon = myPlayerInfo.equipment.weapon;
-            if (weapon && weapon.id === selectedWeaponId) {
-                const apCost = weapon.apCost || 1;
-                if (myPlayerInfo.currentAp < apCost) {
-                    logMessage('Not enough Action Points to attack.', { channel: 'game' });
-                    return;
-                }
-                // A weapon is selected, a monster was clicked. Open narrative modal directly.
-                openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: monster.id }, weapon.name);
-            }
+            // Just set the target ID and re-render
+            selectedTargetId = (selectedTargetId === monster.id) ? null : monster.id;
+            renderGameState(currentRoomState);
         };
 
         const desktopCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
+        if (monster.id === selectedTargetId) desktopCardEl.classList.add('selected-target');
         desktopCardEl.addEventListener('click', clickHandler);
         gameBoardDiv.appendChild(desktopCardEl);
         
         const mobileCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
+        if (monster.id === selectedTargetId) mobileCardEl.classList.add('selected-target');
         mobileCardEl.addEventListener('click', clickHandler);
         mobileBoardCards.appendChild(mobileCardEl);
     });
@@ -746,6 +769,19 @@ joinRoomBtn.addEventListener('click', () => {
     socket.emit('endTurn');
 }));
 
+[actionAttackBtn, mobileActionAttackBtn].forEach(btn => btn.addEventListener('click', () => {
+    if (!selectedWeaponId || !selectedTargetId) return;
+
+    const weapon = myPlayerInfo.equipment.weapon;
+    if (weapon && weapon.id === selectedWeaponId) {
+        const apCost = weapon.apCost || 1;
+        if (myPlayerInfo.currentAp < apCost) {
+            logMessage('Not enough Action Points to attack.', { channel: 'game' });
+            return;
+        }
+        openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
+    }
+}));
 [actionGuardBtn, mobileActionGuardBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
 actionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
 actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
@@ -860,7 +896,6 @@ worldEventSaveRollBtn.addEventListener('click', () => {
 worldEventSaveContinueBtn.addEventListener('click', () => {
     isResolvingWorldEvent = false;
     worldEventSaveModal.classList.add('hidden');
-    worldEventSaveContinueBtn.classList.add('hidden');
     finishModal();
 });
 
@@ -1028,7 +1063,16 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
         worldEventSaveRollBtn.classList.add('hidden');
         worldEventRollResult.textContent = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. ${success ? 'Success!' : 'Failure!'}`;
         worldEventRollResult.classList.remove('hidden');
+        
+        // Show the continue button to allow faster closing, but also set a timeout.
         worldEventSaveContinueBtn.classList.remove('hidden');
+        setTimeout(() => {
+            if (!worldEventSaveModal.classList.contains('hidden')) {
+                 isResolvingWorldEvent = false;
+                 worldEventSaveModal.classList.add('hidden');
+                 finishModal();
+            }
+        }, 3500);
 
         // Show the small popup at the top
         showRollResult(d20Roll, 'd20');
