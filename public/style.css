@@ -155,7 +155,7 @@ body {
 
 .btn-sm { font-size: 0.8rem; padding: 0.3rem 0.6rem; }
 .btn-xs { font-size: 0.7rem; padding: 0.2rem 0.4rem; }
-.btn-icon { padding: 0.5rem; }
+.btn-icon { padding: 0.5rem; display: flex; align-items: center; justify-content: center; }
 
 .input-field, .select-field {
     background-color: var(--color-bg-dark);
@@ -445,9 +445,348 @@ body {
 .card.selected-weapon { border-color: var(--color-primary); box-shadow: 0 0 10px var(--color-glow); }
 
 .card-content { flex-grow: 1; overflow-y: auto; }
-.card-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.25rem; }
+.card-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.25rem; color: var(--color-primary); }
+.card .card-title { color: var(--color-primary); } /* default */
+.card[data-card-id*="monster"] .card-title { color: var(--color-danger); }
+.card[data-card-id*="item"] .card-title, .card[data-card-id*="discovery"] .card-title { color: var(--color-success); }
+.card[data-card-id*="spell"] .card-title { color: #8b5cf6; }
+.card[data-card-id*="weapon"] .card-title { color: #f59e0b; }
+.card[data-card-id*="armor"] .card-title { color: #3b82f6; }
+
+
 .card-effect { font-size: 0.8rem; color: var(--color-text-secondary); }
-.card-footer { font-size: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
+.card-footer { font-size: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 0.5rem; margin-top: 0.5rem; }
 .card-type { text-transform: uppercase; color: var(--color-secondary-hover); }
 .card-bonus { font-weight: bold; }
-.card-actions { position: absolute; bottom:--- END OF FILE public/style.css ---
+.card-actions {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    display: flex;
+    gap: 4px;
+}
+.status-effects-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 0.5rem;
+}
+.status-effect {
+    background-color: var(--color-danger);
+    color: white;
+    padding: 2px 5px;
+    font-size: 0.7rem;
+    border-radius: 3px;
+}
+
+/* --- MODALS & OVERLAYS --- */
+.modal-overlay, .event-overlay, .chat-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.3s;
+}
+.modal-content {
+    background-color: var(--color-surface);
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    padding: 1.5rem;
+    width: 90%;
+    max-width: 450px;
+    box-shadow: var(--shadow-lg);
+}
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+.modal-content p { color: var(--color-text-secondary); margin: 0.5rem 0 1rem; }
+.modal-content textarea { margin-top: 1rem; height: 80px; resize: vertical; }
+
+.chat-overlay {
+    align-items: flex-end;
+    justify-content: flex-end;
+    background: none;
+    pointer-events: none;
+}
+.chat-overlay > div { /* The actual chat box */
+    pointer-events: all;
+    background: var(--color-surface);
+    width: 400px;
+    height: 500px;
+    margin: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg);
+}
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--color-border);
+}
+.chat-header .panel-header { margin: 0; padding: 0.75rem 0; border: none; }
+.chat-close-btn {
+    background: none; border: none; font-size: 2rem;
+    color: var(--color-text-secondary); cursor: pointer;
+}
+.chat-log { flex-grow: 1; overflow-y: auto; padding: 1rem; }
+.chat-form { display: flex; gap: 0.5rem; padding: 1rem; border-top: 1px solid var(--color-border); }
+.chat-form .select-field { flex-basis: 100px; }
+.chat-form .input-field { flex-grow: 1; }
+.chat-message { margin-bottom: 0.5rem; }
+.chat-message.system { color: var(--color-special); font-style: italic; }
+.chat-message.narrative {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid var(--color-special);
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-style: italic;
+}
+.chat-message.narrative strong { color: var(--color-special); }
+.chat-message .channel { font-weight: bold; margin-right: 0.5rem; }
+.chat-message .channel.party { color: var(--color-success); }
+.chat-message .channel.game { color: var(--color-secondary); }
+.chat-message .sender { font-weight: bold; }
+.chat-message .sender.self { color: var(--color-primary); }
+
+.your-turn-popup {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: var(--font-title);
+    font-size: 6rem;
+    color: var(--color-special);
+    text-shadow: 0 0 15px rgba(255, 193, 7, 0.7);
+    z-index: 1500;
+    pointer-events: none;
+    animation: fadeInScaleUp 0.3s ease-out, fadeOut 0.3s ease-in 1.2s forwards;
+}
+
+.skip-popup-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 2000;
+}
+
+.event-step-container { text-align: center; }
+#event-card-selection { justify-content: center; }
+
+/* --- DICE ANIMATIONS --- */
+.dice-scene { perspective: 800px; }
+.dice {
+    width: 60px; height: 60px; position: relative;
+    transform-style: preserve-3d;
+}
+.dice.is-rolling { animation: roll 1.5s ease-out forwards; }
+.face {
+    position: absolute; width: 60px; height: 60px;
+    background: var(--color-surface-light);
+    border: 2px solid var(--color-border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: bold;
+}
+.face.front  { transform: rotateY(  0deg) translateZ(30px); }
+.face.back   { transform: rotateY(180deg) translateZ(30px); }
+.face.right  { transform: rotateY( 90deg) translateZ(30px); }
+.face.left   { transform: rotateY(-90deg) translateZ(30px); }
+.face.top    { transform: rotateX( 90deg) translateZ(30px); }
+.face.bottom { transform: rotateX(-90deg) translateZ(30px); }
+
+#dice-roll-result { margin-top: 1.5rem; text-align: center; }
+.result-line.hit { color: var(--color-success); font-weight: bold; font-size: 1.5rem; }
+.result-line.miss { color: var(--color-danger); font-weight: bold; font-size: 1.5rem; }
+.damage-breakdown { font-size: 1.1rem; margin-top: 0.5rem; }
+
+/* --- SKILL CHALLENGE --- */
+.skill-challenge-progress-container {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+    margin: 1rem 0;
+}
+.progress-bar-container { font-size: 0.9rem; }
+.progress-bar {
+    width: 100%; background-color: var(--color-bg-dark);
+    border-radius: 4px; overflow: hidden; height: 1.2rem;
+    margin-top: 0.25rem;
+}
+.progress-bar div { height: 100%; transition: width 0.3s ease; }
+.progress-bar.success div { background-color: var(--color-success); }
+.progress-bar.danger div { background-color: var(--color-danger); }
+#item-select-container .card.selected-item {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 10px var(--color-glow);
+}
+
+/* --- ANIMATIONS --- */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 5px var(--color-glow); }
+    50% { transform: scale(1.05); box-shadow: 0 0 15px var(--color-glow); }
+}
+@keyframes fadeInScaleUp {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+@keyframes roll {
+    0% { transform: rotateX(0deg) rotateY(0deg); }
+    100% { transform: rotateX(720deg) rotateY(1080deg); }
+}
+.pulse-highlight {
+    animation: pulse-border 1.5s ease-out;
+}
+@keyframes pulse-border {
+    0% { box-shadow: 0 0 0 0 var(--color-special); }
+    50% { box-shadow: 0 0 0 5px rgba(255, 193, 7, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+}
+
+/* --- MOBILE RESPONSIVE STYLES --- */
+@media (max-width: 800px) {
+    body {
+        overflow: hidden; /* Prevent scrolling on the body itself */
+        height: -webkit-fill-available; /* iOS safari height fix */
+    }
+
+    .game-area-desktop {
+        display: none;
+    }
+
+    .game-area-mobile {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: -webkit-fill-available; /* iOS safari height fix */
+        width: 100%;
+    }
+
+    .mobile-header {
+        flex-shrink: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem;
+        background-color: var(--color-surface);
+        border-bottom: 1px solid var(--color-border);
+    }
+    
+    .mobile-header-info, .mobile-header-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .mobile-header-info .turn-indicator-font { font-size: 1rem; }
+    .mobile-header-info .turn-counter { font-size: 0.9rem; color: var(--color-text-secondary); }
+
+    .mobile-main {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 0.5rem;
+        padding-bottom: 120px; /* Space for action bar and nav */
+    }
+
+    .mobile-screen {
+        display: none;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .mobile-screen.active {
+        display: flex;
+    }
+    
+    .mobile-panel {
+        padding: 0.5rem;
+    }
+    .mobile-panel .panel-header {
+        font-size: 1.2rem;
+        padding-bottom: 0.25rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .card {
+        min-width: 140px;
+        width: 140px;
+        height: 200px;
+        padding: 0.5rem;
+    }
+    .card-title { font-size: 0.9rem; }
+    .card-effect { font-size: 0.7rem; }
+    .card-footer { font-size: 0.65rem; padding-top: 0.25rem; margin-top: 0.25rem; }
+
+    #mobile-class-selection .class-cards-container {
+        grid-template-columns: 1fr;
+    }
+    .player-class-header { font-size: 1.2rem; }
+
+    .mobile-action-bar {
+        position: fixed;
+        bottom: 55px; /* Above the nav bar */
+        left: 0;
+        width: 100%;
+        background-color: var(--color-surface);
+        border-top: 1px solid var(--color-border);
+        display: flex;
+        justify-content: space-around;
+        padding: 0.5rem;
+        z-index: 101;
+    }
+
+    .mobile-bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        display: flex;
+        background-color: var(--color-surface);
+        border-top: 1px solid var(--color-border);
+        z-index: 100;
+    }
+    .nav-btn {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.5rem 0;
+        background: none;
+        border: none;
+        color: var(--color-text-secondary);
+        font-size: 0.7rem;
+        cursor: pointer;
+        position: relative;
+    }
+    .nav-btn .material-symbols-outlined { font-size: 1.5rem; }
+    .nav-btn.active { color: var(--color-primary); }
+    .nav-btn.highlight::after {
+        content: '';
+        position: absolute;
+        top: 4px;
+        right: calc(50% - 16px);
+        width: 8px;
+        height: 8px;
+        background-color: var(--color-special);
+        border-radius: 50%;
+    }
+
+    /* Modal adjustments */
+    .modal-content {
+        max-width: 95%;
+    }
+    .chat-overlay {
+        display: none; /* Hide desktop chat, rely on mobile log tab */
+    }
+    .your-turn-popup { font-size: 3rem; }
+
+}
