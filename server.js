@@ -262,13 +262,25 @@ class GameManager {
         // Add bonuses from equipped items
         for (const item of Object.values(player.equipment)) {
             if (item && item.effect && item.effect.bonuses) {
-                newStats.damageBonus += item.effect.bonuses.damage || 0;
-                newStats.shieldBonus += item.effect.bonuses.shield || 0;
+                newStats.damageBonus += item.effect.bonuses.damageBonus || 0;
+                newStats.shieldBonus += item.effect.bonuses.shieldBonus || 0;
                 newStats.ap += item.effect.bonuses.ap || 0;
                 newStats.maxHp += item.effect.bonuses.hp || 0; 
             }
         }
         
+        // Add bonuses from status effects
+        if (player.statusEffects) {
+            for (const effect of player.statusEffects) {
+                if (effect.type === 'stat_modifier' && effect.bonuses) {
+                    newStats.damageBonus += effect.bonuses.damageBonus || 0;
+                    newStats.shieldBonus += effect.bonuses.shieldBonus || 0;
+                    newStats.ap += effect.bonuses.ap || 0;
+                    newStats.maxHp += effect.bonuses.hp || 0;
+                }
+            }
+        }
+
         // Preserve current HP, but cap it at the new maxHP.
         newStats.currentHp = Math.min(player.stats.currentHp, newStats.maxHp);
         
@@ -383,6 +395,27 @@ class GameManager {
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
         if (!player) return;
 
+        // Handle status effects duration at the start of any player's turn
+        if (player.statusEffects && player.statusEffects.length > 0) {
+            player.statusEffects.forEach(effect => {
+                if (effect.turnsRemaining) {
+                    effect.turnsRemaining--;
+                }
+            });
+
+            const expiredEffects = player.statusEffects.filter(effect => effect.turnsRemaining <= 0);
+            if (expiredEffects.length > 0) {
+                expiredEffects.forEach(effect => {
+                     this.sendMessageToRoom(roomId, { 
+                        channel: 'game', 
+                        type: 'system', 
+                        message: `The effect of '${effect.name}' has worn off for ${player.name}.` 
+                    });
+                });
+                player.statusEffects = player.statusEffects.filter(effect => effect.turnsRemaining > 0);
+            }
+        }
+        
         // If it's an automated DM's turn (in single player), take action and pass turn.
         if (player.isNpc && player.role === 'DM') {
             // If there are no monsters on the board, the DM acts.
@@ -775,12 +808,20 @@ class GameManager {
         const choice = cardOptions.find(c => c.id === cardId);
         if (!choice) return;
 
-        if (outcome === 'player_event') {
+        if (choice.effect) {
+            const effectToAdd = {
+                ...choice.effect,
+                // +1 so it lasts for the full number of turns, as it decrements at the start.
+                turnsRemaining: choice.effect.duration + 1 
+            };
+            player.statusEffects.push(effectToAdd);
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} is affected by ${choice.name}!` });
+        } else if (outcome === 'player_event') {
             player.hand.push(choice);
-            this.sendMessageToRoom(room.id, { channel: 'game', message: `${player.name} drew a Player Event card: ${choice.name}.` });
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} drew a Player Event card: ${choice.name}.` });
         } else if (outcome === 'discovery') {
             room.gameState.lootPool.push(choice);
-            this.sendMessageToRoom(room.id, { channel: 'game', message: `The party made a Discovery: ${choice.name}!` });
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party made a Discovery: ${choice.name}!` });
         }
         
         player.pendingEventChoice = null;

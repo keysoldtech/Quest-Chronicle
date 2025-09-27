@@ -512,23 +512,40 @@ function renderGameState(room) {
     if (myPlayerInfo.stats && myPlayerInfo.class) {
         const classDataClient = classData[myPlayerInfo.class];
         if (classDataClient) {
-            const hpBonus = myPlayerInfo.stats.maxHp - classDataClient.baseHp;
-            const dmgBonusBonus = myPlayerInfo.stats.damageBonus - classDataClient.baseDamageBonus;
-            const shieldBonusBonus = myPlayerInfo.stats.shieldBonus - classDataClient.baseShieldBonus;
-            const apBonus = myPlayerInfo.stats.ap - classDataClient.baseAp;
+            // Calculate bonuses from equipment
+            let equipHpBonus = 0, equipDmgBonus = 0, equipShieldBonus = 0, equipApBonus = 0;
+            Object.values(myPlayerInfo.equipment).forEach(item => {
+                if (item && item.effect && item.effect.bonuses) {
+                    equipHpBonus += item.effect.bonuses.hp || 0;
+                    equipDmgBonus += item.effect.bonuses.damageBonus || 0;
+                    equipShieldBonus += item.effect.bonuses.shieldBonus || 0;
+                    equipApBonus += item.effect.bonuses.ap || 0;
+                }
+            });
 
-            const formatBonus = (bonus) => {
-                if (bonus > 0) return `<span class="stat-bonus">+${bonus}</span>`;
-                if (bonus < 0) return `<span class="stat-bonus" style="color: var(--color-danger);">${bonus}</span>`;
+            // Calculate bonuses from status effects
+            let eventHpBonus = 0, eventDmgBonus = 0, eventShieldBonus = 0, eventApBonus = 0;
+            (myPlayerInfo.statusEffects || []).forEach(effect => {
+                if (effect.type === 'stat_modifier' && effect.bonuses) {
+                    eventHpBonus += effect.bonuses.hp || 0;
+                    eventDmgBonus += effect.bonuses.damageBonus || 0;
+                    eventShieldBonus += effect.bonuses.shieldBonus || 0;
+                    eventApBonus += effect.bonuses.ap || 0;
+                }
+            });
+
+            const formatBonus = (bonus, label = '') => {
+                if (bonus > 0) return `<span class="stat-bonus">+${bonus} ${label}</span>`.trim();
+                if (bonus < 0) return `<span class="stat-bonus" style="color: var(--color-danger);">${bonus} ${label}</span>`.trim();
                 return '';
             };
 
             statsHTML = `
-                <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${classDataClient.baseHp}${formatBonus(hpBonus)}</span>
+                <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${classDataClient.baseHp}${formatBonus(equipHpBonus)}${formatBonus(eventHpBonus, '(Event)')}</span>
                 ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
-                <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${classDataClient.baseAp}${formatBonus(apBonus)}</span>
-                <span>DMG Bonus:</span><span class="stat-value">${classDataClient.baseDamageBonus}${formatBonus(dmgBonusBonus)}</span>
-                <span>SHIELD Bonus:</span><span class="stat-value">${classDataClient.baseShieldBonus}${formatBonus(shieldBonusBonus)}</span>
+                <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${classDataClient.baseAp}${formatBonus(equipApBonus)}${formatBonus(eventApBonus, '(Event)')}</span>
+                <span>DMG Bonus:</span><span class="stat-value">${classDataClient.baseDamageBonus}${formatBonus(equipDmgBonus)}${formatBonus(eventDmgBonus, '(Event)')}</span>
+                <span>SHIELD Bonus:</span><span class="stat-value">${classDataClient.baseShieldBonus}${formatBonus(equipShieldBonus)}${formatBonus(eventShieldBonus, '(Event)')}</span>
                 <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
                 <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
             `;
