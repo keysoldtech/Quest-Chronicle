@@ -433,10 +433,19 @@ class GameManager {
             }
     
             if (!actionTaken && !(player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned'))) {
+                let reason = "considers their options and prepares for the next move.";
+                if (!target) {
+                    reason = "sees no enemies and decides to wait.";
+                } else if (weapon && player.currentAp < (weapon.apCost || 1)) {
+                    reason = "lacks the action points for a major action.";
+                } else if (player.stats.currentHp >= (player.stats.maxHp / 2) && player.currentAp < gameData.actionCosts.briefRespite) {
+                    reason = "is healthy and preserves their energy.";
+                }
+
                  this.sendMessageToRoom(room.id, { 
                     channel: 'game', 
                     type: 'system', 
-                    message: `${player.name} considers their options and prepares for the next move.` 
+                    message: `${player.name} ${reason}` 
                 });
             }
     

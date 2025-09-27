@@ -431,17 +431,17 @@ function renderGameState(room) {
         const weapon = myPlayerInfo.equipment.weapon;
         const hasEnoughApForAttack = weapon && myPlayerInfo.currentAp >= (weapon.apCost || 1);
         
-        // Desktop
+        // Desktop - Ensure buttons are always enabled if the bar is visible
         actionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
-        actionGuardBtn.disabled = myPlayerInfo.currentAp < 1;
-        actionBriefRespiteBtn.disabled = myPlayerInfo.currentAp < 1 || myPlayerInfo.healthDice.current < 1;
-        actionFullRestBtn.disabled = myPlayerInfo.currentAp < 2 || myPlayerInfo.healthDice.current < 2;
+        actionGuardBtn.disabled = false;
+        actionBriefRespiteBtn.disabled = false;
+        actionFullRestBtn.disabled = false;
 
-        // Mobile
+        // Mobile - Ensure buttons are always enabled if the bar is visible
         mobileActionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
-        mobileActionGuardBtn.disabled = myPlayerInfo.currentAp < 1;
-        mobileActionBriefRespiteBtn.disabled = myPlayerInfo.currentAp < 1 || myPlayerInfo.healthDice.current < 1;
-        mobileActionFullRestBtn.disabled = myPlayerInfo.currentAp < 2 || myPlayerInfo.healthDice.current < 2;
+        mobileActionGuardBtn.disabled = false;
+        mobileActionBriefRespiteBtn.disabled = false;
+        mobileActionFullRestBtn.disabled = false;
     }
 
 

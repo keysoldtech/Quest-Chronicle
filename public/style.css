@@ -325,7 +325,10 @@ body {
     height: 100%;
 }
 .hand-and-equipped-container {
-    display: flex; flex-direction: column; height: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-height: 0; /* Fix for flexbox overflow */
 }
 .equipped-items-container { margin-bottom: 1rem; }
 .player-hand-container { flex-grow: 1; }
