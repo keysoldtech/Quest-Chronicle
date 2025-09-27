@@ -184,7 +184,7 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 0.5rem;
-    padding-bottom: 180px; /* Space for bottom nav and action bar */
+    padding-bottom: 200px; /* Space for bottom nav and action bar */
 }
 .mobile-screen {
     display: none; /* Hidden by default */
@@ -382,16 +382,24 @@ textarea.input-field { resize: vertical; min-height: 80px; }
 }
 .game-area-mobile .fixed-action-bar {
     bottom: 60px; /* Position above mobile nav bar */
-    gap: 0.2rem;
+    gap: 0.3rem;
     padding: 0.5rem;
+    align-items: stretch; /* Make buttons equal height */
 }
 
 .game-area-mobile .fixed-action-bar .btn {
     flex-grow: 1;
     flex-basis: 0;
-    padding: 0.6rem 0.1rem;
-    font-size: 0.65rem;
-    white-space: nowrap;
+    padding: 0.2rem;
+    font-size: 0.7rem;
+    white-space: normal; /* Allow text to wrap */
+    line-height: 1.2;
+    min-width: 0;
+    text-align: center;
+    /* Use flex to center content in taller buttons */
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 
