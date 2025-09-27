@@ -424,24 +424,30 @@ function renderGameState(room) {
 
 
     // --- Action Bars ---
-    fixedActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer && !isStunned));
-    mobileActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer && !isStunned));
+    const showActionBar = isMyTurn && isExplorer && !isStunned;
+    fixedActionBar.classList.toggle('hidden', !showActionBar);
+    mobileActionBar.classList.toggle('hidden', !showActionBar);
 
-    if(isMyTurn && isExplorer && !isStunned) {
+    if (showActionBar) {
         const weapon = myPlayerInfo.equipment.weapon;
         const hasEnoughApForAttack = weapon && myPlayerInfo.currentAp >= (weapon.apCost || 1);
-        
-        // Desktop - Ensure buttons are always enabled if the bar is visible
-        actionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
-        actionGuardBtn.disabled = false;
-        actionBriefRespiteBtn.disabled = false;
-        actionFullRestBtn.disabled = false;
+        const canGuard = myPlayerInfo.currentAp >= 1;
+        const canBriefRespite = myPlayerInfo.currentAp >= 1 && myPlayerInfo.healthDice.current > 0;
+        const canFullRest = myPlayerInfo.currentAp >= 2 && myPlayerInfo.healthDice.current >= 2;
 
-        // Mobile - Ensure buttons are always enabled if the bar is visible
-        mobileActionAttackBtn.classList.toggle('hidden', !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack));
-        mobileActionGuardBtn.disabled = false;
-        mobileActionBriefRespiteBtn.disabled = false;
-        mobileActionFullRestBtn.disabled = false;
+        // Desktop
+        actionAttackBtn.classList.remove('hidden');
+        actionAttackBtn.disabled = !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack);
+        actionGuardBtn.disabled = !canGuard;
+        actionBriefRespiteBtn.disabled = !canBriefRespite;
+        actionFullRestBtn.disabled = !canFullRest;
+
+        // Mobile
+        mobileActionAttackBtn.classList.remove('hidden');
+        mobileActionAttackBtn.disabled = !(selectedTargetId && selectedWeaponId && hasEnoughApForAttack);
+        mobileActionGuardBtn.disabled = !canGuard;
+        mobileActionBriefRespiteBtn.disabled = !canBriefRespite;
+        mobileActionFullRestBtn.disabled = !canFullRest;
     }
 
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quest-and-chronicle-v4.1.9';
+const CACHE_NAME = 'quest-and-chronicle-v4.2.0';
 const urlsToCache = [
   '/',
   '/style.css',
