@@ -17,6 +17,7 @@ let pendingAbilityConfirmation = null; // For non-attack ability confirmation
 let apModalShownThisTurn = false; // For AP management pop-up
 const modalQueue = [];
 let isModalActive = false;
+let currentSkipHandler = null; // Holds the function to skip the current skippable modal
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -156,6 +157,7 @@ const worldEventDice = get('world-event-dice');
 const worldEventRollResult = get('world-event-roll-result');
 const worldEventSaveRollBtn = get('world-event-save-roll-btn');
 const voiceChatContainer = get('voice-chat-container');
+const skipPopupBtn = get('skip-popup-btn');
 
 
 // --- Helper Functions ---
@@ -177,6 +179,8 @@ function addToModalQueue(showFunction, id) {
 
 function finishModal() {
     isModalActive = false;
+    currentSkipHandler = null; // Clear any active skip handler
+    skipPopupBtn.classList.add('hidden'); // Ensure skip button is hidden
     setTimeout(processModalQueue, 200); // Small delay for smoother transitions
 }
 
@@ -446,10 +450,16 @@ function renderGameState(room) {
         pendingActionData = null;
         addToModalQueue(() => {
             yourTurnPopup.classList.remove('hidden');
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 yourTurnPopup.classList.add('hidden');
                 finishModal();
             }, 1500);
+
+            currentSkipHandler = () => {
+                clearTimeout(timeoutId);
+                yourTurnPopup.classList.add('hidden');
+                finishModal();
+            };
         }, 'your-turn-popup');
     }
     isMyTurnPreviously = isMyTurn;
@@ -825,6 +835,18 @@ worldEventSaveRollBtn.addEventListener('click', () => {
     worldEventSaveRollBtn.disabled = true;
 });
 
+// Skip functionality
+document.body.addEventListener('click', (e) => {
+    if (currentSkipHandler && !e.target.closest('#skip-popup-btn')) {
+        skipPopupBtn.classList.remove('hidden');
+    }
+});
+skipPopupBtn.addEventListener('click', () => {
+    if (currentSkipHandler) {
+        currentSkipHandler();
+    }
+});
+
 
 // --- SOCKET.IO EVENT HANDLERS ---
 socket.on('connect', () => { myId = socket.id; });
@@ -857,6 +879,42 @@ socket.on('actionError', (errorMessage) => alert(errorMessage));
 
 socket.on('attackAnimation', (data) => {
     addToModalQueue(() => {
+        let fastForwarded = false;
+        let timeouts = [];
+
+        const renderResult = () => {
+            attackDice.classList.remove('is-rolling');
+            let resultHTML = data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
+            resultHTML += `<p>Rolled ${data.totalRollToHit} vs DC ${data.requiredRoll}</p>`;
+            if (data.hit) {
+                resultHTML += `<p class="damage-breakdown">Damage: ${data.rawDamageRoll}(d) + ${data.damageBonus}(b) = ${data.totalDamage}</p>`;
+            }
+            diceRollResult.innerHTML = resultHTML;
+            diceRollResult.classList.remove('hidden');
+        };
+
+        const close = () => {
+            diceRollOverlay.classList.add('hidden');
+            finishModal();
+        };
+
+        currentSkipHandler = () => {
+            timeouts.forEach(clearTimeout);
+            if (!fastForwarded) {
+                renderResult();
+                fastForwarded = true;
+                const closeTimeout = setTimeout(close, 3000);
+                timeouts = [closeTimeout];
+                // Update handler for the second skip
+                currentSkipHandler = () => {
+                    clearTimeout(closeTimeout);
+                    close();
+                };
+            } else {
+                close();
+            }
+        };
+
         showRollResult(data.d20Roll, 'd20');
         diceRollTitle.textContent = `${data.attackerName} attacks!`;
         diceRollResult.innerHTML = '';
@@ -867,69 +925,111 @@ socket.on('attackAnimation', (data) => {
         void attackDice.offsetWidth; 
         attackDice.classList.add('is-rolling');
 
-        setTimeout(() => {
-            attackDice.classList.remove('is-rolling');
-            let resultHTML = data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
-            resultHTML += `<p>Rolled ${data.totalRollToHit} vs DC ${data.requiredRoll}</p>`;
-            if (data.hit) {
-                resultHTML += `<p class="damage-breakdown">Damage: ${data.rawDamageRoll}(d) + ${data.damageBonus}(b) = ${data.totalDamage}</p>`;
-            }
-            diceRollResult.innerHTML = resultHTML;
-            diceRollResult.classList.remove('hidden');
-
-            setTimeout(() => {
-                diceRollOverlay.classList.add('hidden');
-                finishModal();
-            }, 3000);
+        const timeout1 = setTimeout(() => {
+            renderResult();
+            fastForwarded = true;
+            const timeout2 = setTimeout(close, 3000);
+            timeouts = [timeout2];
         }, 1500);
+        timeouts.push(timeout1);
+
     }, 'attack-animation');
 });
 
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
-    showRollResult(roll, 'd20');
-    setTimeout(() => {
-        dice.classList.remove('is-rolling');
-        eventDiceAnimationContainer.classList.add('hidden');
-        eventResultContainer.classList.remove('hidden');
-        
-        eventResultTitle.textContent = `You rolled a ${roll}!`;
-        if(outcome === 'none') {
-            eventResultSubtitle.textContent = 'Nothing happens this time.';
-            eventCardSelection.classList.add('hidden');
-            eventResultOkayBtn.classList.remove('hidden');
-            eventResultOkayBtn.onclick = () => {
-                eventOverlay.classList.add('hidden');
-                finishModal();
-            };
-        } else {
-            eventResultSubtitle.textContent = outcome === 'discovery' ? 'You made a discovery! Choose one:' : 'A player event occurs! Choose one:';
-            eventCardSelection.classList.remove('hidden');
-            eventResultOkayBtn.classList.add('hidden');
-            eventCardSelection.innerHTML = '';
-            cardOptions.forEach(card => {
-                const cardEl = createCardElement(card);
-                cardEl.onclick = () => {
-                    socket.emit('selectEventCard', { cardId: card.id });
+    addToModalQueue(() => {
+        let timeoutId;
+
+        const renderResult = () => {
+            currentSkipHandler = null; // Result view is interactive, not skippable
+            skipPopupBtn.classList.add('hidden');
+            dice.classList.remove('is-rolling');
+            eventDiceAnimationContainer.classList.add('hidden');
+            eventResultContainer.classList.remove('hidden');
+            
+            eventResultTitle.textContent = `You rolled a ${roll}!`;
+            if(outcome === 'none') {
+                eventResultSubtitle.textContent = 'Nothing happens this time.';
+                eventCardSelection.classList.add('hidden');
+                eventResultOkayBtn.classList.remove('hidden');
+                eventResultOkayBtn.onclick = () => {
                     eventOverlay.classList.add('hidden');
                     finishModal();
                 };
-                eventCardSelection.appendChild(cardEl);
-            });
-        }
-    }, 1500);
+            } else {
+                eventResultSubtitle.textContent = outcome === 'discovery' ? 'You made a discovery! Choose one:' : 'A player event occurs! Choose one:';
+                eventCardSelection.classList.remove('hidden');
+                eventResultOkayBtn.classList.add('hidden');
+                eventCardSelection.innerHTML = '';
+                cardOptions.forEach(card => {
+                    const cardEl = createCardElement(card);
+                    cardEl.onclick = () => {
+                        socket.emit('selectEventCard', { cardId: card.id });
+                        eventOverlay.classList.add('hidden');
+                        finishModal();
+                    };
+                    eventCardSelection.appendChild(cardEl);
+                });
+            }
+        };
+
+        currentSkipHandler = () => {
+            clearTimeout(timeoutId);
+            renderResult();
+        };
+
+        showRollResult(roll, 'd20');
+        // The roll button click already started the dice animation
+        timeoutId = setTimeout(renderResult, 1500);
+    }, 'eventRollResult');
 });
+
 socket.on('eventCardReveal', ({ chosenCard }) => {
     eventCardSelection.innerHTML = '';
     eventCardSelection.appendChild(createCardElement(chosenCard));
 });
+
 socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
-    showRollResult(d20Roll, 'd20');
-    worldEventRollResult.textContent = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. ${success ? 'Success!' : 'Failure!'}`;
-    worldEventRollResult.classList.remove('hidden');
-    setTimeout(() => {
-        worldEventSaveModal.classList.add('hidden');
-        finishModal();
-    }, 3000);
+    addToModalQueue(() => {
+        let fastForwarded = false;
+        let timeouts = [];
+
+        const renderResult = () => {
+            worldEventRollResult.textContent = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. ${success ? 'Success!' : 'Failure!'}`;
+            worldEventRollResult.classList.remove('hidden');
+        };
+        
+        const close = () => {
+            worldEventSaveModal.classList.add('hidden');
+            finishModal();
+        };
+
+        currentSkipHandler = () => {
+            timeouts.forEach(clearTimeout);
+            if (!fastForwarded) {
+                renderResult();
+                fastForwarded = true;
+                const closeTimeout = setTimeout(close, 3000);
+                timeouts = [closeTimeout];
+                currentSkipHandler = () => {
+                    clearTimeout(closeTimeout);
+                    close();
+                };
+            } else {
+                close();
+            }
+        };
+
+        showRollResult(d20Roll, 'd20');
+        // The roll button click should have already started the animation
+        const timeout1 = setTimeout(() => {
+            renderResult();
+            fastForwarded = true;
+            const timeout2 = setTimeout(close, 3000);
+            timeouts.push(timeout2);
+        }, 1500);
+        timeouts.push(timeout1);
+    }, 'worldEventSaveResult');
 });
 
 

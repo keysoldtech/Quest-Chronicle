@@ -433,6 +433,13 @@ textarea.input-field { resize: vertical; }
     top: 3rem;
 }
 
+.skip-popup-btn {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 2500;
+}
+
 /* DICE ANIMATION */
 .dice-roll-overlay { z-index: 1500; }
 .dice-roll-content { text-align: center; }
