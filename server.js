@@ -843,18 +843,48 @@ class GameManager {
     handleDisconnect(socket) {
         console.log(`User disconnected: ${socket.id}`);
         const room = this.findRoomBySocket(socket);
-        if (room) {
-            const player = room.players[socket.id];
-            if (player) {
-                delete room.players[socket.id];
-                io.to(room.id).emit('playerLeft', { playerName: player.name });
-                this.emitPlayerListUpdate(room.id);
+        if (!room) return;
+    
+        const player = room.players[socket.id];
+        if (!player) return;
+    
+        const wasCurrentTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === socket.id;
+    
+        // Remove player from players object
+        delete room.players[socket.id];
+    
+        // Remove player from turn order
+        const turnIndex = room.gameState.turnOrder.indexOf(socket.id);
+        if (turnIndex > -1) {
+            room.gameState.turnOrder.splice(turnIndex, 1);
+            // Adjust index of current player if the disconnected player was before them
+            if (turnIndex < room.gameState.currentPlayerIndex) {
+                room.gameState.currentPlayerIndex--;
             }
-            const peerIndex = room.voiceChatPeers.indexOf(socket.id);
-            if (peerIndex > -1) {
-                room.voiceChatPeers.splice(peerIndex, 1);
-                room.voiceChatPeers.forEach(peerId => io.to(peerId).emit('voice-peer-disconnect', { peerId: socket.id }));
+        }
+    
+        // Announce departure
+        io.to(room.id).emit('playerLeft', { playerName: player.name });
+        this.emitPlayerListUpdate(room.id);
+    
+        // If it was the disconnected player's turn, advance the turn
+        if (wasCurrentTurn) {
+            // Ensure index is not out of bounds after splice
+            if (room.gameState.currentPlayerIndex >= room.gameState.turnOrder.length) {
+                room.gameState.currentPlayerIndex = 0;
+                if(room.gameState.turnOrder.length > 0 && room.gameState.phase !== 'lobby') room.gameState.turnCount++;
             }
+            this.startTurn(room.id);
+        } else {
+            // Otherwise, just send a regular update
+            this.emitGameState(room.id);
+        }
+    
+        // Voice chat cleanup
+        const peerIndex = room.voiceChatPeers.indexOf(socket.id);
+        if (peerIndex > -1) {
+            room.voiceChatPeers.splice(peerIndex, 1);
+            room.voiceChatPeers.forEach(peerId => io.to(peerId).emit('voice-peer-disconnect', { peerId: socket.id }));
         }
     }
 }
