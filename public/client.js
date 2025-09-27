@@ -1008,6 +1008,64 @@ socket.on('attackAnimation', (data) => {
     }, 'attack-animation');
 });
 
+socket.on('monsterAttackAnimation', (data) => {
+    addToModalQueue(() => {
+        let fastForwarded = false;
+        let timeouts = [];
+
+        const renderResult = () => {
+            attackDice.classList.remove('is-rolling');
+            let resultHTML = data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
+            resultHTML += `<p>Rolled ${data.totalRollToHit} vs DC ${data.requiredRoll}</p>`;
+            if (data.hit) {
+                resultHTML += `<p class="damage-breakdown">Damage: ${data.rawDamageRoll}(d) = ${data.totalDamage}</p>`;
+            }
+            diceRollResult.innerHTML = resultHTML;
+            diceRollResult.classList.remove('hidden');
+        };
+
+        const close = () => {
+            diceRollOverlay.classList.add('hidden');
+            finishModal();
+        };
+
+        currentSkipHandler = () => {
+            timeouts.forEach(clearTimeout);
+            if (!fastForwarded) {
+                renderResult();
+                fastForwarded = true;
+                const closeTimeout = setTimeout(close, 3000);
+                timeouts = [closeTimeout];
+                currentSkipHandler = () => {
+                    clearTimeout(closeTimeout);
+                    close();
+                };
+            } else {
+                close();
+            }
+        };
+
+        showRollResult(data.d20Roll, 'd20');
+        diceRollTitle.textContent = `${data.attackerName} attacks ${data.targetName}!`;
+        diceRollResult.innerHTML = '';
+        diceRollResult.classList.add('hidden');
+        diceRollOverlay.classList.remove('hidden');
+
+        attackDice.classList.remove('is-rolling');
+        void attackDice.offsetWidth; 
+        attackDice.classList.add('is-rolling');
+
+        const timeout1 = setTimeout(() => {
+            renderResult();
+            fastForwarded = true;
+            const timeout2 = setTimeout(close, 3000);
+            timeouts = [timeout2];
+        }, 1500);
+        timeouts.push(timeout1);
+
+    }, 'monster-attack-animation');
+});
+
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
     // This is part of an active modal, so we don't queue it.
     let timeoutId;

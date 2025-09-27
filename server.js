@@ -377,110 +377,62 @@ class GameManager {
         this.startTurn(roomId);
     }
 
-    getAverageDiceRoll(diceString) {
-        if (!diceString || typeof diceString !== 'string') return 0;
-        const [count, sides] = diceString.toLowerCase().split('d').map(Number);
-        if (isNaN(count) || isNaN(sides)) return 0;
-        return count * ((sides + 1) / 2);
-    }
-
     determine_ai_action(player, gameState, allPlayers) {
-        const possibleActions = [];
         const { board } = gameState;
         const { currentAp, stats, hand, healthDice } = player;
 
-        // 1. Evaluate Attack Actions
+        // Priority 1: Healing (Cards)
+        const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
+        let bestHealTarget = { utility: -1, target: null, card: null };
+        hand.forEach(card => {
+            const cardApCost = card.apCost || 1;
+            if (currentAp >= cardApCost && card.effect && card.effect.type === 'heal') {
+                partyMembers.forEach(ally => {
+                    if (ally.stats.currentHp < ally.stats.maxHp * 0.5) {
+                        const healthDeficit = 1 - (ally.stats.currentHp / ally.stats.maxHp);
+                        if (healthDeficit > bestHealTarget.utility) {
+                            bestHealTarget = { utility: healthDeficit, target: ally, card: card };
+                        }
+                    }
+                });
+            }
+        });
+        if (bestHealTarget.target) {
+            return { action: 'useCard', cardId: bestHealTarget.card.id, targetId: bestHealTarget.target.id, apCost: bestHealTarget.card.apCost || 1 };
+        }
+
+        // Priority 2: Attack
         const weapon = player.equipment.weapon;
         if (weapon && board.monsters.length > 0) {
             const apCost = weapon.apCost || 2;
             if (currentAp >= apCost) {
-                let bestAttack = { utility: -1, targetId: null };
-                const baseDamage = this.getAverageDiceRoll(weapon.effect.dice) + player.stats.damageBonus;
-
-                board.monsters.forEach(enemy => {
-                    const healthModifier = (enemy.maxHp - enemy.currentHp) / enemy.maxHp;
-                    const utility = baseDamage * (1 + healthModifier);
-                    if (utility > bestAttack.utility) {
-                        bestAttack = { utility, targetId: enemy.id };
-                    }
-                });
-
-                if (bestAttack.targetId) {
-                    possibleActions.push({
-                        action: 'attack',
-                        utility: bestAttack.utility,
-                        targetId: bestAttack.targetId,
-                        weaponId: weapon.id,
-                        apCost: apCost
-                    });
+                let bestTarget = board.monsters.reduce((prev, curr) => (prev.currentHp < curr.currentHp) ? prev : curr);
+                if (bestTarget) {
+                    return { action: 'attack', targetId: bestTarget.id, weaponId: weapon.id, apCost: apCost };
                 }
             }
         }
-
-        // 2. Evaluate Guard Action
+        
+        // Priority 3: Guard
         const guardApCost = gameData.actionCosts.guard;
         if (currentAp >= guardApCost && stats.currentHp < stats.maxHp * 0.75) {
-            const utility = 15 + 20 * (1 - stats.currentHp / stats.maxHp);
-            possibleActions.push({ action: 'guard', utility, apCost: guardApCost });
+            return { action: 'guard', apCost: guardApCost };
         }
         
-        // 3. Evaluate Healing Actions (Cards and Respite)
-        const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
-        
-        hand.forEach(card => {
-            const cardApCost = card.apCost || 1;
-            if (currentAp >= cardApCost && card.effect && card.effect.type === 'heal') {
-                let bestHealTarget = { utility: -1, target: null };
-                partyMembers.forEach(ally => {
-                    if (ally.stats.currentHp < ally.stats.maxHp * 0.5) {
-                        const utility = 30 + 50 * Math.pow(1 - (ally.stats.currentHp / ally.stats.maxHp), 2);
-                        if (utility > bestHealTarget.utility) {
-                            bestHealTarget = { utility, target: ally };
-                        }
-                    }
-                });
-                if (bestHealTarget.target) {
-                    possibleActions.push({
-                        action: 'useCard',
-                        utility: bestHealTarget.utility,
-                        cardId: card.id,
-                        targetId: bestHealTarget.target.id,
-                        apCost: cardApCost
-                    });
-                }
+        // Priority 4: Rest (Out of Combat)
+        if (board.monsters.length === 0) {
+            const fullRestApCost = gameData.actionCosts.fullRest;
+            if (currentAp >= fullRestApCost && healthDice.current >= 2 && stats.currentHp < stats.maxHp) {
+                return { action: 'fullRest', apCost: fullRestApCost };
             }
-        });
-        
-        const respiteApCost = gameData.actionCosts.briefRespite;
-        if (currentAp >= respiteApCost && healthDice.current > 0 && stats.currentHp < stats.maxHp) {
-            let utility = 0;
-            if (stats.currentHp < stats.maxHp * 0.5 && board.monsters.length === 0) {
-                utility = 30 + 50 * Math.pow(1 - (stats.currentHp / stats.maxHp), 2);
-            } else if (currentAp < stats.ap) {
-                const isBattleNotCritical = board.monsters.every(m => (m.currentHp / m.maxHp) > 0.8);
-                if (isBattleNotCritical) {
-                    utility = 5;
-                }
+            const respiteApCost = gameData.actionCosts.briefRespite;
+            if (currentAp >= respiteApCost && healthDice.current > 0 && stats.currentHp < stats.maxHp) {
+                return { action: 'briefRespite', apCost: respiteApCost };
             }
-            if (utility > 0) {
-                possibleActions.push({ action: 'briefRespite', utility, apCost: respiteApCost });
-            }
-        }
-        
-        const fullRestApCost = gameData.actionCosts.fullRest;
-        if (currentAp >= fullRestApCost && healthDice.current >= 2 && stats.currentHp < stats.maxHp && board.monsters.length === 0) {
-            // High priority to fully heal out of combat if possible
-            const utility = 40 + 50 * Math.pow(1 - (stats.currentHp / stats.maxHp), 2);
-            possibleActions.push({ action: 'fullRest', utility, apCost: fullRestApCost });
-        }
-        
-        // 4. Decide on the best action
-        if (possibleActions.length === 0) {
-            return { action: 'wait', apCost: 0 };
         }
 
-        possibleActions.sort((a, b) => b.utility - a.utility);
-        return possibleActions[0];
+        // Default: Wait
+        return { action: 'wait', apCost: 0 };
     }
 
     async handleNpcExplorerTurn(room, player) {
@@ -491,20 +443,19 @@ class GameManager {
                     type: 'system', 
                     message: `<b>${player.name}</b> is stunned and cannot act!` 
                 });
-                return; // Finally block will advance the turn
+                return;
             }
 
-            await new Promise(res => setTimeout(res, 1500)); // Initial delay to simulate thinking
+            await new Promise(res => setTimeout(res, 1500));
 
             while (player.currentAp > 0) {
-                // Refresh player object to get latest stats after previous actions
                 const currentPlayerState = room.players[player.id];
-                if (!currentPlayerState) break; // Player might have disconnected
+                if (!currentPlayerState) break;
 
                 const bestAction = this.determine_ai_action(currentPlayerState, room.gameState, room.players);
 
                 if (!bestAction || bestAction.action === 'wait' || currentPlayerState.currentAp < bestAction.apCost) {
-                    break; // No more affordable actions
+                    break;
                 }
 
                 currentPlayerState.currentAp -= bestAction.apCost;
@@ -516,7 +467,7 @@ class GameManager {
                         this.sendMessageToRoom(room.id, {
                             channel: 'game',
                             type: 'system',
-                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack, delivering a powerful, calculated strike.`
+                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack, targeting the weakest foe.`
                         });
                         const d20Roll = Math.floor(Math.random() * 20) + 1;
                         this._resolveAttack(room, {
@@ -526,7 +477,6 @@ class GameManager {
                             narrative: narrative
                         }, d20Roll);
                         break;
-
                     case 'guard':
                         const guardBonus = player.equipment.armor?.guardBonus || 2;
                         player.stats.shieldHp += guardBonus;
@@ -536,7 +486,6 @@ class GameManager {
                             message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Guard, gaining ${guardBonus} Shield HP.` 
                         });
                         break;
-
                     case 'briefRespite':
                         player.healthDice.current -= 1;
                         const healAmount = this.rollDice('1d8');
@@ -547,7 +496,6 @@ class GameManager {
                             message: `<b>${player.name}</b> used ${bestAction.apCost} AP for a Brief Respite, healing for ${healAmount} HP.` 
                         });
                         break;
-                    
                     case 'fullRest':
                         player.healthDice.current -= 2;
                         const totalHeal = this.rollDice('2d8');
@@ -558,7 +506,6 @@ class GameManager {
                             message: `<b>${player.name}</b> used ${bestAction.apCost} AP for a Full Rest, healing for ${totalHeal} HP.` 
                         });
                         break;
-
                     case 'useCard':
                         const cardIndex = player.hand.findIndex(c => c.id === bestAction.cardId);
                         if (cardIndex > -1) {
@@ -578,10 +525,9 @@ class GameManager {
                         break;
                 }
                 
-                // Refresh stats and emit state after each action
                 player.stats = this.calculatePlayerStats(player);
                 this.emitGameState(room.id);
-                await new Promise(res => setTimeout(res, 2000)); // Delay between actions
+                await new Promise(res => setTimeout(res, 2000));
             }
 
             this.sendMessageToRoom(room.id, { 
@@ -592,13 +538,7 @@ class GameManager {
 
         } catch (error) {
             console.error(`Error during NPC turn for ${player.name}:`, error);
-            this.sendMessageToRoom(room.id, { 
-                channel: 'game', 
-                type: 'system', 
-                message: `${player.name} seems confused and ends their turn.` 
-            });
         } finally {
-            // Crucially, this always runs to advance the turn
             room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             if (room.gameState.currentPlayerIndex === 0) {
                 room.gameState.turnCount++;
@@ -607,8 +547,95 @@ class GameManager {
         }
     }
 
-    startTurn(roomId) {
+    async handleMonsterTurns(room) {
+        if (!room.gameState.board.monsters || room.gameState.board.monsters.length === 0) {
+            return;
+        }
+
+        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
+        if (explorers.length === 0) return; // No valid targets
+
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', type: 'system',
+            message: `The monsters lash out!`,
+        });
+
+        for (const monster of room.gameState.board.monsters) {
+            await new Promise(res => setTimeout(res, 1500)); // Delay between monster attacks
+
+            // Target lowest HP explorer
+            explorers.sort((a, b) => a.stats.currentHp - b.stats.currentHp);
+            const target = explorers[0];
+            if (!target) continue;
+            
+            this._resolveMonsterAttack(room, monster, target);
+        }
+    }
+
+    _resolveMonsterAttack(room, monster, target) {
+        const requiredRollToHit = 10 + target.stats.shieldBonus;
+        const d20Roll = Math.floor(Math.random() * 20) + 1;
+        const totalRollToHit = d20Roll + monster.attackBonus;
+        const hit = totalRollToHit >= requiredRollToHit;
+        
+        let totalDamage = 0;
+        let rawDamageRoll = 0;
+
+        if (hit) {
+            rawDamageRoll = this.rollDice(monster.effect.dice);
+            totalDamage = rawDamageRoll; 
+            
+            let damageToShield = 0;
+            if (target.stats.shieldHp > 0) {
+                damageToShield = Math.min(totalDamage, target.stats.shieldHp);
+                target.stats.shieldHp -= damageToShield;
+                totalDamage -= damageToShield;
+            }
+            
+            if (totalDamage > 0) {
+                 target.stats.currentHp -= totalDamage;
+            }
+            totalDamage += damageToShield; // For logging purposes, show total damage dealt
+        }
+        
+        io.to(room.id).emit('monsterAttackAnimation', {
+            attackerName: monster.name,
+            targetName: target.name,
+            d20Roll,
+            totalRollToHit,
+            requiredRoll: requiredRollToHit,
+            hit,
+            rawDamageRoll,
+            damageBonus: 0,
+            totalDamage,
+        });
+
+        if (target.stats.currentHp <= 0) {
+            target.lifeCount -= 1;
+            this.sendMessageToRoom(room.id, {
+                channel: 'game', type: 'system',
+                message: `<b>${target.name}</b> has fallen in battle!`,
+            });
+            if(target.lifeCount > 0) {
+                target.stats.currentHp = Math.floor(target.stats.maxHp / 2);
+                 this.sendMessageToRoom(room.id, {
+                    channel: 'game', type: 'system',
+                    message: `${target.name} gets back up, but looks weakened. (${target.lifeCount} lives remaining)`,
+                });
+            } else {
+                 this.sendMessageToRoom(room.id, {
+                    channel: 'game', type: 'system',
+                    message: `${target.name} has been defeated permanently!`,
+                });
+            }
+        }
+        
+        this.emitGameState(room.id);
+    }
+
+    async startTurn(roomId) {
         const room = this.rooms[roomId];
+        if (!room) return;
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
         if (!player) return;
 
@@ -631,6 +658,9 @@ class GameManager {
         }
         
         if (player.isNpc && player.role === 'DM') {
+            await this.handleMonsterTurns(room);
+            await new Promise(res => setTimeout(res, 1500)); // Pause after monster attacks
+
             if (room.gameState.board.monsters.length === 0) {
                 const roll = Math.random();
                 if (roll < 0.25 && room.gameState.decks.worldEvent.length > 0) {
@@ -658,11 +688,6 @@ class GameManager {
                         });
                     }
                 }
-            } else {
-                this.sendMessageToRoom(room.id, {
-                    channel: 'game', senderName: 'Dungeon Master',
-                    message: `The monsters continue their assault!`, isNarrative: true
-                });
             }
 
             this.emitGameState(roomId);
