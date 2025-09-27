@@ -377,77 +377,189 @@ class GameManager {
         this.startTurn(roomId);
     }
 
+    getAverageDiceRoll(diceString) {
+        if (!diceString || typeof diceString !== 'string') return 0;
+        const [count, sides] = diceString.toLowerCase().split('d').map(Number);
+        if (isNaN(count) || isNaN(sides)) return 0;
+        return count * ((sides + 1) / 2);
+    }
+
+    determine_ai_action(player, gameState, allPlayers) {
+        const possibleActions = [];
+        const { board } = gameState;
+        const { currentAp, stats, hand, healthDice } = player;
+
+        // 1. Evaluate Attack Actions
+        const weapon = player.equipment.weapon;
+        if (weapon && board.monsters.length > 0) {
+            const apCost = weapon.apCost || 2;
+            if (currentAp >= apCost) {
+                let bestAttack = { utility: -1, targetId: null };
+                const baseDamage = this.getAverageDiceRoll(weapon.effect.dice) + player.stats.damageBonus;
+
+                board.monsters.forEach(enemy => {
+                    const healthModifier = (enemy.maxHp - enemy.currentHp) / enemy.maxHp;
+                    const utility = baseDamage * (1 + healthModifier);
+                    if (utility > bestAttack.utility) {
+                        bestAttack = { utility, targetId: enemy.id };
+                    }
+                });
+
+                if (bestAttack.targetId) {
+                    possibleActions.push({
+                        action: 'attack',
+                        utility: bestAttack.utility,
+                        targetId: bestAttack.targetId,
+                        weaponId: weapon.id,
+                        apCost: apCost
+                    });
+                }
+            }
+        }
+
+        // 2. Evaluate Guard Action
+        const guardApCost = gameData.actionCosts.guard;
+        if (currentAp >= guardApCost && stats.currentHp < stats.maxHp * 0.75) {
+            const utility = 15 + 20 * (1 - stats.currentHp / stats.maxHp);
+            possibleActions.push({ action: 'guard', utility, apCost: guardApCost });
+        }
+        
+        // 3. Evaluate Healing Actions (Cards and Respite)
+        const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
+        
+        hand.forEach(card => {
+            const cardApCost = card.apCost || 1;
+            if (currentAp >= cardApCost && card.effect && card.effect.type === 'heal') {
+                let bestHealTarget = { utility: -1, target: null };
+                partyMembers.forEach(ally => {
+                    if (ally.stats.currentHp < ally.stats.maxHp * 0.5) {
+                        const utility = 30 + 50 * Math.pow(1 - (ally.stats.currentHp / ally.stats.maxHp), 2);
+                        if (utility > bestHealTarget.utility) {
+                            bestHealTarget = { utility, target: ally };
+                        }
+                    }
+                });
+                if (bestHealTarget.target) {
+                    possibleActions.push({
+                        action: 'useCard',
+                        utility: bestHealTarget.utility,
+                        cardId: card.id,
+                        targetId: bestHealTarget.target.id,
+                        apCost: cardApCost
+                    });
+                }
+            }
+        });
+        
+        const respiteApCost = gameData.actionCosts.briefRespite;
+        if (currentAp >= respiteApCost && healthDice.current > 0 && stats.currentHp < stats.maxHp) {
+            let utility = 0;
+            if (stats.currentHp < stats.maxHp * 0.5 && board.monsters.length === 0) {
+                utility = 30 + 50 * Math.pow(1 - (stats.currentHp / stats.maxHp), 2);
+            } else if (currentAp < stats.ap) {
+                const isBattleNotCritical = board.monsters.every(m => (m.currentHp / m.maxHp) > 0.8);
+                if (isBattleNotCritical) {
+                    utility = 5;
+                }
+            }
+            if (utility > 0) {
+                possibleActions.push({ action: 'briefRespite', utility, apCost: respiteApCost });
+            }
+        }
+        
+        // 4. Decide on the best action
+        if (possibleActions.length === 0) {
+            return { action: 'wait', apCost: 0 };
+        }
+
+        possibleActions.sort((a, b) => b.utility - a.utility);
+        return possibleActions[0];
+    }
+
     handleNpcExplorerTurn(room, player) {
         setTimeout(() => {
             try {
-                let actionTaken = false;
-        
-                const target = room.gameState.board.monsters[0];
-                const weapon = player.equipment.weapon;
-        
-                // Stun check for NPC
                 if (player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned')) {
                     this.sendMessageToRoom(room.id, { 
                         channel: 'game', 
                         type: 'system', 
-                        message: `${player.name} is stunned and cannot act!` 
+                        message: `<b>${player.name}</b> is stunned and cannot act!` 
                     });
-                } else {
-                     // Action Priority: Attack -> Guard -> Rest
-                    if (target && weapon && player.currentAp >= (weapon.apCost || 1)) {
-                        // ATTACK
-                        const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
+                    return;
+                }
+
+                const bestAction = this.determine_ai_action(player, room.gameState, room.players);
+
+                if (!bestAction || bestAction.action === 'wait') {
+                    this.sendMessageToRoom(room.id, { 
+                        channel: 'game', 
+                        type: 'system', 
+                        message: `<b>${player.name}</b> considers their options and waits.` 
+                    });
+                    return;
+                }
+                
+                player.currentAp -= bestAction.apCost;
+                
+                const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
+
+                switch (bestAction.action) {
+                    case 'attack':
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game',
+                            type: 'system',
+                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack, delivering a powerful, calculated strike.`
+                        });
                         const d20Roll = Math.floor(Math.random() * 20) + 1;
                         this._resolveAttack(room, {
                             attackerId: player.id,
-                            targetId: target.id,
-                            weaponId: weapon.id,
+                            targetId: bestAction.targetId,
+                            weaponId: bestAction.weaponId,
                             narrative: narrative
                         }, d20Roll);
-                        actionTaken = true;
-                    } else if (player.stats.currentHp < player.stats.maxHp / 2 && player.currentAp >= gameData.actionCosts.guard) {
-                        // GUARD
-                        player.currentAp -= gameData.actionCosts.guard;
+                        break;
+
+                    case 'guard':
                         const guardBonus = player.equipment.armor?.guardBonus || 2;
                         player.stats.shieldHp += guardBonus;
                         this.sendMessageToRoom(room.id, { 
                             channel: 'game', 
                             type: 'system', 
-                            message: `${player.name} is wounded and takes a defensive stance, gaining ${guardBonus} Shield HP.` 
+                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Guard, gaining ${guardBonus} Shield HP.` 
                         });
                         this.emitGameState(room.id);
-                        actionTaken = true;
-                    } else if (player.stats.currentHp < player.stats.maxHp && player.healthDice.current > 0 && player.currentAp >= gameData.actionCosts.briefRespite) {
-                        // REST (HEAL)
-                        player.currentAp -= gameData.actionCosts.briefRespite;
+                        break;
+
+                    case 'briefRespite':
                         player.healthDice.current -= 1;
                         const healAmount = this.rollDice('1d8');
                         player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
                         this.sendMessageToRoom(room.id, { 
                             channel: 'game', 
                             type: 'system', 
-                            message: `${player.name} takes a moment to tend their wounds, healing for ${healAmount} HP.` 
+                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP for a Brief Respite, healing for ${healAmount} HP.` 
                         });
                         this.emitGameState(room.id);
-                        actionTaken = true;
-                    }
-                }
-        
-                if (!actionTaken && !(player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned'))) {
-                    let reason = "considers their options and prepares for the next move.";
-                    if (!target) {
-                        reason = "sees no enemies and decides to wait.";
-                    } else if (weapon && player.currentAp < (weapon.apCost || 1)) {
-                        reason = "lacks the action points for a major action.";
-                    } else if (player.stats.currentHp >= (player.stats.maxHp / 2) && player.currentAp < gameData.actionCosts.briefRespite) {
-                        reason = "is healthy and preserves their energy.";
-                    }
-    
-                     this.sendMessageToRoom(room.id, { 
-                        channel: 'game', 
-                        type: 'system', 
-                        message: `${player.name} ${reason}` 
-                    });
+                        break;
+
+                    case 'useCard':
+                        const cardIndex = player.hand.findIndex(c => c.id === bestAction.cardId);
+                        if (cardIndex > -1) {
+                            const card = player.hand[cardIndex];
+                            const target = room.players[bestAction.targetId];
+                            if (target && card.effect.type === 'heal') {
+                                const healAmountCard = this.rollDice(card.effect.dice);
+                                target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healAmountCard);
+                                player.hand.splice(cardIndex, 1);
+                                this.sendMessageToRoom(room.id, {
+                                    channel: 'game',
+                                    type: 'system',
+                                    message: `<b>${player.name}</b> used ${bestAction.apCost} AP to use ${card.name} on ${target.name}, healing for ${healAmountCard} HP.`
+                                });
+                                 this.emitGameState(room.id);
+                            }
+                        }
+                        break;
                 }
             } catch (error) {
                 console.error(`Error during NPC turn for ${player.name}:`, error);
@@ -457,7 +569,6 @@ class GameManager {
                     message: `${player.name} seems confused and ends their turn.` 
                 });
             } finally {
-                // End turn - this must always run to prevent the game from freezing
                 room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
                 if (room.gameState.currentPlayerIndex === 0) {
                     room.gameState.turnCount++;

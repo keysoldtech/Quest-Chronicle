@@ -164,6 +164,20 @@ const skipPopupBtn = get('skip-popup-btn');
 
 
 // --- Helper Functions ---
+const randomAttackDescriptions = [
+    "strikes with a fierce shout, pouring all their strength into the action.",
+    "delivers a powerful, calculated strike.",
+    "moves with surprising speed, finding an opening.",
+    "unleashes a precise and deadly blow.",
+    "attacks with a determined grimace, aiming for a weak spot.",
+    "executes a well-practiced maneuver with fluid grace.",
+    "lunges forward, their weapon a blur of motion."
+];
+
+function generate_random_attack_description() {
+    return randomAttackDescriptions[Math.floor(Math.random() * randomAttackDescriptions.length)];
+}
+
 function closeAllModals() {
     console.error("Force-closing all modals due to watchdog timer.");
     narrativeModal.classList.add('hidden');
@@ -857,11 +871,11 @@ endTurnCancelBtn.addEventListener('click', () => {
 });
 
 narrativeConfirmBtn.addEventListener('click', () => {
-    const narrativeText = narrativeInput.value.trim();
+    let narrativeText = narrativeInput.value.trim();
+    
+    // If the input is empty, generate a random description.
     if (narrativeText === "") {
-        alert("Please describe your action before confirming.");
-        narrativeInput.focus();
-        return;
+        narrativeText = generate_random_attack_description();
     }
 
     if (pendingActionData) {
