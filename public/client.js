@@ -413,6 +413,7 @@ function renderGameState(room) {
         pendingAbilityConfirmation = null;
         selectedWeaponId = null;
         selectedTargetId = null;
+        pendingActionData = null;
         yourTurnPopup.classList.remove('hidden');
         setTimeout(() => yourTurnPopup.classList.add('hidden'), 1500);
     }

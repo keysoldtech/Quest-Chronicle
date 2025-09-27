@@ -227,7 +227,7 @@ body {
     font-size: 1.5rem;
 }
 .mobile-panel {
-    min-height: 280px;
+    min-height: 300px;
 }
 #mobile-class-selection.panel { /* Special case for showing class selection screen */
     display: flex;
@@ -323,7 +323,7 @@ body {
 }
 .shield-hp-value { color: var(--color-success); text-shadow: 0 0 5px var(--color-success); }
 
-.card-container-row { display: flex; gap: 1rem; overflow-x: auto; padding: 0.5rem; min-height: 100px; align-items: center; flex: 1;}
+.card-container-row { display: flex; gap: 1rem; overflow-x: auto; padding: 1rem; min-height: 100px; align-items: center; flex: 1;}
 .empty-pool-text { color: var(--color-text-secondary); font-style: italic; align-self: center; margin: auto; }
 .player-hand-header { display: flex; justify-content: space-between; align-items: center; }
 .player-hand-header .panel-header { margin-bottom: 0.5rem; border: none; }
