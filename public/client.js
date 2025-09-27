@@ -1,3 +1,8 @@
+// This file contains all client-side JavaScript logic for the Quest & Chronicle game.
+// It establishes the Socket.IO connection to the server, manages local game state,
+// handles all user interactions (button clicks, form submissions), and dynamically renders
+// the game state received from the server into the HTML DOM. It also contains WebRTC logic for voice chat.
+
 // This script handles the client-side logic for interacting with the server.
 
 const socket = io();

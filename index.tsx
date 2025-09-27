@@ -1,0 +1,1 @@
+// This file can be deleted. It was part of a previous React/TypeScript setup and is not used by the current Node.js server.

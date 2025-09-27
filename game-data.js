@@ -1,3 +1,7 @@
+// This file defines all static game data, including character classes, cards (items, spells, monsters, etc.),
+// NPC dialogue, skill challenges, and other game constants. It is used exclusively by the server (`server.js`) to populate
+// the game world and manage game mechanics. It is not sent to the client.
+
 // This file contains the game data, structured for the server.
 
 let lastId = 0;
