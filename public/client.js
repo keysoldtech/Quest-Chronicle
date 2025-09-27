@@ -15,6 +15,8 @@ let isMyTurnPreviously = false; // For "Your Turn" popup
 let tempSelectedClassId = null; // For temporary class selection in lobby
 let pendingAbilityConfirmation = null; // For non-attack ability confirmation
 let apModalShownThisTurn = false; // For AP management pop-up
+const modalQueue = [];
+let isModalActive = false;
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -157,6 +159,28 @@ const voiceChatContainer = get('voice-chat-container');
 
 
 // --- Helper Functions ---
+function processModalQueue() {
+    if (isModalActive || modalQueue.length === 0) {
+        return;
+    }
+    isModalActive = true;
+    const { showFunction } = modalQueue.shift();
+    showFunction();
+}
+
+function addToModalQueue(showFunction, id) {
+    if (!modalQueue.some(item => item.id === id)) {
+        modalQueue.push({ showFunction, id });
+        processModalQueue();
+    }
+}
+
+function finishModal() {
+    isModalActive = false;
+    setTimeout(processModalQueue, 200); // Small delay for smoother transitions
+}
+
+
 function showRollResult(rollValue, type = 'd20') {
     if (!rollResultPopup) return;
     
@@ -207,16 +231,19 @@ function logMessage(message, options = {}) {
 }
 
 function openNarrativeModal(actionData, cardName) {
-    pendingActionData = actionData;
-    narrativePrompt.textContent = `How do you use ${cardName}?`;
-    narrativeInput.value = '';
-    narrativeModal.classList.remove('hidden');
-    narrativeInput.focus();
+    addToModalQueue(() => {
+        pendingActionData = actionData;
+        narrativePrompt.textContent = `How do you use ${cardName}?`;
+        narrativeInput.value = '';
+        narrativeModal.classList.remove('hidden');
+        narrativeInput.focus();
+    }, 'narrative-modal');
 }
 
 function closeNarrativeModal() {
     pendingActionData = null;
     narrativeModal.classList.add('hidden');
+    finishModal();
 }
 
 function createCardElement(card, actions = {}) {
@@ -417,27 +444,36 @@ function renderGameState(room) {
         selectedWeaponId = null;
         selectedTargetId = null;
         pendingActionData = null;
-        yourTurnPopup.classList.remove('hidden');
-        setTimeout(() => yourTurnPopup.classList.add('hidden'), 1500);
+        addToModalQueue(() => {
+            yourTurnPopup.classList.remove('hidden');
+            setTimeout(() => {
+                yourTurnPopup.classList.add('hidden');
+                finishModal();
+            }, 1500);
+        }, 'your-turn-popup');
     }
     isMyTurnPreviously = isMyTurn;
     
     if (isMyTurn && myPlayerInfo.pendingEventRoll) {
-        eventOverlay.classList.remove('hidden');
-        eventRollContainer.classList.remove('hidden');
-        eventDiceAnimationContainer.classList.add('hidden');
-        eventResultContainer.classList.add('hidden');
+        addToModalQueue(() => {
+            eventOverlay.classList.remove('hidden');
+            eventRollContainer.classList.remove('hidden');
+            eventDiceAnimationContainer.classList.add('hidden');
+            eventResultContainer.classList.add('hidden');
+        }, 'event-roll');
     } else if (!myPlayerInfo.pendingEventChoice) {
         eventOverlay.classList.add('hidden');
     }
     
     if (myPlayerInfo.pendingWorldEventSave) {
-        worldEventSaveModal.classList.remove('hidden');
-        const { dc, save, eventName } = myPlayerInfo.pendingWorldEventSave;
-        worldEventSaveTitle.textContent = eventName;
-        worldEventSavePrompt.textContent = `You must make a DC ${dc} ${save} save!`;
-        worldEventSaveRollBtn.disabled = false;
-        worldEventRollResult.classList.add('hidden');
+        addToModalQueue(() => {
+            worldEventSaveModal.classList.remove('hidden');
+            const { dc, save, eventName } = myPlayerInfo.pendingWorldEventSave;
+            worldEventSaveTitle.textContent = eventName;
+            worldEventSavePrompt.textContent = `You must make a DC ${dc} ${save} save!`;
+            worldEventSaveRollBtn.disabled = false;
+            worldEventRollResult.classList.add('hidden');
+        }, 'world-event-save');
     } else {
         worldEventSaveModal.classList.add('hidden');
     }
@@ -628,7 +664,9 @@ function renderGameState(room) {
     });
     
     if (isMyTurn && myPlayerInfo.currentAp === 0 && !apModalShownThisTurn) {
-        apModal.classList.remove('hidden');
+        addToModalQueue(() => {
+            apModal.classList.remove('hidden');
+        }, 'ap-modal');
         apModalShownThisTurn = true;
     }
 }
@@ -668,7 +706,11 @@ joinRoomBtn.addEventListener('click', () => {
 }));
 
 // Turn Controls
-[actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => endTurnConfirmModal.classList.remove('hidden')));
+[actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => {
+    addToModalQueue(() => {
+        endTurnConfirmModal.classList.remove('hidden');
+    }, 'end-turn-confirm');
+}));
 [actionAttackBtn, mobileActionAttackBtn].forEach(btn => btn.addEventListener('click', () => {
     if (isMyTurnPreviously && selectedWeaponId && selectedTargetId) {
         const weapon = myPlayerInfo.equipment.weapon;
@@ -741,8 +783,15 @@ mobileChatForm.addEventListener('submit', (e) => {
         setTimeout(() => window.location.reload(), 200);
     }
 }));
-endTurnConfirmBtn.addEventListener('click', () => { socket.emit('endTurn'); endTurnConfirmModal.classList.add('hidden'); });
-endTurnCancelBtn.addEventListener('click', () => endTurnConfirmModal.classList.add('hidden'));
+endTurnConfirmBtn.addEventListener('click', () => {
+    socket.emit('endTurn');
+    endTurnConfirmModal.classList.add('hidden');
+    finishModal();
+});
+endTurnCancelBtn.addEventListener('click', () => {
+    endTurnConfirmModal.classList.add('hidden');
+    finishModal();
+});
 
 narrativeConfirmBtn.addEventListener('click', () => {
     if (pendingActionData) {
@@ -762,8 +811,15 @@ rollDiceBtn.onclick = () => {
     eventDiceAnimationContainer.classList.remove('hidden');
     dice.className = 'dice is-rolling';
 };
-apModalConfirmBtn.addEventListener('click', () => { socket.emit('endTurn'); apModal.classList.add('hidden'); });
-apModalCancelBtn.addEventListener('click', () => apModal.classList.add('hidden'));
+apModalConfirmBtn.addEventListener('click', () => {
+    socket.emit('endTurn');
+    apModal.classList.add('hidden');
+    finishModal();
+});
+apModalCancelBtn.addEventListener('click', () => {
+    apModal.classList.add('hidden');
+    finishModal();
+});
 worldEventSaveRollBtn.addEventListener('click', () => {
     socket.emit('rollForWorldEventSave');
     worldEventSaveRollBtn.disabled = true;
@@ -800,28 +856,33 @@ socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left t
 socket.on('actionError', (errorMessage) => alert(errorMessage));
 
 socket.on('attackAnimation', (data) => {
-    showRollResult(data.d20Roll, 'd20');
-    diceRollTitle.textContent = `${data.attackerName} attacks!`;
-    diceRollResult.innerHTML = '';
-    diceRollResult.classList.add('hidden');
-    diceRollOverlay.classList.remove('hidden');
+    addToModalQueue(() => {
+        showRollResult(data.d20Roll, 'd20');
+        diceRollTitle.textContent = `${data.attackerName} attacks!`;
+        diceRollResult.innerHTML = '';
+        diceRollResult.classList.add('hidden');
+        diceRollOverlay.classList.remove('hidden');
 
-    attackDice.classList.remove('is-rolling');
-    void attackDice.offsetWidth; 
-    attackDice.classList.add('is-rolling');
-
-    setTimeout(() => {
         attackDice.classList.remove('is-rolling');
-        let resultHTML = data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
-        resultHTML += `<p>Rolled ${data.totalRollToHit} vs DC ${data.requiredRoll}</p>`;
-        if (data.hit) {
-            resultHTML += `<p class="damage-breakdown">Damage: ${data.rawDamageRoll}(d) + ${data.damageBonus}(b) = ${data.totalDamage}</p>`;
-        }
-        diceRollResult.innerHTML = resultHTML;
-        diceRollResult.classList.remove('hidden');
+        void attackDice.offsetWidth; 
+        attackDice.classList.add('is-rolling');
 
-        setTimeout(() => diceRollOverlay.classList.add('hidden'), 3000);
-    }, 1500);
+        setTimeout(() => {
+            attackDice.classList.remove('is-rolling');
+            let resultHTML = data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
+            resultHTML += `<p>Rolled ${data.totalRollToHit} vs DC ${data.requiredRoll}</p>`;
+            if (data.hit) {
+                resultHTML += `<p class="damage-breakdown">Damage: ${data.rawDamageRoll}(d) + ${data.damageBonus}(b) = ${data.totalDamage}</p>`;
+            }
+            diceRollResult.innerHTML = resultHTML;
+            diceRollResult.classList.remove('hidden');
+
+            setTimeout(() => {
+                diceRollOverlay.classList.add('hidden');
+                finishModal();
+            }, 3000);
+        }, 1500);
+    }, 'attack-animation');
 });
 
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
@@ -836,7 +897,10 @@ socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
             eventResultSubtitle.textContent = 'Nothing happens this time.';
             eventCardSelection.classList.add('hidden');
             eventResultOkayBtn.classList.remove('hidden');
-            eventResultOkayBtn.onclick = () => eventOverlay.classList.add('hidden');
+            eventResultOkayBtn.onclick = () => {
+                eventOverlay.classList.add('hidden');
+                finishModal();
+            };
         } else {
             eventResultSubtitle.textContent = outcome === 'discovery' ? 'You made a discovery! Choose one:' : 'A player event occurs! Choose one:';
             eventCardSelection.classList.remove('hidden');
@@ -847,6 +911,7 @@ socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
                 cardEl.onclick = () => {
                     socket.emit('selectEventCard', { cardId: card.id });
                     eventOverlay.classList.add('hidden');
+                    finishModal();
                 };
                 eventCardSelection.appendChild(cardEl);
             });
@@ -863,6 +928,7 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
     worldEventRollResult.classList.remove('hidden');
     setTimeout(() => {
         worldEventSaveModal.classList.add('hidden');
+        finishModal();
     }, 3000);
 });
 

@@ -411,6 +411,28 @@ textarea.input-field { resize: vertical; }
     20%, 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
+.roll-result-popup {
+    position: fixed;
+    top: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--color-surface);
+    color: var(--color-special);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    font-size: 1.5rem;
+    font-weight: bold;
+    z-index: 2001;
+    opacity: 0;
+    transition: opacity 0.3s ease, top 0.3s ease;
+    pointer-events: none;
+}
+.roll-result-popup.visible {
+    opacity: 1;
+    top: 3rem;
+}
+
 /* DICE ANIMATION */
 .dice-roll-overlay { z-index: 1500; }
 .dice-roll-content { text-align: center; }
@@ -440,7 +462,18 @@ textarea.input-field { resize: vertical; }
 .dice-roll-result-container .result-line.miss { color: var(--color-danger); }
 
 /* EVENT OVERLAY */
-.event-overlay { z-index: 1200; }
+.event-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1200;
+}
 .event-step-container { text-align: center; background: var(--color-surface); padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; }
 
 /* --- MOBILE LAYOUT --- */
