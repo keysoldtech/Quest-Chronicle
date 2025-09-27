@@ -58,7 +58,57 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--color-secondary); }
 
 /* --- FONT STYLES --- */
-.title-font { font-family: var(--font-title); font-size: 5rem; color: var(--color-primary); text-shadow: 0 0 15px var(--color-glow); }
+.title-font { 
+    font-family: var(--font-title); 
+    font-size: 5rem; 
+    color: var(--color-text-primary);
+    text-shadow: 0 0 2px var(--color-text-secondary); /* A very subtle shadow to make text pop */
+    position: relative;
+    z-index: 1;
+}
+
+.lobby-container .title-font::before,
+.lobby-container .title-font::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+}
+
+.lobby-container .title-font::before {
+    color: var(--color-special);
+    filter: blur(2px);
+    animation: flicker 3s linear infinite alternate 0.5s;
+}
+
+.lobby-container .title-font::after {
+    color: var(--color-primary);
+    filter: blur(4px);
+    animation: flicker 3s linear infinite alternate;
+}
+
+@keyframes flicker {
+  0%, 100% {
+    opacity: 0.9;
+    text-shadow: 0 0 10px currentColor, 0 0 25px currentColor;
+  }
+  25% {
+    opacity: 0.4;
+    text-shadow: 0 0 8px currentColor, 0 0 20px currentColor;
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 12px currentColor, 0 0 30px currentColor;
+  }
+  75% {
+    opacity: 0.6;
+    text-shadow: 0 0 10px currentColor, 0 0 22px currentColor;
+  }
+}
+
 .subtitle-font { color: var(--color-text-secondary); margin-bottom: 2.5rem; letter-spacing: 1px; }
 .panel-header {
     font-family: var(--font-title);
