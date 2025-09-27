@@ -548,6 +548,7 @@ function renderGameState(room) {
                     if (item.id === selectedWeaponId) cardEl.classList.add('selected-weapon');
                     cardEl.onclick = () => {
                         selectedWeaponId = (selectedWeaponId === item.id) ? null : item.id;
+                        selectedTargetId = null; // Also reset target when changing weapon selection
                         renderGameState(currentRoomState);
                     };
                 }

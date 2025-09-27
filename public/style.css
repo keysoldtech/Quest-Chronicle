@@ -227,7 +227,7 @@ body {
     font-size: 1.5rem;
 }
 .mobile-panel {
-    min-height: 265px;
+    min-height: 280px;
 }
 #mobile-class-selection.panel { /* Special case for showing class selection screen */
     display: flex;
