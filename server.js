@@ -510,12 +510,31 @@ class GameManager {
     handlePlayerAction(socket, data) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-        const isMyTurn = room?.gameState.turnOrder[room.gameState.currentPlayerIndex] === player?.id;
+        if (!room || !player) return;
 
-        if (!player || !isMyTurn) return;
+        const isMyTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === player.id;
+        if (!isMyTurn) {
+            socket.emit('actionError', "It's not your turn.");
+            return;
+        }
 
         switch (data.action) {
             case 'attack':
+                const weapon = player.equipment.weapon;
+                const target = room.gameState.board.monsters.find(m => m.id === data.targetId);
+                if (!weapon) {
+                    socket.emit('actionError', 'You must have a weapon equipped to attack.');
+                    return;
+                }
+                if (!target) {
+                    socket.emit('actionError', 'Selected target is no longer valid.');
+                    return;
+                }
+                const apCost = weapon.apCost || 1;
+                if (player.currentAp < apCost) {
+                    socket.emit('actionError', `Not enough Action Points. This attack costs ${apCost} AP.`);
+                    return;
+                }
                 this.handleAttack(room, player, data);
                 break;
             case 'guard':
@@ -563,7 +582,12 @@ class GameManager {
         const weapon = player.equipment.weapon;
         const target = room.gameState.board.monsters.find(m => m.id === data.targetId);
 
-        if (!weapon || !target || player.currentAp < (weapon.apCost || 1)) return;
+        // Pre-checks are handled in handlePlayerAction for human players,
+        // but this is a safeguard, especially for NPC logic.
+        if (!weapon || !target || player.currentAp < (weapon.apCost || 1)) {
+            console.error(`Invalid attack state for ${player.name}`);
+            return;
+        }
 
         player.currentAp -= (weapon.apCost || 1);
         

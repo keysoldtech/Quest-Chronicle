@@ -722,7 +722,7 @@ joinRoomBtn.addEventListener('click', () => {
     }, 'end-turn-confirm');
 }));
 [actionAttackBtn, mobileActionAttackBtn].forEach(btn => btn.addEventListener('click', () => {
-    if (isMyTurnPreviously && selectedWeaponId && selectedTargetId) {
+    if (selectedWeaponId && selectedTargetId) {
         const weapon = myPlayerInfo.equipment.weapon;
         if (weapon && weapon.id === selectedWeaponId) {
             openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
