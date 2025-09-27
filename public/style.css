@@ -266,13 +266,16 @@ body {
 .player-hp { font-size: 0.9rem; color: var(--color-text-secondary); margin-top: 0.25rem; }
 .npc-tag { color: var(--color-special); }
 .player-class { color: var(--color-text-secondary); font-style: italic; }
+.player-status-effects { font-size: 0.8rem; margin-top: 0.25rem; }
+.status-effect-sm { background-color: var(--color-danger); color: white; padding: 2px 4px; border-radius: 3px; margin-right: 4px; }
+
 
 /* --- DESKTOP LAYOUT --- */
 .game-area-mobile { display: none; }
 .game-area-desktop {
     display: grid;
     grid-template-columns: 280px 1fr 320px;
-    grid-template-rows: auto minmax(0, 1fr) minmax(240px, 28vh);
+    grid-template-rows: auto minmax(0, 1fr) 280px;
     grid-template-areas:
         "header header header"
         "players board info"
@@ -397,7 +400,7 @@ body {
 .card.attackable-weapon { cursor: pointer; }
 .card.selected-weapon { border-color: var(--color-primary); box-shadow: 0 0 10px var(--color-glow); }
 
-.card-content { flex-grow: 1; }
+.card-content { flex-grow: 1; overflow-y: auto; }
 .card-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.25rem; }
 .card-effect { font-size: 0.8rem; color: var(--color-text-secondary); }
 .card-footer { font-size: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
@@ -405,6 +408,17 @@ body {
 .card-bonus { font-weight: bold; }
 .card-actions { position: absolute; bottom: 0.5rem; left: 0.5rem; right: 0.5rem; display: flex; gap: 0.25rem; justify-content: center; opacity: 0; transition: opacity 0.2s;}
 .card:hover .card-actions { opacity: 1; }
+.status-effects-container {
+    font-size: 0.7rem;
+    padding: 0.25rem 0;
+}
+.status-effect {
+    background-color: var(--color-danger);
+    color: white;
+    padding: 2px 4px;
+    border-radius: 3px;
+    margin-right: 4px;
+}
 
 /* --- OVERLAYS & MODALS --- */
 .modal-overlay {

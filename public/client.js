@@ -392,6 +392,7 @@ function renderGameState(room) {
     const hasConfirmedClass = !!myPlayerInfo.class;
     const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
     const isMyTurn = currentTurnTakerId === myId;
+    const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
     
     // --- Universal UI state ---
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby'));
@@ -423,10 +424,10 @@ function renderGameState(room) {
 
 
     // --- Action Bars ---
-    fixedActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer));
-    mobileActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer));
+    fixedActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer && !isStunned));
+    mobileActionBar.classList.toggle('hidden', !(isMyTurn && isExplorer && !isStunned));
 
-    if(isMyTurn && isExplorer) {
+    if(isMyTurn && isExplorer && !isStunned) {
         const weapon = myPlayerInfo.equipment.weapon;
         const hasEnoughApForAttack = weapon && myPlayerInfo.currentAp >= (weapon.apCost || 1);
         

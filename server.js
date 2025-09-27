@@ -1,4 +1,3 @@
-
 // Import required modules
 const express = require('express');
 const http = require('http');
@@ -384,32 +383,56 @@ class GameManager {
     
             const target = room.gameState.board.monsters[0];
             const weapon = player.equipment.weapon;
-            if (target && weapon && player.currentAp >= (weapon.apCost || 1)) {
-                const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
-                
-                const d20Roll = Math.floor(Math.random() * 20) + 1;
-                this._resolveAttack(room, {
-                    attackerId: player.id,
-                    targetId: target.id,
-                    weaponId: weapon.id,
-                    narrative: narrative
-                }, d20Roll);
-                actionTaken = true;
-            } 
-            else if (player.stats.currentHp < player.stats.maxHp / 2 && player.currentAp >= gameData.actionCosts.guard) {
-                player.currentAp -= gameData.actionCosts.guard;
-                const guardBonus = player.equipment.armor?.guardBonus || 2;
-                player.stats.shieldHp += guardBonus;
+    
+            // Stun check for NPC
+            if (player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned')) {
                 this.sendMessageToRoom(room.id, { 
                     channel: 'game', 
                     type: 'system', 
-                    message: `${player.name} is wounded and takes a defensive stance, gaining ${guardBonus} Shield HP.` 
+                    message: `${player.name} is stunned and cannot act!` 
                 });
-                this.emitGameState(room.id);
-                actionTaken = true;
+            } else {
+                 // Action Priority: Attack -> Guard -> Rest
+                if (target && weapon && player.currentAp >= (weapon.apCost || 1)) {
+                    // ATTACK
+                    const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
+                    const d20Roll = Math.floor(Math.random() * 20) + 1;
+                    this._resolveAttack(room, {
+                        attackerId: player.id,
+                        targetId: target.id,
+                        weaponId: weapon.id,
+                        narrative: narrative
+                    }, d20Roll);
+                    actionTaken = true;
+                } else if (player.stats.currentHp < player.stats.maxHp / 2 && player.currentAp >= gameData.actionCosts.guard) {
+                    // GUARD
+                    player.currentAp -= gameData.actionCosts.guard;
+                    const guardBonus = player.equipment.armor?.guardBonus || 2;
+                    player.stats.shieldHp += guardBonus;
+                    this.sendMessageToRoom(room.id, { 
+                        channel: 'game', 
+                        type: 'system', 
+                        message: `${player.name} is wounded and takes a defensive stance, gaining ${guardBonus} Shield HP.` 
+                    });
+                    this.emitGameState(room.id);
+                    actionTaken = true;
+                } else if (player.stats.currentHp < player.stats.maxHp && player.healthDice.current > 0 && player.currentAp >= gameData.actionCosts.briefRespite) {
+                    // REST (HEAL)
+                    player.currentAp -= gameData.actionCosts.briefRespite;
+                    player.healthDice.current -= 1;
+                    const healAmount = this.rollDice('1d8');
+                    player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+                    this.sendMessageToRoom(room.id, { 
+                        channel: 'game', 
+                        type: 'system', 
+                        message: `${player.name} takes a moment to tend their wounds, healing for ${healAmount} HP.` 
+                    });
+                    this.emitGameState(room.id);
+                    actionTaken = true;
+                }
             }
     
-            if (!actionTaken) {
+            if (!actionTaken && !(player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned'))) {
                  this.sendMessageToRoom(room.id, { 
                     channel: 'game', 
                     type: 'system', 
@@ -417,6 +440,7 @@ class GameManager {
                 });
             }
     
+            // End turn
             room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             if (room.gameState.currentPlayerIndex === 0) {
                 room.gameState.turnCount++;
@@ -516,6 +540,15 @@ class GameManager {
         const player = room?.players[socket.id];
         if (!room || !player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) {
             return;
+        }
+    
+        const isStunned = player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
+        if (isStunned) {
+            this.sendMessageToRoom(room.id, {
+                channel: 'game',
+                type: 'system',
+                message: `${player.name} is stunned and their turn ends!`
+            });
         }
         
         player.stats.shieldHp = 0;
@@ -696,6 +729,10 @@ class GameManager {
             return socket.emit('actionError', "It's not your turn.");
         }
         
+        if (player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned')) {
+            return socket.emit('actionError', "You are stunned and cannot act!");
+        }
+
         switch(data.action) {
             case 'attack':
                 this.handleAttack(socket, data);
