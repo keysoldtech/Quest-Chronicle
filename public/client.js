@@ -1,4 +1,3 @@
-
 // This script handles the client-side logic for interacting with the server.
 
 const socket = io();
@@ -157,6 +156,7 @@ const worldEventSavePrompt = get('world-event-save-prompt');
 const worldEventDice = get('world-event-dice');
 const worldEventRollResult = get('world-event-roll-result');
 const worldEventSaveRollBtn = get('world-event-save-roll-btn');
+const worldEventSaveContinueBtn = get('world-event-save-continue-btn');
 const voiceChatContainer = get('voice-chat-container');
 const skipPopupBtn = get('skip-popup-btn');
 
@@ -482,8 +482,12 @@ function renderGameState(room) {
             const { dc, save, eventName } = myPlayerInfo.pendingWorldEventSave;
             worldEventSaveTitle.textContent = eventName;
             worldEventSavePrompt.textContent = `You must make a DC ${dc} ${save} save!`;
+
+            // Reset modal state
             worldEventSaveRollBtn.disabled = false;
+            worldEventSaveRollBtn.classList.remove('hidden');
             worldEventRollResult.classList.add('hidden');
+            worldEventSaveContinueBtn.classList.add('hidden');
         }, 'world-event-save');
     } else {
         worldEventSaveModal.classList.add('hidden');
@@ -592,7 +596,7 @@ function renderGameState(room) {
                 ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
                 <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${classDataClient.baseAp}${formatBonus(equipApBonus)}${formatBonus(eventApBonus, '(Event)')}</span>
                 <span>DMG Bonus:</span><span class="stat-value">${classDataClient.baseDamageBonus}${formatBonus(equipDmgBonus)}${formatBonus(eventDmgBonus, '(Event)')}</span>
-                <span>SHIELD Bonus:</span><span class="stat-value">${classDataClient.baseShieldBonus}${formatBonus(equipShieldBonus)}${formatBonus(eventShieldBonus, '(Event)')}</span>
+                <span>SHIELD Bonus:</span><span class="stat-value">${classDataClient.baseShieldBonus}${formatBonus(equipShieldBonus)}${formatBonus(eventDmgBonus, '(Event)')}</span>
                 <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
                 <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
             `;
@@ -837,6 +841,12 @@ worldEventSaveRollBtn.addEventListener('click', () => {
     worldEventSaveRollBtn.disabled = true;
     worldEventDice.className = 'dice is-rolling';
 });
+worldEventSaveContinueBtn.addEventListener('click', () => {
+    worldEventSaveModal.classList.add('hidden');
+    worldEventSaveContinueBtn.classList.add('hidden');
+    finishModal();
+});
+
 
 // Skip functionality
 document.body.addEventListener('click', (e) => {
@@ -992,46 +1002,24 @@ socket.on('eventCardReveal', ({ chosenCard }) => {
 });
 
 socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
-    // This is part of an active modal, so we don't queue it.
-    let fastForwarded = false;
-    let timeouts = [];
-
-    const renderResult = () => {
+    // This is part of an active modal.
+    setTimeout(() => {
+        // Stop the dice animation
         worldEventDice.classList.remove('is-rolling');
+        
+        // Hide the roll button, show the result and continue button
+        worldEventSaveRollBtn.classList.add('hidden');
         worldEventRollResult.textContent = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. ${success ? 'Success!' : 'Failure!'}`;
         worldEventRollResult.classList.remove('hidden');
-    };
-    
-    const close = () => {
-        worldEventSaveModal.classList.add('hidden');
-        finishModal();
-    };
+        worldEventSaveContinueBtn.classList.remove('hidden');
 
-    currentSkipHandler = () => {
-        timeouts.forEach(clearTimeout);
-        if (!fastForwarded) {
-            renderResult();
-            fastForwarded = true;
-            const closeTimeout = setTimeout(close, 3000);
-            timeouts = [closeTimeout];
-            currentSkipHandler = () => {
-                clearTimeout(closeTimeout);
-                close();
-            };
-        } else {
-            close();
-        }
-    };
+        // Show the small popup at the top
+        showRollResult(d20Roll, 'd20');
 
-    showRollResult(d20Roll, 'd20');
-    // The roll button click started the animation
-    const timeout1 = setTimeout(() => {
-        renderResult();
-        fastForwarded = true;
-        const timeout2 = setTimeout(close, 3000);
-        timeouts.push(timeout2);
-    }, 1500);
-    timeouts.push(timeout1);
+        // Clear any skip handlers, this modal is now interactive and not on a timer
+        currentSkipHandler = null;
+        skipPopupBtn.classList.add('hidden');
+    }, 1500); // Wait for dice animation to roughly finish
 });
 
 
