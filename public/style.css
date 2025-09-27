@@ -275,7 +275,7 @@ body {
 .game-area-desktop {
     display: grid;
     grid-template-columns: 280px 1fr 320px;
-    grid-template-rows: auto minmax(0, 1fr) 280px;
+    grid-template-rows: auto minmax(0, 1fr) 300px;
     grid-template-areas:
         "header header header"
         "players board info"
