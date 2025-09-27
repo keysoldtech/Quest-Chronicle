@@ -18,6 +18,7 @@ let apModalShownThisTurn = false; // For AP management pop-up
 const modalQueue = [];
 let isModalActive = false;
 let currentSkipHandler = null; // Holds the function to skip the current skippable modal
+let isResolvingWorldEvent = false;
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -32,7 +33,7 @@ const classData = {
     Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, description: "Wielder of arcane energies.", abilities: ["Arcane Recovery", "Spell Mastery"] },
     Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, description: "A peerless hunter and scout.", abilities: ["Favored Enemy", "Hunter's Mark"] },
     Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
-    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
 };
 
 
@@ -490,7 +491,9 @@ function renderGameState(room) {
             worldEventSaveContinueBtn.classList.add('hidden');
         }, 'world-event-save');
     } else {
-        worldEventSaveModal.classList.add('hidden');
+        if (!isResolvingWorldEvent) {
+            worldEventSaveModal.classList.add('hidden');
+        }
     }
 
     // --- Class Selection ---
@@ -837,11 +840,13 @@ apModalCancelBtn.addEventListener('click', () => {
     finishModal();
 });
 worldEventSaveRollBtn.addEventListener('click', () => {
+    isResolvingWorldEvent = true;
     socket.emit('rollForWorldEventSave');
     worldEventSaveRollBtn.disabled = true;
     worldEventDice.className = 'dice is-rolling';
 });
 worldEventSaveContinueBtn.addEventListener('click', () => {
+    isResolvingWorldEvent = false;
     worldEventSaveModal.classList.add('hidden');
     worldEventSaveContinueBtn.classList.add('hidden');
     finishModal();
