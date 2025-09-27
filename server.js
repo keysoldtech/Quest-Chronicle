@@ -1,3 +1,4 @@
+
 // Import required modules
 const express = require('express');
 const http = require('http');
@@ -52,8 +53,9 @@ class GameManager {
     }
     
     rollDice(diceString) {
-        if (!diceString) return 0;
+        if (!diceString || typeof diceString !== 'string') return 0;
         const [count, sides] = diceString.toLowerCase().split('d').map(Number);
+        if (isNaN(count) || isNaN(sides)) return 0;
         let total = 0;
         for (let i = 0; i < count; i++) {
             total += Math.floor(Math.random() * sides) + 1;
@@ -431,10 +433,10 @@ class GameManager {
 
         if (player.statusEffects && player.statusEffects.length > 0) {
             player.statusEffects.forEach(effect => {
-                if (effect.turnsRemaining) effect.turnsRemaining--;
+                if (effect.duration) effect.duration--;
             });
 
-            const expiredEffects = player.statusEffects.filter(effect => effect.turnsRemaining <= 0);
+            const expiredEffects = player.statusEffects.filter(effect => effect.duration <= 0);
             if (expiredEffects.length > 0) {
                 expiredEffects.forEach(effect => {
                      this.sendMessageToRoom(roomId, { 
@@ -443,7 +445,7 @@ class GameManager {
                         message: `The effect of '${effect.name}' has worn off for ${player.name}.` 
                     });
                 });
-                player.statusEffects = player.statusEffects.filter(effect => effect.turnsRemaining > 0);
+                player.statusEffects = player.statusEffects.filter(effect => effect.duration > 0);
             }
         }
         
@@ -458,6 +460,9 @@ class GameManager {
                             channel: 'game', senderName: 'Dungeon Master',
                             message: gameData.npcDialogue.dm.worldEvent[Math.floor(Math.random() * gameData.npcDialogue.dm.worldEvent.length)],
                             isNarrative: true
+                        });
+                        Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc).forEach(p => {
+                            p.pendingWorldEventSave = { ...worldEventCard.saveInfo, eventName: worldEventCard.name };
                         });
                     }
                 } else {
@@ -603,6 +608,201 @@ class GameManager {
 
         this.emitGameState(room.id);
     }
+
+    rollForEvent(socket) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingEventRoll) return;
+
+        player.pendingEventRoll = false;
+
+        const roll = Math.floor(Math.random() * 20) + 1;
+        let outcome = 'none';
+        let cardOptions = [];
+
+        if (roll > 10) { 
+            outcome = Math.random() > 0.5 ? 'discovery' : 'playerEvent';
+            const deckName = outcome === 'discovery' ? 'discovery' : 'playerEvent';
+            const deck = room.gameState.decks[deckName];
+            
+            if (deck.length >= 2) {
+                cardOptions = [deck.pop(), deck.pop()];
+                player.pendingEventChoice = { outcome: deckName, options: cardOptions };
+            } else {
+                outcome = 'none';
+            }
+        }
+
+        socket.emit('eventRollResult', { roll, outcome, cardOptions });
+        this.emitGameState(room.id);
+    }
+
+    selectEventCard(socket, { cardId }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingEventChoice) return;
+
+        const choice = player.pendingEventChoice;
+        const selectedCard = choice.options.find(c => c.id === cardId);
+        if (!selectedCard) return;
+
+        if (choice.outcome === 'discovery') {
+            room.gameState.lootPool.push(selectedCard);
+        } else if (choice.outcome === 'playerEvent') {
+            if (selectedCard.effect) {
+                const effectCopy = JSON.parse(JSON.stringify(selectedCard.effect));
+                player.statusEffects.push(effectCopy);
+            }
+            this.sendMessageToRoom(room.id, {
+                channel: 'game', type: 'system',
+                message: `${player.name} experienced the event: '${selectedCard.name}'`
+            });
+        }
+        
+        const otherCard = choice.options.find(c => c.id !== cardId);
+        if (otherCard) room.gameState.decks[choice.outcome].unshift(otherCard);
+
+        player.pendingEventChoice = null;
+        this.emitGameState(room.id);
+    }
+
+    rollForWorldEventSave(socket) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingWorldEventSave) return;
+    
+        const { dc, save, eventName } = player.pendingWorldEventSave;
+        const d20Roll = Math.floor(Math.random() * 20) + 1;
+        const bonus = 2; // Placeholder bonus
+        const totalRoll = d20Roll + bonus;
+        const success = totalRoll >= dc;
+    
+        if (!success) {
+            if (eventName === 'Echoes of the Past') {
+                player.statusEffects.push({ name: 'Stunned', type: 'stun', duration: 2 });
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} failed their save and is stunned!` });
+            }
+        }
+    
+        player.pendingWorldEventSave = null;
+        socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc, success });
+        this.emitGameState(room.id);
+    }
+
+    handlePlayerAction(socket, data) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!room || !player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) {
+            return socket.emit('actionError', "It's not your turn.");
+        }
+        
+        switch(data.action) {
+            case 'attack':
+                this.handleAttack(socket, data);
+                break;
+            case 'guard':
+                if (player.currentAp >= gameData.actionCosts.guard) {
+                    player.currentAp -= gameData.actionCosts.guard;
+                    const guardBonus = player.equipment.armor?.guardBonus || 2;
+                    player.stats.shieldHp += guardBonus;
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} takes a guard stance, gaining ${guardBonus} Shield HP.` });
+                    this.emitGameState(room.id);
+                } else {
+                    socket.emit('actionError', 'Not enough AP to Guard.');
+                }
+                break;
+            case 'briefRespite':
+                 if (player.currentAp >= gameData.actionCosts.briefRespite) {
+                    if (player.healthDice.current > 0) {
+                        player.currentAp -= gameData.actionCosts.briefRespite;
+                        player.healthDice.current -= 1;
+                        const healAmount = this.rollDice('1d8');
+                        player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} takes a brief respite, healing for ${healAmount} HP.` });
+                        this.emitGameState(room.id);
+                    } else {
+                        socket.emit('actionError', 'No Health Dice remaining.');
+                    }
+                } else {
+                    socket.emit('actionError', 'Not enough AP for a Brief Respite.');
+                }
+                break;
+            case 'fullRest':
+                 if (player.currentAp >= gameData.actionCosts.fullRest) {
+                    if (player.healthDice.current >= 2) {
+                        player.currentAp -= gameData.actionCosts.fullRest;
+                        player.healthDice.current -= 2;
+                        const totalHeal = this.rollDice('2d8');
+                        player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + totalHeal);
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} takes a full rest, healing for ${totalHeal} HP.` });
+                        this.emitGameState(room.id);
+                    } else {
+                        socket.emit('actionError', 'Not enough Health Dice for a Full Rest.');
+                    }
+                } else {
+                    socket.emit('actionError', 'Not enough AP for a Full Rest.');
+                }
+                break;
+            default:
+                 console.log(`Action '${data.action}' received but not handled yet.`);
+        }
+    }
+    
+    handleDmAction(socket, data) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!room || !player || player.role !== 'DM' || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) {
+            return socket.emit('actionError', "It's not your turn or you are not the DM.");
+        }
+    
+        if (data.action === 'playMonster') {
+            const monsterCard = room.gameState.decks.monster.pop();
+            if (monsterCard) {
+                monsterCard.currentHp = monsterCard.maxHp;
+                room.gameState.board.monsters.push(monsterCard);
+                this.sendMessageToRoom(room.id, {
+                    channel: 'game', senderName: 'Dungeon Master',
+                    message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
+                    isNarrative: true
+                });
+                this.emitGameState(room.id);
+            }
+        }
+    }
+
+    handleJoinVoice(socket) {
+        const room = this.findRoomBySocket(socket);
+        if (!room) return;
+        const otherPeers = room.voiceChatPeers.filter(id => id !== socket.id);
+        otherPeers.forEach(peerId => io.to(peerId).emit('voice-peer-join', { peerId: socket.id }));
+        socket.emit('voice-peers', otherPeers);
+        if (!room.voiceChatPeers.includes(socket.id)) room.voiceChatPeers.push(socket.id);
+    }
+    
+    relayVoice(socket, eventName, data) {
+        const room = this.findRoomBySocket(socket);
+        if (room && room.players[data.toId]) {
+            io.to(data.toId).emit(eventName, { ...data, fromId: socket.id });
+        }
+    }
+
+    handleDisconnect(socket) {
+        console.log(`User disconnected: ${socket.id}`);
+        const room = this.findRoomBySocket(socket);
+        if (room) {
+            const player = room.players[socket.id];
+            if (player) {
+                delete room.players[socket.id];
+                io.to(room.id).emit('playerLeft', { playerName: player.name });
+                this.emitPlayerListUpdate(room.id);
+            }
+            const peerIndex = room.voiceChatPeers.indexOf(socket.id);
+            if (peerIndex > -1) {
+                room.voiceChatPeers.splice(peerIndex, 1);
+                room.voiceChatPeers.forEach(peerId => io.to(peerId).emit('voice-peer-disconnect', { peerId: socket.id }));
+            }
+        }
+    }
 }
 
 const gameManager = new GameManager();
@@ -614,20 +814,11 @@ io.on('connection', (socket) => {
     socket.on('chooseClass', (data) => gameManager.chooseClass(socket, data));
     socket.on('equipItem', (data) => gameManager.equipItem(socket, data));
     socket.on('endTurn', () => gameManager.endTurn(socket));
-
-    socket.on('playerAction', (data) => {
-        const room = gameManager.findRoomBySocket(socket);
-        const player = room?.players[socket.id];
-        if (!room || !player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) {
-            return socket.emit('actionError', "It's not your turn.");
-        }
-
-        if (data.action === 'attack') {
-            gameManager.handleAttack(socket, data);
-        } else {
-            console.log(`Action '${data.action}' received but not handled yet.`);
-        }
-    });
+    socket.on('rollForEvent', () => gameManager.rollForEvent(socket));
+    socket.on('selectEventCard', (data) => gameManager.selectEventCard(socket, data));
+    socket.on('rollForWorldEventSave', () => gameManager.rollForWorldEventSave(socket));
+    socket.on('dmAction', (data) => gameManager.handleDmAction(socket, data));
+    socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));
     
     socket.on('sendMessage', (data) => {
         const room = gameManager.findRoomBySocket(socket);
@@ -641,19 +832,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
-        const room = gameManager.findRoomBySocket(socket);
-        if (room) {
-            const player = room.players[socket.id];
-            if (player) {
-                // For simplicity, we just notify. A real game might replace with NPC.
-                delete room.players[socket.id];
-                io.to(room.id).emit('playerLeft', { playerName: player.name });
-                gameManager.emitPlayerListUpdate(room.id);
-            }
-        }
-    });
+    // Voice Chat
+    socket.on('join-voice', () => gameManager.handleJoinVoice(socket));
+    socket.on('voice-offer', (data) => gameManager.relayVoice(socket, 'voice-offer', data));
+    socket.on('voice-answer', (data) => gameManager.relayVoice(socket, 'voice-answer', data));
+    socket.on('voice-ice-candidate', (data) => gameManager.relayVoice(socket, 'voice-ice-candidate', data));
+
+    socket.on('disconnect', () => gameManager.handleDisconnect(socket));
 });
 
 server.listen(PORT, () => {

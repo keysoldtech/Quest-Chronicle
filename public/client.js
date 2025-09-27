@@ -1,3 +1,4 @@
+
 // This script handles the client-side logic for interacting with the server.
 
 const socket = io();

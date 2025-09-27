@@ -513,40 +513,38 @@ const armorCards = [
     { id: nextId(), name: "Link Hauberk", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "None", bonuses: { shieldBonus: 4, ap: 0 } }, guardBonus: 3 },
     { id: nextId(), name: "Nightfall Shroud", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { description: "Advantage on Stealth checks.", bonuses: { shieldBonus: 1, ap: 3 } }, guardBonus: 1 },
     { id: nextId(), name: "Nightfall Shroud", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { description: "Advantage on Stealth checks.", bonuses: { shieldBonus: 1, ap: 3 } }, guardBonus: 1 },
-    { id: nextId(), name: "Phase Shroud", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "Once per turn, may force an attacker to reroll their attack roll.", bonuses: { shieldBonus: 5, ap: 0 } }, guardBonus: 3 },
-    { id: nextId(), name: "Phase Shroud", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "Once per turn, may force an attacker to reroll their attack roll.", bonuses: { shieldBonus: 5, ap: 0 } }, guardBonus: 3 },
-    { id: nextId(), name: "Plate Cuirass", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "None", bonuses: { shieldBonus: 6, ap: 0 } }, guardBonus: 4 },
-    { id: nextId(), name: "Plate Cuirass", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "None", bonuses: { shieldBonus: 6, ap: 0 } }, guardBonus: 4 },
-    { id: nextId(), name: "Round Shield", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "+1 to Block rolls.", bonuses: { shieldBonus: 1, ap: 0 } }, guardBonus: 1 },
-    { id: nextId(), name: "Round Shield", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "+1 to Block rolls.", bonuses: { shieldBonus: 1, ap: 0 } }, guardBonus: 1 },
-    { id: nextId(), name: "Scaled Vest", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "None", bonuses: { shieldBonus: 5, ap: 0 } }, guardBonus: 3 },
-    { id: nextId(), name: "Scaled Vest", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { description: "None", bonuses: { shieldBonus: 5, ap: 0 } }, guardBonus: 3 },
-    { id: nextId(), name: "Spellward Plate", type: "Armor", class: ["Warrior"], effect: { description: "+1 to saving throws against spells.", bonuses: { shieldBonus: 9, ap: -2 } }, guardBonus: 5 },
-    { id: nextId(), name: "Spellward Plate", type: "Armor", class: ["Warrior"], effect: { description: "+1 to saving throws against spells.", bonuses: { shieldBonus: 9, ap: -2 } }, guardBonus: 5 },
-];
-
-const worldEventCards = [
-    { id: nextId(), name: "Echoes of the Past", type: "World Event", tags: "Mystical", outcome: "All players must make a DC 13 Wisdom saving throw or be stunned for 1 round as visions of a past battle overwhelm them.", saveInfo: { save: 'Wisdom', dc: 13 } },
-    { id: nextId(), name: "Blood Moon", type: "World Event", tags: "Celestial", outcome: "All creatures (players and monsters) gain +1 to damage rolls, but also have vulnerability to all damage types. Lasts for 3 rounds." },
-    { id: nextId(), name: "Mana Storm", type: "World Event", tags: "Magical", outcome: "At the start of each player's turn, they roll a d6. On a 1, a random spell from their hand is cast at a random target." },
-    { id: nextId(), name: "Unraveling Weave", type: "World Event", tags: "Magical", outcome: "All saving throws against spells have disadvantage. All spell attack rolls have advantage. Lasts for 3 rounds." },
+    { id: nextId(), name: "Phase Shroud", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { description: "Can move through one enemy creature per turn without provoking opportunity attacks.", bonuses: { shieldBonus: 3, ap: 2 } }, guardBonus: 2 },
+    { id: nextId(), name: "Phase Shroud", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { description: "Can move through one enemy creature per turn without provoking opportunity attacks.", bonuses: { shieldBonus: 3, ap: 2 } }, guardBonus: 2 },
+    { id: nextId(), name: "Scale Mail", type: "Armor", class: ["Warrior", "Cleric", "Ranger"], effect: { description: "None.", bonuses: { shieldBonus: 5, ap: 0 } }, guardBonus: 3 },
+    { id: nextId(), name: "Scale Mail", type: "Armor", class: ["Warrior", "Cleric", "Ranger"], effect: { description: "None.", bonuses: { shieldBonus: 5, ap: 0 } }, guardBonus: 3 },
+    { id: nextId(), name: "Plate Armor", type: "Armor", class: ["Warrior"], effect: { description: "None.", bonuses: { shieldBonus: 9, ap: -2 } }, guardBonus: 5 },
+    { id: nextId(), name: "Plate Armor", type: "Armor", class: ["Warrior"], effect: { description: "None.", bonuses: { shieldBonus: 9, ap: -2 } }, guardBonus: 5 },
 ];
 
 const playerEventCards = [
-    { id: nextId(), name: "A Familiar Path", type: "Player Event", class: "Any", description: "You recognize this area. You have advantage on your next Wisdom (Survival) or Intelligence (Investigation) check." },
-    { id: nextId(), name: "Sudden Adrenaline", type: "Player Event", class: "Any", description: "A surge of energy flows through you. Gain 1 extra Action Point for this turn only." },
-    { id: nextId(), name: "Haunting Memory", type: "Player Event", class: "Any", description: "A painful memory surfaces, shaking your resolve. You have disadvantage on your next attack roll or saving throw." },
-    { id: nextId(), name: "Moment of Grace", type: "Player Event", class: "Any", description: "You are filled with divine favor, granting you +1 Damage Bonus for 2 turns.", effect: { name: 'Moment of Grace', type: 'stat_modifier', duration: 2, bonuses: { damageBonus: 1 } } },
-    { id: nextId(), name: "Stumbled Discovery", type: "Player Event", class: "Any", description: "You notice something others have missed. Draw one card from the Discovery deck." },
-    { id: nextId(), name: "A Ominous Feeling", type: "Player Event", class: "Any", description: "You have a bad feeling about this. The DM draws and reveals the next monster from the monster deck. It is not played yet." },
-    { id: nextId(), name: "Guiding Hand", type: "Player Event", class: "Any", description: "A kind stranger approaches, offering aid or guidance." },
-    { id: nextId(), name: "Lost Trinket", type: "Player Event", class: "Any", description: "A small, sentimental item you thought was lost reappears in your pack." },
+    { id: nextId(), name: "Sudden Insight", type: "Player Event", category: "General", description: "You recall a piece of forgotten lore.", effect: { name: 'Insightful', type: 'stat_modifier', bonuses: {}, duration: 2, description: "Advantage on your next INT or WIS check." } },
+    { id: nextId(), name: "A Moment's Peace", type: "Player Event", category: "General", description: "You find a quiet moment to catch your breath.", effect: { name: 'Rested', type: 'heal', dice: '1d4', description: "Regain 1d4 HP." } },
+    { id: nextId(), name: "Twisted Ankle", type: "Player Event", category: "General", description: "You misstep on the uneven ground.", effect: { name: 'Slowed', type: 'stat_modifier', bonuses: { ap: -1 }, duration: 2, description: "Your AP is reduced by 1 for your next turn." } },
+    { id: nextId(), name: "Eerie Feeling", type: "Player Event", category: "General", description: "The hairs on your neck stand up. Something is wrong.", effect: { name: 'On Edge', type: 'stat_modifier', bonuses: {}, duration: 2, description: "You have disadvantage on your next initiative roll." } },
+    { id: nextId(), name: "Surge of Adrenaline", type: "Player Event", category: "General", description: "A sudden burst of energy flows through you.", effect: { name: 'Adrenaline Rush', type: 'stat_modifier', bonuses: { ap: 1 }, duration: 2, description: "Gain +1 AP on your next turn." } },
+    { id: nextId(), name: "Lost Grip", type: "Player Event", category: "General", description: "Your weapon feels slick in your hand.", effect: { name: 'Fumble', type: 'stat_modifier', bonuses: { damageBonus: -2 }, duration: 2, description: "You have -2 to your next attack roll." } },
 ];
 
 const discoveryCards = [
-    { id: nextId(), name: "Forgotten Idol", type: "Discovery", description: "A small, strange idol made of a material you don't recognize. It hums with a faint energy." },
-    { id: nextId(), name: "Tattered Map", type: "Discovery", description: "A piece of a map, showing a location you don't recognize. It seems to lead to a hidden treasure or a dangerous place." },
-    { id: nextId(), name: "Dragon's Tooth", type: "Discovery", description: "A large, sharp tooth, far too big for any normal beast. It feels warm to the touch." },
+    { id: nextId(), name: "Ancient Map Fragment", type: "Utility", category: "General", description: "A piece of an old map. Finding more might lead to treasure." },
+    { id: nextId(), name: "Gemstone of Value", type: "Treasure", category: "General", description: "A valuable gem worth a good sum in any city." },
+    { id: nextId(), name: "Forgotten Idol", type: "Utility", category: "General", description: "A strange idol that hums with a faint energy." },
+    { id: nextId(), name: "A Pouch of Strange Dust", type: "Utility", category: "General", description: "The shimmering dust seems to move on its own. Could be magical." },
+    { id: nextId(), name: "Sealed Scroll Case", type: "Utility", category: "General", description: "A weathered scroll case, sealed with a wax emblem you don't recognize." },
+    { id: nextId(), name: "Ornate Silver Key", type: "Utility", category: "General", description: "A heavy, ornate key. It must unlock something important." },
+];
+
+const worldEventCards = [
+    { id: nextId(), name: "Echoes of the Past", type: "World Event", tags: "Magical Anomaly", outcome: "All explorers must make a DC 13 Wisdom save or be stunned for 1 round as visions of a past battle overwhelm them.", saveInfo: { dc: 13, save: 'Wisdom' } },
+    { id: nextId(), name: "Tremors", type: "World Event", tags: "Natural Hazard", outcome: "The ground shakes violently. All explorers must make a DC 12 Dexterity save or be knocked prone.", saveInfo: { dc: 12, save: 'Dexterity' } },
+    { id: nextId(), name: "Whispers in the Dark", type: "World Event", tags: "Supernatural", outcome: "Mad whispers fill the air. All explorers must make a DC 14 Wisdom save or gain disadvantage on attack rolls for 1 round.", saveInfo: { dc: 14, save: 'Wisdom' } },
+    { id: nextId(), name: "Sudden Downpour", type: "World Event", tags: "Natural Hazard", outcome: "A sudden, torrential rain begins. All ranged attacks have disadvantage, and the ground becomes difficult terrain.", saveInfo: null },
+    { id: nextId(), name: "Mana Surge", type: "World Event", tags: "Magical Anomaly", outcome: "The air crackles with raw magic. All spells cast for the next 2 rounds have unpredictable effects (DM's discretion).", saveInfo: null },
 ];
 
 
@@ -560,7 +558,7 @@ module.exports = {
     monsterCards,
     weaponCards,
     armorCards,
-    worldEventCards,
     playerEventCards,
     discoveryCards,
+    worldEventCards
 };
