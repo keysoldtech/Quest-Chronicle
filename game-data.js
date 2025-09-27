@@ -18,7 +18,8 @@ const statusEffectDefinitions = {
     'On Fire': { trigger: 'start', damage: '1d6', description: 'Takes 1d6 damage at the start of their turn.'},
     'Guarded': { rollModifier: 2, description: 'Has +2 to defense rolls.'},
     'Slowed': { rollModifier: -2, description: 'Has -2 to all d20 rolls.'},
-    'Drained': { description: 'Starts turn with -1 AP.' }
+    'Drained': { description: 'Starts turn with -1 AP.' },
+    'Inspired': { description: 'Feeling motivated, +2 to attack rolls.' },
 };
 
 const actionCosts = {
@@ -329,8 +330,8 @@ const spellCards = [
     { id: nextId(), name: "Healing Touch", type: "Spell", class: ["Cleric", "Ranger"], category: "Healing", apCost: 1, effect: { type: "heal", dice: "1d8+5", target: "any-explorer", description: "Heals 1d8 + 5 HP." } },
     { id: nextId(), name: "Illumination", type: "Spell", class: ["Mage", "Cleric", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", description: "Object emits bright light in a 20-foot radius and dim light for an additional 20 feet." } },
     { id: nextId(), name: "Illumination", type: "Spell", class: ["Mage", "Cleric", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", description: "Object emits bright light in a 20-foot radius and dim light for an additional 20 feet." } },
-    { id: nextId(), name: "Inspire Allies", type: "Spell", class: ["Cleric", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", description: "Up to three creatures gain 1d4 bonus to attack rolls and saving throws." } },
-    { id: nextId(), name: "Inspire Allies", type: "Spell", class: ["Cleric", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", description: "Up to three creatures gain 1d4 bonus to attack rolls and saving throws." } },
+    { id: nextId(), name: "Inspire Allies", type: "Spell", class: ["Cleric", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", target: "all-explorers", statusToApply: { name: 'Inspired', type: 'stat_modifier', bonuses: { damageBonus: 2 }, duration: 2 }, description: "All explorers gain a +2 bonus to their attack rolls for 1 round." } },
+    { id: nextId(), name: "Inspire Allies", type: "Spell", class: ["Cleric", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", target: "all-explorers", statusToApply: { name: 'Inspired', type: 'stat_modifier', bonuses: { damageBonus: 2 }, duration: 2 }, description: "All explorers gain a +2 bonus to their attack rolls for 1 round." } },
     { id: nextId(), name: "Jolt Touch", type: "Spell", class: ["Mage"], category: "Damage", apCost: 1, effect: { type: "damage", dice: "1d8", target: "any-monster", description: "Deals 1d8 lightning damage. Target can't take reactions until the start of its next turn." } },
     { id: nextId(), name: "Jolt Touch", type: "Spell", class: ["Mage"], category: "Damage", apCost: 1, effect: { type: "damage", dice: "1d8", target: "any-monster", description: "Deals 1d8 lightning damage. Target can't take reactions until the start of its next turn." } },
     { id: nextId(), name: "Obscuring Mist", type: "Spell", class: ["Mage", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", description: "Creates a 20-foot radius sphere of fog that heavily obscures vision." } },
@@ -355,7 +356,7 @@ const spellCards = [
     { id: nextId(), name: "Warding Touch", type: "Spell", class: ["Mage", "Cleric", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", description: "Target gains 1d4 bonus to one saving throw." } },
     { id: nextId(), name: "Warding Touch", type: "Spell", class: ["Mage", "Cleric", "Ranger"], category: "Utility", apCost: 1, effect: { type: "utility", description: "Target gains 1d4 bonus to one saving throw." } },
     { id: nextId(), name: "Illusory Doubles", type: "Spell", class: ["Mage"], category: "Utility", apCost: 2, effect: { type: "utility", description: "Creates three illusory duplicates of yourself." } },
-    { id: nextId(), name: "Immobilize Foe", type: "Spell", class: ["Mage", "Cleric"], category: "Utility", apCost: 2, effect: { type: "utility", status: "Stunned", duration: 2, target: "any-monster", description: "A humanoid must make a Wisdom saving throw (DC 13) or be paralyzed." } },
+    { id: nextId(), name: "Immobilize Foe", type: "Spell", class: ["Mage", "Cleric"], category: "Utility", apCost: 2, effect: { type: "utility", status: "Stunned", statusType: "stun", duration: 2, target: "any-monster", description: "A humanoid must make a Wisdom saving throw (DC 13) or be paralyzed." } },
     { id: nextId(), name: "Inferno Rays", type: "Spell", class: ["Mage"], category: "Damage", apCost: 2, effect: { type: "damage", dice: "2d6", target: "any-monster", description: "You create three rays of fire and hurl them at targets within range. Each ray deals 2d6 fire damage." } },
     { id: nextId(), name: "Lunar Ray", type: "Spell", class: ["Cleric", "Ranger"], category: "Damage", apCost: 2, effect: { type: "damage", dice: "2d10", target: "any-monster", description: "Deals 2d10 radiant damage to any creature that enters the beam or starts its turn there." } },
     { id: nextId(), name: "Mind Scan", type: "Spell", class: ["Mage"], category: "Utility", apCost: 2, effect: { type: "utility", description: "Allows you to read the surface thoughts of creatures within 30 feet." } },

@@ -121,11 +121,48 @@ class GameManager {
             socket.emit('actionError', 'Room not found.');
             return;
         }
+
+        // --- LATE JOIN LOGIC ---
         if (room.gameState.phase !== 'lobby') {
-             socket.emit('actionError', 'Game has already started.');
+            const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
+            if (humanPlayers.length >= 5) {
+                socket.emit('actionError', 'This room is full of human players.');
+                return;
+            }
+
+            const npcToReplace = 
+                Object.values(room.players).find(p => p.isNpc && p.role === 'Explorer') || 
+                Object.values(room.players).find(p => p.isNpc && p.role === 'DM');
+
+            if (!npcToReplace) {
+                socket.emit('actionError', 'This room is full and cannot be joined.');
+                return;
+            }
+
+            const newPlayer = this.createPlayerObject(socket.id, playerName);
+            newPlayer.role = npcToReplace.role;
+            
+            this.sendMessageToRoom(roomId, {
+                channel: 'game',
+                type: 'system',
+                message: `<b>${playerName}</b> has joined the game, taking over for the NPC <b>${npcToReplace.name}</b>!`
+            });
+            
+            delete room.players[npcToReplace.id];
+            room.players[socket.id] = newPlayer;
+
+            const turnIndex = room.gameState.turnOrder.indexOf(npcToReplace.id);
+            if (turnIndex > -1) {
+                room.gameState.turnOrder[turnIndex] = socket.id;
+            }
+            
+            socket.join(roomId);
+            socket.emit('joinSuccess', room);
+            this.emitGameState(roomId);
             return;
         }
-
+        
+        // --- ORIGINAL LOBBY JOIN LOGIC ---
         const newPlayer = this.createPlayerObject(socket.id, playerName);
         room.players[socket.id] = newPlayer;
         socket.join(roomId);
@@ -237,7 +274,7 @@ class GameManager {
     chooseClass(socket, { classId }) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-        if (!player || player.class || player.role === 'DM') return;
+        if (!player || player.class || player.role !== 'Explorer') return;
 
         const classStats = gameData.classes[classId];
         if (!classStats) {
@@ -314,7 +351,7 @@ class GameManager {
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
         const allReady = explorers.every(p => p.class);
         
-        if (allReady) {
+        if (allReady && room.gameState.phase === 'class_selection') {
             if (room.gameState.gameMode === 'Advanced') {
                 room.gameState.phase = 'advanced_setup_choice';
             } else {
@@ -381,9 +418,9 @@ class GameManager {
     determine_ai_action(player, gameState, allPlayers) {
         const { board } = gameState;
         const { currentAp, stats, hand, healthDice } = player;
+        const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
 
         // Priority 1: Healing (Cards)
-        const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
         let bestHealTarget = { utility: -1, target: null, card: null };
         hand.forEach(card => {
             const cardApCost = card.apCost || 1;
@@ -402,7 +439,39 @@ class GameManager {
             return { action: 'useCard', cardId: bestHealTarget.card.id, targetId: bestHealTarget.target.id, apCost: bestHealTarget.card.apCost || 1 };
         }
 
-        // Priority 2: Attack
+        // Priority 2: Utility (Cards)
+        if (board.monsters.length > 0) { // Only use combat utility in combat
+            for (const card of hand) {
+                const cardApCost = card.apCost || 1;
+                if (currentAp >= cardApCost && card.effect && card.effect.type === 'utility') {
+                    switch (card.name) {
+                        case 'Inspire Allies':
+                            if (partyMembers.length >= 2) { // Inspire if there's at least one other explorer
+                                return { action: 'useCard', cardId: card.id, apCost: cardApCost };
+                            }
+                            break;
+                        case 'Force Barrier':
+                            if (stats.currentHp < stats.maxHp * 0.75) {
+                                return { action: 'useCard', cardId: card.id, targetId: player.id, apCost: cardApCost };
+                            }
+                            break;
+                        case 'Immobilize Foe':
+                        case 'Sticky Webbing':
+                            // Target highest HP monster not already stunned/slowed
+                            const validTargets = board.monsters.filter(m => 
+                                !m.statusEffects || (!m.statusEffects.some(e => e.name === 'Stunned' || e.name === 'Slowed'))
+                            );
+                            if (validTargets.length > 0) {
+                                const target = validTargets.reduce((prev, curr) => (prev.currentHp > curr.currentHp) ? prev : curr);
+                                return { action: 'useCard', cardId: card.id, targetId: target.id, apCost: cardApCost };
+                            }
+                            break;
+                    }
+                }
+            }
+        }
+
+        // Priority 3: Attack
         const weapon = player.equipment.weapon;
         if (weapon && board.monsters.length > 0) {
             const apCost = weapon.apCost || 2;
@@ -414,13 +483,13 @@ class GameManager {
             }
         }
         
-        // Priority 3: Guard
+        // Priority 4: Guard
         const guardApCost = gameData.actionCosts.guard;
         if (currentAp >= guardApCost && stats.currentHp < stats.maxHp * 0.75) {
             return { action: 'guard', apCost: guardApCost };
         }
         
-        // Priority 4: Rest (Out of Combat)
+        // Priority 5: Rest (Out of Combat)
         if (board.monsters.length === 0) {
             const fullRestApCost = gameData.actionCosts.fullRest;
             if (currentAp >= fullRestApCost && healthDice.current >= 2 && stats.currentHp < stats.maxHp) {
@@ -510,18 +579,45 @@ class GameManager {
                     case 'useCard':
                         const cardIndex = player.hand.findIndex(c => c.id === bestAction.cardId);
                         if (cardIndex > -1) {
-                            const card = player.hand[cardIndex];
-                            const target = room.players[bestAction.targetId];
-                            if (target && card.effect.type === 'heal') {
-                                const healAmountCard = this.rollDice(card.effect.dice);
-                                target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healAmountCard);
-                                player.hand.splice(cardIndex, 1);
-                                this.sendMessageToRoom(room.id, {
-                                    channel: 'game',
-                                    type: 'system',
-                                    message: `<b>${player.name}</b> used ${bestAction.apCost} AP to use ${card.name} on ${target.name}, healing for ${healAmountCard} HP.`
-                                });
+                            const card = player.hand.splice(cardIndex, 1)[0];
+                            const effect = card.effect;
+                            let message = `<b>${player.name}</b> used ${bestAction.apCost} AP to use ${card.name}`;
+
+                            if (effect.type === 'heal') {
+                                const healTarget = room.players[bestAction.targetId];
+                                if (healTarget) {
+                                    const healAmountCard = this.rollDice(effect.dice);
+                                    healTarget.stats.currentHp = Math.min(healTarget.stats.maxHp, healTarget.stats.currentHp + healAmountCard);
+                                    message += ` on ${healTarget.name}, healing for ${healAmountCard} HP.`;
+                                }
+                            } else if (effect.type === 'utility') {
+                                const statusToApply = effect.statusToApply || { name: effect.status, type: effect.statusType || 'utility_debuff', duration: effect.duration };
+                                statusToApply.bonuses = statusToApply.bonuses || {};
+                                
+                                const targetType = effect.target;
+                                if (targetType === 'self' || (targetType === 'any-explorer' && bestAction.targetId === player.id)) {
+                                    player.statusEffects.push(JSON.parse(JSON.stringify(statusToApply)));
+                                    message += `, bolstering their own defenses.`;
+                                } else if (targetType === 'any-monster') {
+                                    const monsterTarget = room.gameState.board.monsters.find(m => m.id === bestAction.targetId);
+                                    if (monsterTarget) {
+                                        if (!monsterTarget.statusEffects) monsterTarget.statusEffects = [];
+                                        monsterTarget.statusEffects.push(JSON.parse(JSON.stringify(statusToApply)));
+                                        message += `, targeting the ${monsterTarget.name}.`;
+                                    }
+                                } else if (targetType === 'all-explorers') {
+                                    Object.values(room.players).filter(p => p.role === 'Explorer').forEach(p => {
+                                        p.statusEffects.push(JSON.parse(JSON.stringify(statusToApply)));
+                                    });
+                                    message += `, inspiring the whole party!`;
+                                }
                             }
+                            
+                            this.sendMessageToRoom(room.id, {
+                                channel: 'game',
+                                type: 'system',
+                                message: message
+                            });
                         }
                         break;
                 }
@@ -563,6 +659,14 @@ class GameManager {
 
         for (const monster of room.gameState.board.monsters) {
             await new Promise(res => setTimeout(res, 1500)); // Delay between monster attacks
+
+            if (monster.statusEffects && monster.statusEffects.some(e => e.name === 'Stunned')) {
+                this.sendMessageToRoom(room.id, {
+                    channel: 'game', type: 'system',
+                    message: `The ${monster.name} is stunned and cannot act!`,
+                });
+                continue; // Skip this monster's turn
+            }
 
             // Target lowest HP explorer
             explorers.sort((a, b) => a.stats.currentHp - b.stats.currentHp);
@@ -659,6 +763,28 @@ class GameManager {
         }
         
         if (player.isNpc && player.role === 'DM') {
+            // Process monster status effects at the start of the DM's turn
+            if (room.gameState.board.monsters && room.gameState.board.monsters.length > 0) {
+                room.gameState.board.monsters.forEach(monster => {
+                    if (monster.statusEffects && monster.statusEffects.length > 0) {
+                        monster.statusEffects.forEach(effect => {
+                            if (effect.duration) effect.duration--;
+                        });
+                        const expiredEffects = monster.statusEffects.filter(effect => effect.duration <= 0);
+                        if (expiredEffects.length > 0) {
+                            expiredEffects.forEach(effect => {
+                                 this.sendMessageToRoom(roomId, { 
+                                    channel: 'game', 
+                                    type: 'system', 
+                                    message: `The effect of '${effect.name}' has worn off for the ${monster.name}.` 
+                                });
+                            });
+                            monster.statusEffects = monster.statusEffects.filter(effect => effect.duration > 0);
+                        }
+                    }
+                });
+            }
+            
             await this.handleMonsterTurns(room);
             await new Promise(res => setTimeout(res, 1500)); // Pause after monster attacks
 
@@ -1096,43 +1222,59 @@ class GameManager {
         const player = room.players[socket.id];
         if (!player) return;
     
-        const wasCurrentTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === socket.id;
-    
-        // Remove player from players object
-        delete room.players[socket.id];
-    
-        // Remove player from turn order
-        const turnIndex = room.gameState.turnOrder.indexOf(socket.id);
-        if (turnIndex > -1) {
-            room.gameState.turnOrder.splice(turnIndex, 1);
-            // Adjust index of current player if the disconnected player was before them
-            if (turnIndex < room.gameState.currentPlayerIndex) {
-                room.gameState.currentPlayerIndex--;
-            }
-        }
-    
-        // Announce departure
-        io.to(room.id).emit('playerLeft', { playerName: player.name });
-        this.emitPlayerListUpdate(room.id);
-    
-        // If it was the disconnected player's turn, advance the turn
-        if (wasCurrentTurn) {
-            // Ensure index is not out of bounds after splice
-            if (room.gameState.currentPlayerIndex >= room.gameState.turnOrder.length) {
-                room.gameState.currentPlayerIndex = 0;
-                if(room.gameState.turnOrder.length > 0 && room.gameState.phase !== 'lobby') room.gameState.turnCount++;
-            }
-            this.startTurn(room.id);
-        } else {
-            // Otherwise, just send a regular update
-            this.emitGameState(room.id);
-        }
-    
-        // Voice chat cleanup
         const peerIndex = room.voiceChatPeers.indexOf(socket.id);
         if (peerIndex > -1) {
             room.voiceChatPeers.splice(peerIndex, 1);
             room.voiceChatPeers.forEach(peerId => io.to(peerId).emit('voice-peer-disconnect', { peerId: socket.id }));
+        }
+
+        if (room.gameState.phase === 'lobby') {
+            delete room.players[socket.id];
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> has left the lobby.` });
+            this.emitPlayerListUpdate(room.id);
+            return;
+        }
+    
+        const wasCurrentTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === socket.id;
+        
+        this.sendMessageToRoom(room.id, {
+            channel: 'game',
+            type: 'system',
+            message: `<b>${player.name}</b> has disconnected. An NPC will now control their character.`
+        });
+    
+        const newNpcId = `npc-replaced-${player.name.replace(/\s/g, '')}-${Math.floor(Math.random() * 1000)}`;
+        const npcVersion = {
+            id: newNpcId,
+            name: player.name,
+            isNpc: true,
+            role: player.role,
+            class: player.class,
+            stats: { ...player.stats },
+            currentAp: 0,
+            lifeCount: player.lifeCount,
+            hand: [...player.hand],
+            equipment: JSON.parse(JSON.stringify(player.equipment)),
+            statusEffects: JSON.parse(JSON.stringify(player.statusEffects)),
+            pendingEventRoll: false,
+            pendingEventChoice: null,
+            madeAdvancedChoice: player.madeAdvancedChoice,
+            pendingWorldEventSave: null,
+            healthDice: { ...player.healthDice }
+        };
+        
+        delete room.players[socket.id];
+        room.players[newNpcId] = npcVersion;
+        
+        const turnIndex = room.gameState.turnOrder.indexOf(socket.id);
+        if (turnIndex > -1) {
+            room.gameState.turnOrder[turnIndex] = newNpcId;
+        }
+    
+        if (wasCurrentTurn) {
+            this.startTurn(room.id);
+        } else {
+            this.emitGameState(room.id);
         }
     }
 }

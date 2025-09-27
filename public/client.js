@@ -463,14 +463,14 @@ function renderGameState(room) {
     [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.classList.toggle('hidden', gameState.phase === 'lobby'));
     
     // Desktop specific
-    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || isDM);
+    classSelectionDiv.classList.toggle('hidden', hasConfirmedClass || !isExplorer);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
-    playerStatsContainer.classList.toggle('hidden', !hasConfirmedClass || isDM);
+    playerStatsContainer.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
     
     // Mobile specific
-    const inMobileClassSelection = gameState.phase === 'class_selection' && !hasConfirmedClass && !isDM;
+    const inMobileClassSelection = !hasConfirmedClass && isExplorer;
     if (inMobileClassSelection) {
         // If we are in class selection, force the character screen to be active
         if (!get('mobile-screen-character').classList.contains('active')) {
@@ -483,7 +483,7 @@ function renderGameState(room) {
         mobilePlayerStats.classList.add('hidden');
     } else {
         mobileClassSelection.classList.add('hidden');
-        mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || isDM);
+        mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     }
 
 
@@ -600,7 +600,7 @@ function renderGameState(room) {
 
 
     // --- Class Selection ---
-    if (gameState.phase === 'class_selection' && !hasConfirmedClass && !isDM) {
+    if (!hasConfirmedClass && isExplorer) {
         [classCardsContainer, mobileClassCardsContainer].forEach(container => {
              if (container.children.length === 0) {
                 for (const [classId, data] of Object.entries(classData)) {
@@ -808,7 +808,7 @@ createRoomBtn.addEventListener('click', () => {
 });
 joinRoomBtn.addEventListener('click', () => {
     const playerName = playerNameInput.value.trim();
-    const roomId = roomIdInput.value.trim();
+    const roomId = roomIdInput.value.trim().toUpperCase();
     if (playerName && roomId) {
         socket.emit('joinRoom', { roomId, playerName });
     } else {
@@ -907,8 +907,7 @@ mobileChatForm.addEventListener('submit', (e) => {
 });
 [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.addEventListener('click', () => {
      if (confirm("Are you sure you want to leave? Your character will be controlled by an NPC.")) {
-        socket.disconnect();
-        setTimeout(() => window.location.reload(), 200);
+        window.location.reload();
     }
 }));
 endTurnConfirmBtn.addEventListener('click', () => {
