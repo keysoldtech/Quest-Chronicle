@@ -139,6 +139,7 @@
 
             <div id="fixed-action-bar" class="fixed-action-bar hidden">
                 <button id="action-attack-btn" class="btn btn-danger hidden">Confirm Attack</button>
+                <button id="action-skill-challenge-btn" class="btn btn-special hidden">Challenge (1 AP)</button>
                 <button id="action-guard-btn" class="btn btn-secondary">Guard (1 AP)</button>
                 <button id="action-brief-respite-btn" class="btn btn-secondary">Brief Respite (1 AP)</button>
                 <button id="action-full-rest-btn" class="btn btn-secondary">Full Rest (2 AP)</button>
@@ -236,6 +237,7 @@
 
             <div id="mobile-action-bar" class="mobile-action-bar hidden">
                 <button id="mobile-action-attack-btn" class="btn btn-danger btn-sm hidden">Attack</button>
+                <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge</button>
                 <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard</button>
                 <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite</button>
                 <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest</button>
@@ -347,6 +349,31 @@
             <p id="world-event-roll-result" class="hidden" style="font-weight: bold; font-size: 1.2rem; margin-bottom: 1rem;"></p>
             <button id="world-event-save-roll-btn" class="btn btn-special">Roll d20</button>
             <button id="world-event-save-continue-btn" class="btn btn-primary hidden">Continue</button>
+        </div>
+    </div>
+
+    <div id="skill-challenge-overlay" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <h2 id="skill-challenge-title" class="panel-header">Skill Challenge</h2>
+            <p id="skill-challenge-desc"></p>
+            <div id="skill-challenge-progress" class="skill-challenge-progress-container"></div>
+            <p id="skill-challenge-info"></p>
+            <div id="skill-challenge-log" class="log-content-area" style="height: 150px; margin-top: 1rem;"></div>
+            <div class="modal-actions">
+                <button id="skill-challenge-close-btn" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="item-select-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="panel-header">Use an Item?</h2>
+            <p>Select an item from your hand or equipment to help with the roll. Or, use no item.</p>
+            <div id="item-select-container" class="card-container-row" style="margin-top: 1rem; max-height: 250px; flex-wrap: nowrap;"></div>
+            <div class="modal-actions">
+                <button id="item-select-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="item-select-confirm-btn" class="btn btn-primary">Confirm Roll</button>
+            </div>
         </div>
     </div>
 

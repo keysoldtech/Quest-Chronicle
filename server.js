@@ -105,6 +105,7 @@ class GameManager {
                     duration: 0,
                     sourcePlayerId: null,
                 },
+                skillChallenge: { isActive: false },
             },
             chatLog: []
         };
@@ -661,7 +662,7 @@ class GameManager {
             await this.handleMonsterTurns(room);
             await new Promise(res => setTimeout(res, 1500)); // Pause after monster attacks
 
-            if (room.gameState.board.monsters.length === 0) {
+            if (room.gameState.board.monsters.length === 0 && !room.gameState.skillChallenge.isActive) {
                 const roll = Math.random();
                 if (roll < 0.25 && room.gameState.decks.worldEvent.length > 0) {
                     const worldEventCard = room.gameState.decks.worldEvent.pop();
@@ -676,6 +677,25 @@ class GameManager {
                             p.pendingWorldEventSave = { ...worldEventCard.saveInfo, eventName: worldEventCard.name };
                         });
                     }
+                } else if (roll >= 0.25 && roll < 0.5 && gameData.skillChallenges.length > 0) {
+                     const challenge = gameData.skillChallenges[Math.floor(Math.random() * gameData.skillChallenges.length)];
+                    room.gameState.skillChallenge = {
+                        isActive: true,
+                        challengeId: challenge.id,
+                        name: challenge.name,
+                        description: challenge.description,
+                        skill: challenge.skill,
+                        dc: challenge.dc,
+                        successes: 0,
+                        failures: 0,
+                        successThreshold: challenge.successThreshold,
+                        failureThreshold: challenge.failureThreshold,
+                        log: [],
+                    };
+                    this.sendMessageToRoom(room.id, {
+                        channel: 'game', type: 'system',
+                        message: `A new challenge begins: <b>${challenge.name}</b>! Explorers can contribute on their turn.`
+                    });
                 } else {
                     const monsterCard = room.gameState.decks.monster.pop();
                     if (monsterCard) {
@@ -961,6 +981,69 @@ class GameManager {
                 } else {
                     socket.emit('actionError', 'Not enough AP for a Full Rest.');
                 }
+                break;
+            case 'contributeToSkillChallenge':
+                const challenge = room.gameState.skillChallenge;
+                if (!challenge || !challenge.isActive) {
+                    return socket.emit('actionError', 'There is no active skill challenge.');
+                }
+                if (player.currentAp < 1) { // Cost 1 AP
+                    return socket.emit('actionError', 'Not enough AP to contribute.');
+                }
+                player.currentAp -= 1;
+    
+                const item = player.hand.find(c => c.id === data.itemId) || Object.values(player.equipment).find(c => c && c.id === data.itemId);
+                const challengeData = gameData.skillChallenges.find(c => c.id === challenge.challengeId);
+                let rollModifier = 0;
+                let itemUsedName = '';
+                if (item && challengeData.itemBonus && challengeData.itemBonus[item.name]) {
+                    rollModifier = challengeData.itemBonus[item.name].rollModifier;
+                    itemUsedName = ` with ${item.name}`;
+                }
+    
+                const d20Roll = Math.floor(Math.random() * 20) + 1;
+                const playerStat = player.class ? (gameData.classes[player.class].stats[challenge.skill] || 0) : 0;
+                const totalRoll = d20Roll + playerStat + rollModifier;
+    
+                const success = totalRoll >= challenge.dc;
+                let logText = `<b>${player.name}</b> attempts to help${itemUsedName}... They roll a ${d20Roll} + ${playerStat}(stat) ${rollModifier > 0 ? `+ ${rollModifier}(item)` : ''} = <b>${totalRoll}</b> vs DC ${challenge.dc}. `;
+                
+                if (success) {
+                    challenge.successes++;
+                    logText += "<span style='color: var(--color-success)'>Success!</span>";
+                } else {
+                    challenge.failures++;
+                    logText += "<span style='color: var(--color-danger)'>Failure!</span>";
+                }
+                challenge.log.push(logText);
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logText });
+    
+                if (challenge.successes >= challenge.successThreshold) {
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>Challenge Succeeded!</b> ${challengeData.success.message}` });
+                    if (challengeData.success.reward && challengeData.success.reward.type === 'loot') {
+                        for (let i = 0; i < challengeData.success.reward.count; i++) {
+                            const card = room.gameState.decks.discovery.pop();
+                            if (card) room.gameState.lootPool.push(card);
+                        }
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party found ${challengeData.success.reward.count} new discovery cards!` });
+                    }
+                    room.gameState.skillChallenge = { isActive: false };
+                } else if (challenge.failures >= challenge.failureThreshold) {
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>Challenge Failed!</b> ${challengeData.failure.message}` });
+                    if (challengeData.failure.consequence && challengeData.failure.consequence.type === 'damage') {
+                        const damage = this.rollDice(challengeData.failure.consequence.dice);
+                        const targetParty = challengeData.failure.consequence.target === 'party';
+                        Object.values(room.players).forEach(p => {
+                            if (p.role === 'Explorer' && (targetParty || p.id === player.id)) {
+                                p.stats.currentHp = Math.max(0, p.stats.currentHp - damage);
+                                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${p.name} takes ${damage} damage!` });
+                            }
+                        });
+                    }
+                    room.gameState.skillChallenge = { isActive: false };
+                }
+    
+                this.emitGameState(room.id);
                 break;
             default:
                  console.log(`Action '${data.action}' received but not handled yet.`);

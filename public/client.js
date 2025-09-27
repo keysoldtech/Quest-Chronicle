@@ -20,6 +20,7 @@ let isModalActive = false;
 let currentSkipHandler = null; // Holds the function to skip the current skippable modal
 let isResolvingWorldEvent = false;
 let modalWatchdog = null;
+let selectedItemIdForChallenge = null;
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -81,6 +82,7 @@ const desktopTabButtons = document.querySelectorAll('.game-area-desktop .tab-btn
 // Desktop Action Bar
 const fixedActionBar = get('fixed-action-bar');
 const actionAttackBtn = get('action-attack-btn');
+const actionSkillChallengeBtn = get('action-skill-challenge-btn');
 const actionGuardBtn = get('action-guard-btn');
 const actionBriefRespiteBtn = get('action-brief-respite-btn');
 const actionFullRestBtn = get('action-full-rest-btn');
@@ -111,6 +113,7 @@ const mobileChatChannel = get('mobile-chat-channel');
 const mobileChatInput = get('mobile-chat-input');
 const mobileActionBar = get('mobile-action-bar');
 const mobileActionAttackBtn = get('mobile-action-attack-btn');
+const mobileActionSkillChallengeBtn = get('mobile-action-skill-challenge-btn');
 const mobileActionGuardBtn = get('mobile-action-guard-btn');
 const mobileActionBriefRespiteBtn = get('mobile-action-brief-respite-btn');
 const mobileActionFullRestBtn = get('mobile-action-full-rest-btn');
@@ -161,6 +164,17 @@ const worldEventSaveRollBtn = get('world-event-save-roll-btn');
 const worldEventSaveContinueBtn = get('world-event-save-continue-btn');
 const voiceChatContainer = get('voice-chat-container');
 const skipPopupBtn = get('skip-popup-btn');
+const skillChallengeOverlay = get('skill-challenge-overlay');
+const skillChallengeTitle = get('skill-challenge-title');
+const skillChallengeDesc = get('skill-challenge-desc');
+const skillChallengeProgress = get('skill-challenge-progress');
+const skillChallengeInfo = get('skill-challenge-info');
+const skillChallengeLog = get('skill-challenge-log');
+const skillChallengeCloseBtn = get('skill-challenge-close-btn');
+const itemSelectModal = get('item-select-modal');
+const itemSelectContainer = get('item-select-container');
+const itemSelectCancelBtn = get('item-select-cancel-btn');
+const itemSelectConfirmBtn = get('item-select-confirm-btn');
 
 
 // --- Helper Functions ---
@@ -186,6 +200,8 @@ function closeAllModals() {
     diceRollOverlay.classList.add('hidden');
     eventOverlay.classList.add('hidden');
     worldEventSaveModal.classList.add('hidden');
+    skillChallengeOverlay.classList.add('hidden');
+    itemSelectModal.classList.add('hidden');
     modalQueue.length = 0; // Clear the queue
     finishModal(); // Reset state, including watchdog
 }
@@ -473,6 +489,7 @@ function renderGameState(room) {
 
     // --- Action Bars ---
     const showActionBar = isMyTurn && isExplorer && !isStunned;
+    const challenge = gameState.skillChallenge;
     fixedActionBar.classList.toggle('hidden', !showActionBar);
     mobileActionBar.classList.toggle('hidden', !showActionBar);
 
@@ -481,15 +498,18 @@ function renderGameState(room) {
         const canBriefRespite = myPlayerInfo.currentAp >= 1 && myPlayerInfo.healthDice.current > 0;
         const canFullRest = myPlayerInfo.currentAp >= 2 && myPlayerInfo.healthDice.current >= 2;
         const showAttackButton = selectedWeaponId && selectedTargetId;
+        const showChallengeButton = challenge && challenge.isActive && myPlayerInfo.currentAp >= 1;
 
         // Desktop
         actionAttackBtn.classList.toggle('hidden', !showAttackButton);
+        actionSkillChallengeBtn.classList.toggle('hidden', !showChallengeButton);
         actionGuardBtn.disabled = !canGuard;
         actionBriefRespiteBtn.disabled = !canBriefRespite;
         actionFullRestBtn.disabled = !canFullRest;
 
         // Mobile
         mobileActionAttackBtn.classList.toggle('hidden', !showAttackButton);
+        mobileActionSkillChallengeBtn.classList.toggle('hidden', !showChallengeButton);
         mobileActionGuardBtn.disabled = !canGuard;
         mobileActionBriefRespiteBtn.disabled = !canBriefRespite;
         mobileActionFullRestBtn.disabled = !canFullRest;
@@ -547,6 +567,37 @@ function renderGameState(room) {
             worldEventSaveModal.classList.add('hidden');
         }
     }
+
+    if (challenge && challenge.isActive) {
+        skillChallengeOverlay.classList.remove('hidden');
+        skillChallengeTitle.textContent = challenge.name;
+        skillChallengeDesc.textContent = challenge.description;
+        skillChallengeInfo.innerHTML = `Roll against <b>DC ${challenge.dc}</b> using <b>${challenge.skill.toUpperCase()}</b>.`;
+        skillChallengeProgress.innerHTML = `
+            <div class="progress-bar-container">
+                <label>Successes (${challenge.successes} / ${challenge.successThreshold})</label>
+                <div class="progress-bar success">
+                    <div style="width: ${(challenge.successes / challenge.successThreshold) * 100}%"></div>
+                </div>
+            </div>
+            <div class="progress-bar-container">
+                <label>Failures (${challenge.failures} / ${challenge.failureThreshold})</label>
+                <div class="progress-bar danger">
+                    <div style="width: ${(challenge.failures / challenge.failureThreshold) * 100}%"></div>
+                </div>
+            </div>
+        `;
+        skillChallengeLog.innerHTML = '';
+        challenge.log.forEach(entry => {
+            const p = document.createElement('p');
+            p.innerHTML = entry;
+            skillChallengeLog.appendChild(p);
+        });
+        skillChallengeLog.scrollTop = skillChallengeLog.scrollHeight;
+    } else {
+        skillChallengeOverlay.classList.add('hidden');
+    }
+
 
     // --- Class Selection ---
     if (gameState.phase === 'class_selection' && !hasConfirmedClass && !isDM) {
@@ -918,6 +969,53 @@ skipPopupBtn.addEventListener('click', () => {
         currentSkipHandler();
     }
 });
+
+// --- SKILL CHALLENGE LISTENERS ---
+skillChallengeCloseBtn.addEventListener('click', () => {
+    skillChallengeOverlay.classList.add('hidden');
+});
+
+function openItemSelectModal() {
+    selectedItemIdForChallenge = null;
+    itemSelectContainer.innerHTML = '';
+    const allItems = [...myPlayerInfo.hand, ...Object.values(myPlayerInfo.equipment).filter(i => i)];
+    if (allItems.length === 0) {
+        itemSelectContainer.innerHTML = `<p class="empty-pool-text">You have no items to use.</p>`;
+    } else {
+        allItems.forEach(item => {
+            const cardEl = createCardElement(item);
+            cardEl.onclick = () => {
+                selectedItemIdForChallenge = (selectedItemIdForChallenge === item.id) ? null : item.id;
+                // Visually update selection
+                itemSelectContainer.querySelectorAll('.card').forEach(c => c.classList.remove('selected-item'));
+                if (selectedItemIdForChallenge === item.id) {
+                    cardEl.classList.add('selected-item');
+                }
+            };
+            itemSelectContainer.appendChild(cardEl);
+        });
+    }
+    itemSelectModal.classList.remove('hidden');
+}
+
+[actionSkillChallengeBtn, mobileActionSkillChallengeBtn].forEach(btn => {
+    btn.addEventListener('click', openItemSelectModal);
+});
+
+itemSelectCancelBtn.addEventListener('click', () => {
+    itemSelectModal.classList.add('hidden');
+    selectedItemIdForChallenge = null;
+});
+
+itemSelectConfirmBtn.addEventListener('click', () => {
+    socket.emit('playerAction', {
+        action: 'contributeToSkillChallenge',
+        itemId: selectedItemIdForChallenge
+    });
+    itemSelectModal.classList.add('hidden');
+    selectedItemIdForChallenge = null;
+});
+
 
 
 // --- SOCKET.IO EVENT HANDLERS ---
