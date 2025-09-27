@@ -1,4 +1,4 @@
-const CACHE_NAME = 'quest-and-chronicle-v4.1.5';
+const CACHE_NAME = 'quest-and-chronicle-v4.1.7';
 const urlsToCache = [
   '/',
   '/style.css',
@@ -13,6 +13,22 @@ self.addEventListener('install', event => {
         console.log('Opened cache');
         return cache.addAll(urlsToCache);
       })
+  );
+});
+
+self.addEventListener('activate', event => {
+  const cacheWhitelist = [CACHE_NAME];
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheWhitelist.indexOf(cacheName) === -1) {
+            console.log('Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
   );
 });
 
