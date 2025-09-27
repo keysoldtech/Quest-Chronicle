@@ -522,9 +522,11 @@ class GameManager {
 
             await new Promise(res => setTimeout(res, 1500));
 
-            while (player.currentAp > 0) {
+            while (true) {
                 const currentPlayerState = room.players[player.id];
-                if (!currentPlayerState) break;
+                if (!currentPlayerState || currentPlayerState.currentAp <= 0) {
+                    break; 
+                }
 
                 const bestAction = this.determine_ai_action(currentPlayerState, room.gameState, room.players);
 
@@ -552,8 +554,8 @@ class GameManager {
                         }, d20Roll);
                         break;
                     case 'guard':
-                        const guardBonus = player.equipment.armor?.guardBonus || 2;
-                        player.stats.shieldHp += guardBonus;
+                        const guardBonus = currentPlayerState.equipment.armor?.guardBonus || 2;
+                        currentPlayerState.stats.shieldHp += guardBonus;
                         this.sendMessageToRoom(room.id, { 
                             channel: 'game', 
                             type: 'system', 
@@ -561,9 +563,9 @@ class GameManager {
                         });
                         break;
                     case 'briefRespite':
-                        player.healthDice.current -= 1;
+                        currentPlayerState.healthDice.current -= 1;
                         const healAmount = this.rollDice('1d8');
-                        player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+                        currentPlayerState.stats.currentHp = Math.min(currentPlayerState.stats.maxHp, currentPlayerState.stats.currentHp + healAmount);
                         this.sendMessageToRoom(room.id, { 
                             channel: 'game', 
                             type: 'system', 
@@ -571,9 +573,9 @@ class GameManager {
                         });
                         break;
                     case 'fullRest':
-                        player.healthDice.current -= 2;
+                        currentPlayerState.healthDice.current -= 2;
                         const totalHeal = this.rollDice('2d8');
-                        player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + totalHeal);
+                        currentPlayerState.stats.currentHp = Math.min(currentPlayerState.stats.maxHp, currentPlayerState.stats.currentHp + totalHeal);
                         this.sendMessageToRoom(room.id, { 
                             channel: 'game', 
                             type: 'system', 
@@ -581,9 +583,9 @@ class GameManager {
                         });
                         break;
                     case 'useCard':
-                        const cardIndex = player.hand.findIndex(c => c.id === bestAction.cardId);
+                        const cardIndex = currentPlayerState.hand.findIndex(c => c.id === bestAction.cardId);
                         if (cardIndex > -1) {
-                            const card = player.hand.splice(cardIndex, 1)[0];
+                            const card = currentPlayerState.hand.splice(cardIndex, 1)[0];
                             const effect = card.effect;
                             let message = `<b>${player.name}</b> used ${bestAction.apCost} AP to use ${card.name}`;
 
@@ -600,7 +602,7 @@ class GameManager {
                                 
                                 const targetType = effect.target;
                                 if (targetType === 'self' || (targetType === 'any-explorer' && bestAction.targetId === player.id)) {
-                                    player.statusEffects.push(JSON.parse(JSON.stringify(statusToApply)));
+                                    currentPlayerState.statusEffects.push(JSON.parse(JSON.stringify(statusToApply)));
                                     message += `, bolstering their own defenses.`;
                                 } else if (targetType === 'any-monster') {
                                     const monsterTarget = room.gameState.board.monsters.find(m => m.id === bestAction.targetId);
@@ -626,7 +628,7 @@ class GameManager {
                         break;
                 }
                 
-                player.stats = this.calculatePlayerStats(player);
+                currentPlayerState.stats = this.calculatePlayerStats(currentPlayerState);
                 this.emitGameState(room.id);
                 await new Promise(res => setTimeout(res, 2000));
             }

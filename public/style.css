@@ -387,6 +387,41 @@ body {
     z-index: 100;
 }
 
+/* --- TOAST NOTIFICATION --- */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--color-danger);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    z-index: 2000;
+    animation: slideInDown 0.3s ease-out;
+}
+#toast-close-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 0;
+}
+#toast-close-btn:hover { opacity: 1; }
+
+@keyframes slideInDown {
+    from { top: -100px; opacity: 0; }
+    to { top: 20px; opacity: 1; }
+}
+
+
 /* --- CARD STYLING --- */
 .card {
     background: var(--color-bg-dark);
@@ -415,4 +450,4 @@ body {
 .card-footer { font-size: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
 .card-type { text-transform: uppercase; color: var(--color-secondary-hover); }
 .card-bonus { font-weight: bold; }
-.card-actions { position: absolute; bottom:
+.card-actions { position: absolute; bottom:--- END OF FILE public/style.css ---

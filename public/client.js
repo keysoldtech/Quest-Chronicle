@@ -180,9 +180,23 @@ const itemSelectModal = get('item-select-modal');
 const itemSelectContainer = get('item-select-container');
 const itemSelectCancelBtn = get('item-select-cancel-btn');
 const itemSelectConfirmBtn = get('item-select-confirm-btn');
+const toastNotification = get('toast-notification');
+const toastMessage = get('toast-message');
+const toastCloseBtn = get('toast-close-btn');
 
 
 // --- Helper Functions ---
+let toastTimeout;
+
+function showToast(message) {
+    clearTimeout(toastTimeout);
+    toastMessage.textContent = message;
+    toastNotification.classList.remove('hidden');
+    toastTimeout = setTimeout(() => {
+        toastNotification.classList.add('hidden');
+    }, 4000); // Hide after 4 seconds
+}
+
 const randomAttackDescriptions = [
     "strikes with a fierce shout, pouring all their strength into the action.",
     "delivers a powerful, calculated strike.",
@@ -379,7 +393,7 @@ function createCardElement(card, actions = {}) {
         playBtn.className = 'btn btn-xs btn-primary';
         playBtn.onclick = () => {
             if ((cardEffect.type === 'damage' || cardEffect.target === 'any-monster') && !selectedTargetId) {
-                alert("You must select a monster to target!");
+                showToast("You must select a monster to target!");
                 return;
             }
             const action = card.type === 'Spell' ? 'castSpell' : 'useItem';
@@ -468,14 +482,14 @@ function renderGameState(room) {
     [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.classList.toggle('hidden', gameState.phase === 'lobby'));
     
     // Desktop specific
-    classSelectionDiv.classList.toggle('hidden', hasConfirmedClass || !isExplorer);
+    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || !isExplorer);
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
     playerStatsContainer.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
     
     // Mobile specific
-    const inMobileClassSelection = !hasConfirmedClass && isExplorer;
+    const inMobileClassSelection = gameState.phase === 'class_selection' && !hasConfirmedClass && isExplorer;
     if (inMobileClassSelection) {
         // If we are in class selection, force the character screen to be active
         if (!get('mobile-screen-character').classList.contains('active')) {
@@ -605,7 +619,7 @@ function renderGameState(room) {
 
 
     // --- Class Selection ---
-    if (!hasConfirmedClass && isExplorer) {
+    if (!hasConfirmedClass && isExplorer && gameState.phase === 'class_selection') {
         [classCardsContainer, mobileClassCardsContainer].forEach(container => {
              if (container.children.length === 0) {
                 for (const [classId, data] of Object.entries(classData)) {
@@ -808,7 +822,7 @@ createRoomBtn.addEventListener('click', () => {
     if (playerName) {
         socket.emit('createRoom', playerName);
     } else {
-        alert('Please enter a player name.');
+        showToast('Please enter a player name.');
     }
 });
 joinRoomBtn.addEventListener('click', () => {
@@ -817,7 +831,7 @@ joinRoomBtn.addEventListener('click', () => {
     if (playerName && roomId) {
         socket.emit('joinRoom', { roomId, playerName });
     } else {
-        alert('Please enter a player name and a room code.');
+        showToast('Please enter a player name and a room code.');
     }
 });
 
@@ -973,6 +987,10 @@ skipPopupBtn.addEventListener('click', () => {
         currentSkipHandler();
     }
 });
+toastCloseBtn.addEventListener('click', () => {
+    clearTimeout(toastTimeout);
+    toastNotification.classList.add('hidden');
+});
 
 // --- SKILL CHALLENGE LISTENERS ---
 skillChallengeCloseBtn.addEventListener('click', () => {
@@ -1049,7 +1067,7 @@ socket.on('gameStarted', (room) => {
 socket.on('gameStateUpdate', (room) => renderGameState(room));
 socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
-socket.on('actionError', (errorMessage) => alert(errorMessage));
+socket.on('actionError', (errorMessage) => showToast(errorMessage));
 
 socket.on('attackAnimation', (data) => {
     addToModalQueue(() => {
@@ -1276,7 +1294,7 @@ joinVoiceBtn.addEventListener('click', async () => {
         socket.emit('join-voice');
     } catch (err) {
         console.error("Error accessing microphone:", err);
-        alert("Could not access microphone. Please check permissions.");
+        showToast("Could not access microphone. Please check permissions.");
     }
 });
 const createPeerConnection = (peerId) => {

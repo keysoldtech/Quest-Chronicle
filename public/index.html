@@ -25,7 +25,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">Prototype 4.2.9</p>
+        <p class="subtitle-font">Prototype 4.4.0 - cleaned</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -64,7 +64,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.2.9</p>
+                     <p class="build-number-font">v4.4.0 - cleaned</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -385,6 +385,11 @@
     <div id="voice-chat-container"></div>
     
     <button id="skip-popup-btn" class="btn btn-secondary btn-sm skip-popup-btn hidden">Skip</button>
+    
+    <div id="toast-notification" class="toast-notification hidden">
+        <p id="toast-message"></p>
+        <button id="toast-close-btn">&times;</button>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>
