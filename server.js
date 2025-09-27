@@ -467,6 +467,13 @@ class GameManager {
             }
         }
         
+        const fullRestApCost = gameData.actionCosts.fullRest;
+        if (currentAp >= fullRestApCost && healthDice.current >= 2 && stats.currentHp < stats.maxHp && board.monsters.length === 0) {
+            // High priority to fully heal out of combat if possible
+            const utility = 40 + 50 * Math.pow(1 - (stats.currentHp / stats.maxHp), 2);
+            possibleActions.push({ action: 'fullRest', utility, apCost: fullRestApCost });
+        }
+        
         // 4. Decide on the best action
         if (possibleActions.length === 0) {
             return { action: 'wait', apCost: 0 };
@@ -476,30 +483,31 @@ class GameManager {
         return possibleActions[0];
     }
 
-    handleNpcExplorerTurn(room, player) {
-        setTimeout(() => {
-            try {
-                if (player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned')) {
-                    this.sendMessageToRoom(room.id, { 
-                        channel: 'game', 
-                        type: 'system', 
-                        message: `<b>${player.name}</b> is stunned and cannot act!` 
-                    });
-                    return;
+    async handleNpcExplorerTurn(room, player) {
+        try {
+            if (player.statusEffects && player.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned')) {
+                this.sendMessageToRoom(room.id, { 
+                    channel: 'game', 
+                    type: 'system', 
+                    message: `<b>${player.name}</b> is stunned and cannot act!` 
+                });
+                return; // Finally block will advance the turn
+            }
+
+            await new Promise(res => setTimeout(res, 1500)); // Initial delay to simulate thinking
+
+            while (player.currentAp > 0) {
+                // Refresh player object to get latest stats after previous actions
+                const currentPlayerState = room.players[player.id];
+                if (!currentPlayerState) break; // Player might have disconnected
+
+                const bestAction = this.determine_ai_action(currentPlayerState, room.gameState, room.players);
+
+                if (!bestAction || bestAction.action === 'wait' || currentPlayerState.currentAp < bestAction.apCost) {
+                    break; // No more affordable actions
                 }
 
-                const bestAction = this.determine_ai_action(player, room.gameState, room.players);
-
-                if (!bestAction || bestAction.action === 'wait') {
-                    this.sendMessageToRoom(room.id, { 
-                        channel: 'game', 
-                        type: 'system', 
-                        message: `<b>${player.name}</b> considers their options and waits.` 
-                    });
-                    return;
-                }
-                
-                player.currentAp -= bestAction.apCost;
+                currentPlayerState.currentAp -= bestAction.apCost;
                 
                 const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
 
@@ -527,7 +535,6 @@ class GameManager {
                             type: 'system', 
                             message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Guard, gaining ${guardBonus} Shield HP.` 
                         });
-                        this.emitGameState(room.id);
                         break;
 
                     case 'briefRespite':
@@ -539,7 +546,17 @@ class GameManager {
                             type: 'system', 
                             message: `<b>${player.name}</b> used ${bestAction.apCost} AP for a Brief Respite, healing for ${healAmount} HP.` 
                         });
-                        this.emitGameState(room.id);
+                        break;
+                    
+                    case 'fullRest':
+                        player.healthDice.current -= 2;
+                        const totalHeal = this.rollDice('2d8');
+                        player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + totalHeal);
+                        this.sendMessageToRoom(room.id, { 
+                            channel: 'game', 
+                            type: 'system', 
+                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP for a Full Rest, healing for ${totalHeal} HP.` 
+                        });
                         break;
 
                     case 'useCard':
@@ -556,26 +573,38 @@ class GameManager {
                                     type: 'system',
                                     message: `<b>${player.name}</b> used ${bestAction.apCost} AP to use ${card.name} on ${target.name}, healing for ${healAmountCard} HP.`
                                 });
-                                 this.emitGameState(room.id);
                             }
                         }
                         break;
                 }
-            } catch (error) {
-                console.error(`Error during NPC turn for ${player.name}:`, error);
-                this.sendMessageToRoom(room.id, { 
-                    channel: 'game', 
-                    type: 'system', 
-                    message: `${player.name} seems confused and ends their turn.` 
-                });
-            } finally {
-                room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
-                if (room.gameState.currentPlayerIndex === 0) {
-                    room.gameState.turnCount++;
-                }
-                this.startTurn(room.id);
+                
+                // Refresh stats and emit state after each action
+                player.stats = this.calculatePlayerStats(player);
+                this.emitGameState(room.id);
+                await new Promise(res => setTimeout(res, 2000)); // Delay between actions
             }
-        }, 2000);
+
+            this.sendMessageToRoom(room.id, { 
+                channel: 'game', 
+                type: 'system', 
+                message: `<b>${player.name}</b> finishes their turn.` 
+            });
+
+        } catch (error) {
+            console.error(`Error during NPC turn for ${player.name}:`, error);
+            this.sendMessageToRoom(room.id, { 
+                channel: 'game', 
+                type: 'system', 
+                message: `${player.name} seems confused and ends their turn.` 
+            });
+        } finally {
+            // Crucially, this always runs to advance the turn
+            room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
+            if (room.gameState.currentPlayerIndex === 0) {
+                room.gameState.turnCount++;
+            }
+            this.startTurn(room.id);
+        }
     }
 
     startTurn(roomId) {
