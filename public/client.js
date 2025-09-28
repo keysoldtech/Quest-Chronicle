@@ -1154,7 +1154,6 @@ socket.on('roomCreated', (room) => {
     mobileRoomCode.textContent = room.id;
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.remove('hidden'));
     gameModeSelector.classList.remove('hidden');
-    initDiceScene();
     renderGameState(room);
 });
 socket.on('joinSuccess', (room) => {
@@ -1164,7 +1163,6 @@ socket.on('joinSuccess', (room) => {
     roomCodeDisplay.textContent = room.id;
     mobileRoomCode.textContent = room.id;
     gameModeSelector.classList.add('hidden');
-    initDiceScene();
     renderGameState(room);
 });
 socket.on('playerListUpdate', (room) => renderGameState(room));
@@ -1617,31 +1615,54 @@ if ('serviceWorker' in navigator) {
 
 // --- 3D DICE LOGIC ---
 function initDiceScene() {
-    if (diceRenderer) return; // Already initialized
-
     const container = diceSceneContainer;
+    if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
+        console.warn("Dice container not ready.");
+        return false;
+    }
+
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // Scene
-    diceScene = new THREE.Scene();
-    diceScene.background = null;
+    if (diceRenderer) { // Already initialized, just resize
+        const currentSize = diceRenderer.getSize(new THREE.Vector2());
+        if(currentSize.x !== width || currentSize.y !== height) {
+            diceRenderer.setSize(width, height);
+            diceCamera.aspect = width / height;
+            diceCamera.updateProjectionMatrix();
+        }
+        return true;
+    }
 
-    // Camera
-    diceCamera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-    diceCamera.position.z = 2.5;
+    // First time initialization
+    try {
+        // Scene
+        diceScene = new THREE.Scene();
+        diceScene.background = null;
 
-    // Renderer
-    diceRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    diceRenderer.setSize(width, height);
-    container.appendChild(diceRenderer.domElement);
+        // Camera
+        diceCamera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        diceCamera.position.z = 2.5;
 
-    // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    diceScene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    directionalLight.position.set(1, 1, 1);
-    diceScene.add(directionalLight);
+        // Renderer
+        diceRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        diceRenderer.setSize(width, height);
+        container.innerHTML = ''; // Clear first
+        container.appendChild(diceRenderer.domElement);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        diceScene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight.position.set(1, 1, 1);
+        diceScene.add(directionalLight);
+
+        return true;
+    } catch (e) {
+        console.error("Error initializing 3D dice scene:", e);
+        diceRenderer = null; // Ensure we don't think it's initialized on next try
+        return false;
+    }
 }
 
 function createTextTexture(text) {
@@ -1690,8 +1711,30 @@ function showDiceRoll(options) {
     const { dieType, roll, title, resultHTML, continueCallback } = options;
 
     addToModalQueue(() => {
-        if (!diceRenderer) initDiceScene();
         if (diceAnimationId) cancelAnimationFrame(diceAnimationId);
+
+        // Setup modal first so container has dimensions
+        diceRollTitle.textContent = title;
+        diceRollResult.classList.add('hidden');
+        diceRollContinueBtn.classList.add('hidden');
+        diceRollOverlay.classList.remove('hidden');
+        
+        // Try to initialize or resize the scene
+        const sceneReady = initDiceScene();
+        
+        if (!sceneReady) {
+            console.warn("Dice scene not ready. Skipping animation.");
+            // Fallback for when WebGL fails.
+            diceRollResult.innerHTML = resultHTML;
+            diceRollResult.classList.remove('hidden');
+            diceRollContinueBtn.classList.remove('hidden');
+            diceRollContinueBtn.onclick = () => {
+                diceRollOverlay.classList.add('hidden');
+                if (continueCallback) continueCallback();
+                finishModal();
+            };
+            return;
+        }
 
         // Clear previous die
         if (diceMesh) diceScene.remove(diceMesh);
@@ -1715,12 +1758,6 @@ function showDiceRoll(options) {
         }
         diceMesh = new THREE.Mesh(geometry, materials);
         diceScene.add(diceMesh);
-
-        // Setup modal
-        diceRollTitle.textContent = title;
-        diceRollResult.classList.add('hidden');
-        diceRollContinueBtn.classList.add('hidden');
-        diceRollOverlay.classList.remove('hidden');
 
         // Animation variables
         const duration = 2000; // 2s roll
