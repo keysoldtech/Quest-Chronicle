@@ -928,7 +928,7 @@ class GameManager {
         else if (turnCount < 20) tier = 'tier2';
         else tier = 'tier3';
 
-        const monsterDeck = room.gameState.decks.monster[tier];
+        let monsterDeck = room.gameState.decks.monster[tier];
         if (!monsterDeck || monsterDeck.length === 0) {
             console.log(`Monster deck for ${tier} is empty.`);
             // Fallback to lower tiers if empty
@@ -1678,6 +1678,18 @@ class GameManager {
         if (!room.voiceChatPeers.includes(socket.id)) room.voiceChatPeers.push(socket.id);
     }
     
+    handleLeaveVoice(socket) {
+        const room = this.findRoomBySocket(socket);
+        if (!room) return;
+    
+        const peerIndex = room.voiceChatPeers.indexOf(socket.id);
+        if (peerIndex > -1) {
+            room.voiceChatPeers.splice(peerIndex, 1);
+            // Notify remaining peers that this one has left
+            room.voiceChatPeers.forEach(peerId => io.to(peerId).emit('voice-peer-disconnect', { peerId: socket.id }));
+        }
+    }
+
     relayVoice(socket, eventName, data) {
         const room = this.findRoomBySocket(socket);
         if (room && room.players[data.toId]) {
@@ -1693,11 +1705,7 @@ class GameManager {
         const player = room.players[socket.id];
         if (!player) return;
     
-        const peerIndex = room.voiceChatPeers.indexOf(socket.id);
-        if (peerIndex > -1) {
-            room.voiceChatPeers.splice(peerIndex, 1);
-            room.voiceChatPeers.forEach(peerId => io.to(peerId).emit('voice-peer-disconnect', { peerId: socket.id }));
-        }
+        this.handleLeaveVoice(socket); // Clean up voice chat connection
 
         if (room.gameState.phase === 'lobby') {
             delete room.players[socket.id];
@@ -1783,6 +1791,7 @@ io.on('connection', (socket) => {
 
     // Voice Chat
     socket.on('join-voice', () => gameManager.handleJoinVoice(socket));
+    socket.on('leave-voice', () => gameManager.handleLeaveVoice(socket));
     socket.on('voice-offer', (data) => gameManager.relayVoice(socket, 'voice-offer', data));
     socket.on('voice-answer', (data) => gameManager.relayVoice(socket, 'voice-answer', data));
     socket.on('voice-ice-candidate', (data) => gameManager.relayVoice(socket, 'voice-ice-candidate', data));

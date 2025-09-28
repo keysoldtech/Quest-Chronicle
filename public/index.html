@@ -7,7 +7,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Quest & Chronicle - Multiplayer Prototype</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,7 +25,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">Prototype 4.5.24 - The New War (REBORN)</p>
+        <p class="subtitle-font">Prototype 4.5.25 - The New War (REBORN)</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -64,21 +64,28 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.5.24 - The New War (REBORN)</p>
+                     <p class="build-number-font">v4.5.25 - The New War (REBORN)</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
                          <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                     </div>
-                    <button id="chat-toggle-btn" class="btn btn-sm btn-secondary">Chat & Log</button>
-                    <button id="join-voice-btn" class="btn btn-sm btn-success">Join Voice</button>
                     <div id="header-action-buttons">
-                        <button id="leave-game-btn" class="btn btn-sm btn-danger hidden">Leave Game</button>
                         <button id="startGameBtn" class="btn btn-primary hidden">Start Game</button>
                     </div>
                     <div class="room-code-display">
                         <p>Room Code:</p>
                         <p id="room-code">----</p>
+                    </div>
+                    <div class="header-menu">
+                        <button id="menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
+                        <div id="menu-dropdown" class="menu-dropdown hidden">
+                            <button id="chat-toggle-btn" class="menu-item"><span class="material-symbols-outlined">chat</span>Chat & Log</button>
+                            <button id="join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Join Voice</button>
+                            <button id="mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
+                            <button id="disconnect-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave Voice</button>
+                            <button id="leave-game-btn" class="menu-item danger hidden"><span class="material-symbols-outlined">logout</span>Leave Game</button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -162,8 +169,16 @@
                 </div>
                  <div class="mobile-header-controls">
                     <div id="mobile-header-action-buttons">
-                        <button id="mobile-leave-game-btn" class="btn btn-sm btn-icon btn-danger hidden"><span class="material-symbols-outlined">logout</span></button>
                         <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
+                    </div>
+                    <div class="header-menu">
+                        <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
+                        <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
+                            <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span></button>
+                            <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span></button>
+                            <button id="mobile-disconnect-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span></button>
+                            <button id="mobile-leave-game-btn" class="menu-item danger hidden"><span class="material-symbols-outlined">logout</span></button>
+                        </div>
                     </div>
                 </div>
             </header>

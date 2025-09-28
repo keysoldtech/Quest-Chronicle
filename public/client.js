@@ -25,6 +25,7 @@ let isModalActive = false;
 let currentSkipHandler = null; // Holds the function to skip the current skippable modal
 let selectedItemIdForChallenge = null;
 let isPerformingAction = false; // To prevent modals during an action sequence
+let isVoiceConnected = false;
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -71,11 +72,19 @@ const gameModeSelector = get('game-mode-selector');
 // Main Game Area
 const gameArea = get('game-area');
 
+// Desktop Header Menu
+const menuToggleBtn = get('menu-toggle-btn');
+const menuDropdown = get('menu-dropdown');
+const chatToggleBtn = get('chat-toggle-btn');
+const joinVoiceBtn = get('join-voice-btn');
+const muteVoiceBtn = get('mute-voice-btn');
+const disconnectVoiceBtn = get('disconnect-voice-btn');
+const leaveGameBtn = get('leave-game-btn');
+
 // Desktop
 const turnIndicator = get('turn-indicator');
 const turnCounter = get('turn-counter');
 const startGameBtn = get('startGameBtn');
-const joinVoiceBtn = get('join-voice-btn');
 const dmControls = get('dm-controls');
 const dmPlayMonsterBtn = get('dm-play-monster-btn');
 const playerList = get('player-list');
@@ -94,7 +103,6 @@ const gameBoardDiv = get('board-cards');
 const worldEventsContainer = get('world-events-container');
 const partyLootContainer = get('party-loot-container');
 const gameLogContent = get('game-log-content');
-const leaveGameBtn = get('leave-game-btn');
 const desktopTabButtons = document.querySelectorAll('.game-area-desktop .tab-btn');
 
 // Desktop Action Bar
@@ -124,7 +132,6 @@ const mobileEquippedItems = get('mobile-equipped-items');
 const mobilePlayerList = get('mobile-player-list');
 const mobileWorldEventsContainer = get('mobile-world-events-container');
 const mobilePartyLootContainer = get('mobile-party-loot-container');
-const mobileLeaveGameBtn = get('mobile-leave-game-btn');
 const mobileBottomNav = document.querySelector('.mobile-bottom-nav');
 const mobileChatLog = get('mobile-chat-log');
 const mobileChatForm = get('mobile-chat-form');
@@ -138,10 +145,17 @@ const mobileActionBriefRespiteBtn = get('mobile-action-brief-respite-btn');
 const mobileActionFullRestBtn = get('mobile-action-full-rest-btn');
 const mobileActionEndTurnBtn = get('mobile-action-end-turn-btn');
 
+// Mobile Header Menu
+const mobileMenuToggleBtn = get('mobile-menu-toggle-btn');
+const mobileMenuDropdown = get('mobile-menu-dropdown');
+const mobileJoinVoiceBtn = get('mobile-join-voice-btn');
+const mobileMuteVoiceBtn = get('mobile-mute-voice-btn');
+const mobileDisconnectVoiceBtn = get('mobile-disconnect-voice-btn');
+const mobileLeaveGameBtn = get('mobile-leave-game-btn');
+
 
 // Shared Overlays & Modals
 const chatOverlay = get('chat-overlay');
-const chatToggleBtn = get('chat-toggle-btn');
 const chatCloseBtn = get('chat-close-btn');
 const chatLog = get('chat-log');
 const chatForm = get('chat-form');
@@ -932,7 +946,11 @@ desktopTabButtons.forEach(button => {
 
 
 // Chat, Modals, etc.
-chatToggleBtn.addEventListener('click', () => chatOverlay.classList.toggle('hidden'));
+chatToggleBtn.addEventListener('click', () => {
+    chatOverlay.classList.toggle('hidden');
+    menuDropdown.classList.add('hidden');
+    menuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
+});
 chatCloseBtn.addEventListener('click', () => chatOverlay.classList.add('hidden'));
 chatForm.addEventListener('submit', (e) => { 
     e.preventDefault();
@@ -1329,7 +1347,31 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
 
 
 // --- VOICE CHAT ---
-joinVoiceBtn.addEventListener('click', async () => {
+function updateVoiceButtons() {
+    const isMuted = localStream ? !localStream.getAudioTracks()[0].enabled : false;
+
+    // Desktop
+    joinVoiceBtn.classList.toggle('hidden', isVoiceConnected);
+    muteVoiceBtn.classList.toggle('hidden', !isVoiceConnected);
+    disconnectVoiceBtn.classList.toggle('hidden', !isVoiceConnected);
+    if (isVoiceConnected) {
+        muteVoiceBtn.innerHTML = isMuted
+            ? `<span class="material-symbols-outlined">mic</span>Unmute`
+            : `<span class="material-symbols-outlined">mic_off</span>Mute`;
+    }
+
+    // Mobile
+    mobileJoinVoiceBtn.classList.toggle('hidden', isVoiceConnected);
+    mobileMuteVoiceBtn.classList.toggle('hidden', !isVoiceConnected);
+    mobileDisconnectVoiceBtn.classList.toggle('hidden', !isVoiceConnected);
+    if (isVoiceConnected) {
+         mobileMuteVoiceBtn.innerHTML = isMuted
+            ? `<span class="material-symbols-outlined">mic</span>`
+            : `<span class="material-symbols-outlined">mic_off</span>`;
+    }
+}
+
+async function joinVoice() {
     try {
         if (!localStream) {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -1339,14 +1381,46 @@ joinVoiceBtn.addEventListener('click', async () => {
         audio.muted = true;
         audio.play();
         voiceChatContainer.appendChild(audio);
-        joinVoiceBtn.disabled = true;
-        joinVoiceBtn.textContent = 'Voice Active';
+        
+        isVoiceConnected = true;
+        updateVoiceButtons();
         socket.emit('join-voice');
     } catch (err) {
         console.error("Error accessing microphone:", err);
         showToast("Could not access microphone. Please check permissions.");
     }
-});
+}
+
+function disconnectVoice() {
+    if (!localStream) return;
+
+    socket.emit('leave-voice');
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+
+    for (const peerId in peerConnections) {
+        if (peerConnections[peerId]) {
+            peerConnections[peerId].close();
+        }
+        delete peerConnections[peerId];
+    }
+
+    voiceChatContainer.innerHTML = '';
+    isVoiceConnected = false;
+    updateVoiceButtons();
+}
+
+[joinVoiceBtn, mobileJoinVoiceBtn].forEach(btn => btn.addEventListener('click', joinVoice));
+[disconnectVoiceBtn, mobileDisconnectVoiceBtn].forEach(btn => btn.addEventListener('click', disconnectVoice));
+[muteVoiceBtn, mobileMuteVoiceBtn].forEach(btn => btn.addEventListener('click', () => {
+    if (localStream) {
+        const audioTrack = localStream.getAudioTracks()[0];
+        audioTrack.enabled = !audioTrack.enabled;
+        updateVoiceButtons();
+    }
+}));
+
+
 const createPeerConnection = (peerId) => {
     const pc = new RTCPeerConnection(iceServers);
     peerConnections[peerId] = pc;
@@ -1414,6 +1488,35 @@ socket.on('voice-peer-disconnect', ({ peerId }) => {
     const audio = document.getElementById(`audio-${peerId}`);
     if (audio) {
         audio.remove();
+    }
+});
+
+// --- MENU ---
+function toggleMenu(menu, button) {
+    const isHidden = menu.classList.toggle('hidden');
+    button.innerHTML = isHidden
+        ? `<span class="material-symbols-outlined">menu</span>`
+        : `<span class="material-symbols-outlined">close</span>`;
+}
+
+menuToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu(menuDropdown, menuToggleBtn);
+});
+mobileMenuToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu(mobileMenuDropdown, mobileMenuToggleBtn);
+});
+
+// Close menu when clicking outside
+document.addEventListener('click', (e) => {
+    if (!menuDropdown.classList.contains('hidden') && !e.target.closest('.header-menu')) {
+        menuDropdown.classList.add('hidden');
+        menuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
+    }
+    if (!mobileMenuDropdown.classList.contains('hidden') && !e.target.closest('.header-menu')) {
+        mobileMenuDropdown.classList.add('hidden');
+        mobileMenuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
     }
 });
 
