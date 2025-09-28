@@ -642,22 +642,28 @@ function renderGameState(room) {
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     customSettingsPanel.classList.toggle('hidden', !(gameState.phase === 'lobby' && document.querySelector('input[name="gameMode"]:checked').value === 'Custom'));
 
-    const inMobileClassSelection = (gameState.phase === 'class_selection' || gameState.phase === 'advanced_setup_choice') && !myPlayerInfo.madeAdvancedChoice && isExplorer;
-    if (inMobileClassSelection) {
+    // --- Mobile: Handle Character Screen visibility during setup ---
+    const inMobileSetupPhase = (gameState.phase === 'class_selection' || gameState.phase === 'advanced_setup_choice') && isExplorer;
+
+    // If we are in a setup phase and haven't completed it, force the Character screen to be active.
+    if (inMobileSetupPhase && !myPlayerInfo.madeAdvancedChoice) {
         if (!get('mobile-screen-character').classList.contains('active')) {
              document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
              get('mobile-screen-character').classList.add('active');
              mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
              document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
         }
-        mobileClassSelection.classList.toggle('hidden', gameState.phase !== 'class_selection');
-        mobileAdvancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice');
-        mobilePlayerStats.classList.add('hidden');
-    } else {
-        mobileClassSelection.classList.add('hidden');
-        mobileAdvancedCardChoiceDiv.classList.add('hidden');
-        mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     }
+    
+    // --- Mobile: Toggle content inside the Character screen ---
+    // Show class selection UI only if in that phase AND no class has been chosen.
+    mobileClassSelection.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || !isExplorer);
+    
+    // Show advanced setup UI only if in that phase AND no choice has been made.
+    mobileAdvancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice || !isExplorer);
+    
+    // Show player stats as soon as a class is chosen. This fixes the "disappearing" sheet.
+    mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     
     if (gameState.phase === 'advanced_setup_choice' && !myPlayerInfo.madeAdvancedChoice) {
         [advancedChoiceButtonsDiv, mobileAdvancedChoiceButtonsDiv].forEach(container => {

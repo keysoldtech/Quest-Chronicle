@@ -911,7 +911,7 @@ label {
 }
 .equipment-choice-item { text-align: center; }
 .item-swap-container { display: flex; gap: 1rem; }
-.item-swap-column { flex: 1; }
+.item-swap-column { flex: 1; min-width: 0; /* Prevents flex item from overflowing */ }
 #swap-hand-display { flex-wrap: nowrap; overflow-x: auto; }
 .selectable-card { cursor: pointer; }
 .item-found-display { display: flex; justify-content: center; margin: 1rem 0;}
