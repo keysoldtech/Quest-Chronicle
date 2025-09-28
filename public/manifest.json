@@ -8,6 +8,11 @@
   "description": "A multiplayer digital prototype for the Quest & Chronicle card game.",
   "icons": [
     {
+      "src": "/dragon-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
       "src": "/icon-192.png",
       "type": "image/png",
       "sizes": "192x192"
