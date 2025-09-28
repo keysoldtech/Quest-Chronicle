@@ -95,7 +95,7 @@ class GameManager {
                 phase: 'lobby',
                 gameMode: null,
                 decks: { 
-                    item: [], spell: [], monster: [], weapon: [], armor: [], worldEvent: [],
+                    item: [], spell: [], monster: { tier1: [], tier2: [], tier3: [] }, weapon: [], armor: [], worldEvent: [],
                     playerEvent: [...gameData.playerEventCards],
                     partyEvent: [...gameData.partyEventCards],
                     treasure: [],
@@ -261,11 +261,16 @@ class GameManager {
         const createDeck = (cardArray) => cardArray.map(c => ({...c, id: this.generateUniqueCardId() }));
         room.gameState.decks.item = createDeck(gameData.itemCards);
         room.gameState.decks.spell = createDeck(gameData.spellCards);
-        room.gameState.decks.monster = createDeck(gameData.monsterCards);
         room.gameState.decks.weapon = createDeck(gameData.weaponCards);
         room.gameState.decks.armor = createDeck(gameData.armorCards);
         room.gameState.decks.worldEvent = createDeck(gameData.worldEventCards);
+        room.gameState.decks.playerEvent = createDeck(gameData.playerEventCards);
         room.gameState.decks.partyEvent = createDeck(gameData.partyEventCards);
+        
+        room.gameState.decks.monster.tier1 = createDeck(gameData.monsterTiers.tier1);
+        room.gameState.decks.monster.tier2 = createDeck(gameData.monsterTiers.tier2);
+        room.gameState.decks.monster.tier3 = createDeck(gameData.monsterTiers.tier3);
+
 
         // Create combined Treasure deck
         room.gameState.decks.treasure = [
@@ -274,7 +279,13 @@ class GameManager {
             ...room.gameState.decks.armor
         ];
         
-        Object.values(room.gameState.decks).forEach(deck => shuffle(deck));
+        Object.values(room.gameState.decks).forEach(deck => {
+            if (Array.isArray(deck)) shuffle(deck);
+        });
+        shuffle(room.gameState.decks.monster.tier1);
+        shuffle(room.gameState.decks.monster.tier2);
+        shuffle(room.gameState.decks.monster.tier3);
+
 
         room.gameState.phase = 'class_selection';
         io.to(room.id).emit('gameStarted', room);
@@ -788,6 +799,56 @@ class GameManager {
         this.emitGameState(room.id);
     }
 
+    scaleMonsterStats(monster, turnCount) {
+        const scaledMonster = JSON.parse(JSON.stringify(monster)); // Deep copy
+
+        const hpBonus = Math.floor(turnCount / 4) * 5; // +5 HP every 4 turns
+        const attackBonus = Math.floor(turnCount / 5); // +1 attack every 5 turns
+        const defenseBonus = Math.floor(turnCount / 6); // +1 defense every 6 turns
+
+        scaledMonster.maxHp += hpBonus;
+        scaledMonster.currentHp = scaledMonster.maxHp;
+        scaledMonster.attackBonus += attackBonus;
+        scaledMonster.requiredRollToHit += defenseBonus;
+        
+        scaledMonster.name = `Empowered ${scaledMonster.name}`;
+
+        return scaledMonster;
+    }
+
+    playMonster(room) {
+        const { turnCount, gameMode } = room.gameState;
+        
+        let tier;
+        if (turnCount < 10) tier = 'tier1';
+        else if (turnCount < 20) tier = 'tier2';
+        else tier = 'tier3';
+
+        const monsterDeck = room.gameState.decks.monster[tier];
+        if (!monsterDeck || monsterDeck.length === 0) {
+            console.log(`Monster deck for ${tier} is empty.`);
+            // Fallback to lower tiers if empty
+            if (tier === 'tier3' && room.gameState.decks.monster.tier2.length > 0) monsterDeck = room.gameState.decks.monster.tier2;
+            else if (room.gameState.decks.monster.tier1.length > 0) monsterDeck = room.gameState.decks.monster.tier1;
+            else return; // No monsters left at all
+        }
+
+        let monsterCard = monsterDeck.pop();
+        if (!monsterCard) return;
+
+        if (gameMode === 'Advanced') {
+            monsterCard = this.scaleMonsterStats(monsterCard, turnCount);
+        }
+
+        monsterCard.currentHp = monsterCard.maxHp;
+        room.gameState.board.monsters.push(monsterCard);
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', senderName: 'Dungeon Master',
+            message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
+            isNarrative: true
+        });
+    }
+
     async startTurn(roomId) {
         const room = this.rooms[roomId];
         if (!room) return;
@@ -874,16 +935,7 @@ class GameManager {
                         message: `A new challenge begins: <b>${challenge.name}</b>! Explorers can contribute on their turn.`
                     });
                 } else {
-                    const monsterCard = room.gameState.decks.monster.pop();
-                    if (monsterCard) {
-                        monsterCard.currentHp = monsterCard.maxHp;
-                        room.gameState.board.monsters.push(monsterCard);
-                        this.sendMessageToRoom(room.id, {
-                            channel: 'game', senderName: 'Dungeon Master',
-                            message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
-                            isNarrative: true
-                        });
-                    }
+                    this.playMonster(room);
                 }
             }
             
@@ -902,17 +954,8 @@ class GameManager {
                  await new Promise(res => setTimeout(res, 1000));
                 
                 // 75% chance for a monster, 25% for a world event
-                if (Math.random() < 0.75 && room.gameState.decks.monster.length > 0) {
-                    const monsterCard = room.gameState.decks.monster.pop();
-                    if (monsterCard) {
-                        monsterCard.currentHp = monsterCard.maxHp;
-                        room.gameState.board.monsters.push(monsterCard);
-                         this.sendMessageToRoom(room.id, {
-                            channel: 'game', senderName: 'Dungeon Master',
-                            message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
-                            isNarrative: true
-                        });
-                    }
+                if (Math.random() < 0.75) {
+                    this.playMonster(room);
                 } else if (room.gameState.decks.worldEvent.length > 0) {
                     const worldEventCard = room.gameState.decks.worldEvent.pop();
                     if (worldEventCard) {
@@ -1075,6 +1118,56 @@ class GameManager {
 
         this.emitGameState(room.id);
     }
+    
+    generateMagicalEquipment(card, turnCount) {
+        const newCard = JSON.parse(JSON.stringify(card)); // Deep copy
+        
+        const magicChance = Math.min(0.1 + (turnCount * 0.04), 0.8); // 10% base + 4% per turn, max 80%
+        if (Math.random() > magicChance) return newCard; // Not magical this time
+        
+        let availablePrefixes = gameData.magicalAffixes.prefixes.filter(p => p.types.includes(newCard.type.toLowerCase()));
+        let availableSuffixes = gameData.magicalAffixes.suffixes.filter(s => s.types.includes(newCard.type.toLowerCase()));
+
+        // Filter by tier based on turn count
+        if (turnCount < 10) {
+            availablePrefixes = availablePrefixes.filter(p => p.tier === 1);
+            availableSuffixes = availableSuffixes.filter(s => s.tier === 1);
+        } else if (turnCount < 20) {
+            availablePrefixes = availablePrefixes.filter(p => p.tier <= 2);
+            availableSuffixes = availableSuffixes.filter(s => s.tier <= 2);
+        }
+        
+        if (availablePrefixes.length === 0 && availableSuffixes.length === 0) return newCard;
+        
+        const hasPrefix = Math.random() < 0.7 && availablePrefixes.length > 0;
+        const hasSuffix = Math.random() < 0.7 && availableSuffixes.length > 0;
+        
+        if (!hasPrefix && !hasSuffix) return newCard; // Unlucky roll, no affix
+        
+        let newName = newCard.name;
+        if (!newCard.effect.bonuses) newCard.effect.bonuses = {};
+        
+        if (hasPrefix) {
+            const prefix = availablePrefixes[Math.floor(Math.random() * availablePrefixes.length)];
+            newName = `${prefix.name} ${newName}`;
+            for (const [key, value] of Object.entries(prefix.bonuses)) {
+                newCard.effect.bonuses[key] = (newCard.effect.bonuses[key] || 0) + value;
+            }
+        }
+        
+        if (hasSuffix) {
+            const suffix = availableSuffixes[Math.floor(Math.random() * availableSuffixes.length)];
+            newName = `${newName} ${suffix.name}`;
+            for (const [key, value] of Object.entries(suffix.bonuses)) {
+                newCard.effect.bonuses[key] = (newCard.effect.bonuses[key] || 0) + value;
+            }
+        }
+
+        newCard.name = newName;
+        newCard.isMagical = true;
+        
+        return newCard;
+    }
 
     rollForEvent(socket) {
         const room = this.findRoomBySocket(socket);
@@ -1091,7 +1184,13 @@ class GameManager {
 
             if (eventTypeRoll < 0.5 && room.gameState.decks.treasure.length > 0) { // 50% Treasure Draw
                 outcome = 'equipmentDraw';
-                const card = room.gameState.decks.treasure.pop();
+                let card = room.gameState.decks.treasure.pop();
+                
+                // --- SCALING LOGIC ---
+                if (card.type === 'Weapon' || card.type === 'Armor') {
+                    card = this.generateMagicalEquipment(card, room.gameState.turnCount);
+                }
+
                 const cardType = card.type.toLowerCase();
                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} found a ${card.name}!` });
 
@@ -1357,17 +1456,8 @@ class GameManager {
         }
     
         if (data.action === 'playMonster') {
-            const monsterCard = room.gameState.decks.monster.pop();
-            if (monsterCard) {
-                monsterCard.currentHp = monsterCard.maxHp;
-                room.gameState.board.monsters.push(monsterCard);
-                this.sendMessageToRoom(room.id, {
-                    channel: 'game', senderName: 'Dungeon Master',
-                    message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
-                    isNarrative: true
-                });
-                this.emitGameState(room.id);
-            }
+            this.playMonster(room);
+            this.emitGameState(room.id);
         }
     }
 
