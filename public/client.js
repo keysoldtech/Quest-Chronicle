@@ -630,8 +630,7 @@ function renderGameState(room) {
     advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice || !isExplorer);
     playerStatsContainer.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
-    gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
-    customSettingsPanel.classList.toggle('hidden', !(isHost && gameState.phase === 'lobby' && document.querySelector('input[name="gameMode"]:checked').value === 'Custom'));
+    customSettingsPanel.classList.toggle('hidden', !(gameState.phase === 'lobby' && document.querySelector('input[name="gameMode"]:checked').value === 'Custom'));
 
     const inMobileClassSelection = (gameState.phase === 'class_selection' || gameState.phase === 'advanced_setup_choice') && !myPlayerInfo.madeAdvancedChoice && isExplorer;
     if (inMobileClassSelection) {
@@ -1060,7 +1059,6 @@ socket.on('roomCreated', (room) => {
     roomCodeDisplay.textContent = room.id;
     mobileRoomCode.textContent = room.id;
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.remove('hidden'));
-    gameModeSelector.classList.remove('hidden');
     renderGameState(room);
 });
 socket.on('joinSuccess', (room) => {
@@ -1069,7 +1067,6 @@ socket.on('joinSuccess', (room) => {
     gameArea.classList.remove('hidden');
     roomCodeDisplay.textContent = room.id;
     mobileRoomCode.textContent = room.id;
-    gameModeSelector.classList.add('hidden');
     renderGameState(room);
 });
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
@@ -1078,7 +1075,6 @@ socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left t
 socket.on('playerListUpdate', (room) => renderGameState(room));
 socket.on('gameStarted', (room) => {
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.add('hidden'));
-    gameModeSelector.classList.add('hidden');
     logMessage('The game has begun!', { type: 'system' });
     renderGameState(room);
 });
@@ -1523,24 +1519,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => {
-        const selectedMode = document.querySelector('input[name="gameMode"]:checked').value;
-        let customSettings = {};
-        if (selectedMode === 'Beginner') {
-            customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50 };
-        } else if (selectedMode === 'Advanced') {
-            customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60 };
-        } else { // Custom
-            customSettings = {
-                dungeonPressure: parseInt(get('dungeon-pressure').value, 10),
-                lootDropRate: parseInt(get('loot-drop-rate').value, 10),
-                magicalItemChance: parseInt(get('magical-item-chance').value, 10),
-                maxHandSize: parseInt(get('max-hand-size').value, 10),
-                enemyScaling: get('enemy-scaling').checked,
-                scalingRate: parseInt(get('scaling-rate').value, 10),
-            };
-        }
-        socket.emit('startGame', { gameMode: selectedMode, customSettings });
+        socket.emit('startGame');
     }));
+
     [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
         if (tempSelectedClassId) {
             socket.emit('chooseClass', { classId: tempSelectedClassId });
@@ -1807,27 +1788,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <h3>Player Stats</h3>
         <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit.</p>
-        <p><strong>Shield Bonus:</strong> Your Armor Class (AC). Monsters must roll higher than this number to hit you.</p>
-        <p><strong>Health Dice:</strong> A resource used for the Respite and Rest actions to heal outside of combat.</p>
-        <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes, used for Skill Challenges and certain card effects.</p>
-        
-        <h3>Turn Events & Challenges</h3>
-        <p><strong>Turn Event:</strong> At the start of your turn, you roll a d20. On a 11+, something happens! This can be finding an item, a personal story event, or a party-wide event.</p>
-        <p><strong>World Events:</strong> The DM can trigger these powerful, ongoing events that affect the whole party. You may need to make a "saving throw" (a d20 roll) to resist their negative effects.</p>
-        <p><strong>Skill Challenges:</strong> A party-wide objective, like climbing a cliff or disarming a trap. On your turn, you can spend 1 AP to contribute by making a skill check.</p>
+        <p><strong>Shield Bonus:</strong> Your defense against attacks. An enemy must roll a d20 + their attack bonus that is higher than 10 + your shield bonus to hit you.</p>
+        <p><strong>Health Dice:</strong> A resource used for healing during a Respite or Rest action.</p>
+        <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes that influence rolls and certain abilities.</p>
 
-        <h3>UI Navigation</h3>
-        <p><strong>Game Tab:</strong> Your main view, showing the monster board, your equipment, and your hand.</p>
-        <p><strong>Character Tab:</strong> Shows your detailed stats and your unique Class Ability.</p>
-        <p><strong>Party Tab:</strong> A list of all players in the game, their current health, and status.</p>
-        <p><strong>Info Tab:</strong> Displays active World Events and any treasure the party has discovered but not yet distributed.</p>
-        <p><strong>Log Tab:</strong> A running log of all game events and player chat.</p>
+        <h3>Actions (Your Turn)</h3>
+        <p><strong>Attack (-1 or -2 AP):</strong> Use your equipped weapon or fists to attack a monster.</p>
+        <p><strong>Use Item/Cast Spell (-1 AP):</strong> Use a card from your hand. Some may require a target.</p>
+        <p><strong>Use Class Ability (Varies):</strong> Perform your unique class ability.</p>
+        <p><strong>Guard (-1 AP):</strong> Add a temporary Shield HP bonus for one round, making you harder to damage.</p>
+        <p><strong>Brief Respite (-1 AP):</strong> Spend one Health Die to recover HP.</p>
+        <p><strong>Full Rest (-2 AP):</strong> Spend two Health Dice to recover HP.</p>
+        <p><strong>Contribute to Challenge (-1 AP):</strong> If a Skill Challenge is active, spend AP to make a roll and contribute.</p>
     `;
+    [helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => {
+        get('help-content').innerHTML = helpContentHTML;
+        helpModal.classList.remove('hidden');
+    }));
+    get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
 
-    get('help-content').innerHTML = helpContentHTML;
-    [helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => helpModal.classList.remove('hidden')));
-    get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden');
+    if (!localStorage.getItem('tutorialCompleted')) {
+        showTutorial();
+    }
 
+    // --- 4.7. Voice Chat ---
     [joinVoiceBtn, mobileJoinVoiceBtn].forEach(btn => btn.addEventListener('click', joinVoice));
     [disconnectVoiceBtn, mobileDisconnectVoiceBtn].forEach(btn => btn.addEventListener('click', disconnectVoice));
     [muteVoiceBtn, mobileMuteVoiceBtn].forEach(btn => btn.addEventListener('click', () => {
@@ -1838,47 +1822,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }));
     
-    menuToggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleMenu(menuDropdown, menuToggleBtn);
-    });
-    mobileMenuToggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleMenu(mobileMenuDropdown, mobileMenuToggleBtn);
-    });
-
+    // --- 4.8. Menu Toggles ---
+    menuToggleBtn.addEventListener('click', () => toggleMenu(menuDropdown, menuToggleBtn));
+    mobileMenuToggleBtn.addEventListener('click', () => toggleMenu(mobileMenuDropdown, mobileMenuToggleBtn));
     document.addEventListener('click', (e) => {
-        if (!menuDropdown.classList.contains('hidden') && !e.target.closest('.header-menu')) {
+        if (!e.target.closest('.header-menu')) {
             menuDropdown.classList.add('hidden');
-            menuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
-        }
-        if (!mobileMenuDropdown.classList.contains('hidden') && !e.target.closest('.header-menu')) {
             mobileMenuDropdown.classList.add('hidden');
+            menuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
             mobileMenuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
         }
     });
-
-    document.querySelector('.radio-group').addEventListener('change', (e) => {
-        if (e.target.name === 'gameMode') {
-            document.querySelectorAll('.radio-label').forEach(label => label.classList.remove('active'));
-            const parentLabel = e.target.closest('.radio-label');
-            if(parentLabel) parentLabel.classList.add('active');
-            customSettingsPanel.classList.toggle('hidden', e.target.value !== 'Custom');
-        }
+    
+    // --- 4.9. Lobby Settings ---
+    document.querySelectorAll('input[name="gameMode"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const isCustom = document.querySelector('input[name="gameMode"]:checked').value === 'Custom';
+            customSettingsPanel.classList.toggle('hidden', !isCustom);
+        });
     });
 
     initializeLobby();
-    if (!localStorage.getItem('tutorialCompleted')) {
-        showTutorial();
-    }
 });
 
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(registration => {
-            console.log('SW registered: ', registration);
-        }).catch(registrationError => {
-            console.log('SW registration failed: ', registrationError);
-        });
-    });
+    navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('Service worker registered successfully', reg))
+        .catch(err => console.error('Service worker registration failed:', err));
 }
