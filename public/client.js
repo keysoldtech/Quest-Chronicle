@@ -61,6 +61,19 @@ const statVisuals = {
     requiredRollToHit: { icon: 'security', color: 'var(--stat-color-shield)' },
 };
 
+const statusEffectVisuals = {
+    'Stunned':           { icon: 'dizziness', color: '#ffeb3b' },
+    'Poisoned':          { icon: 'skull', color: '#4caf50' },
+    'Guarded':           { icon: 'shield', color: '#9e9e9e' },
+    'On Fire':           { icon: 'local_fire_department', color: '#f44336' },
+    'Slowed':            { icon: 'hourglass_empty', color: '#795548' },
+    'Drained':           { icon: 'battery_alert', color: '#9c27b0' },
+    'Inspired':          { icon: 'star', color: '#ffc107' },
+    'Unchecked Assault': { icon: 'axe', color: '#e53935' },
+    'Weapon Surge':      { icon: 'swords', color: '#1e88e5' },
+    'Divine Aid':        { icon: 'auto_awesome', color: '#fff176' },
+};
+
 // --- DOM Element References ---
 const get = (id) => document.getElementById(id);
 
@@ -350,6 +363,19 @@ function createCardElement(card, actions = {}) {
         if(isTargetable) cardDiv.classList.add('targetable');
     }
     
+    let statusEffectsIconsHTML = '';
+    if (card.statusEffects && card.statusEffects.length > 0) {
+        const icons = card.statusEffects.map(effect => {
+            const visual = statusEffectVisuals[effect.name];
+            if (!visual) return '';
+            const durationText = effect.duration > 1 ? `${effect.duration} turns left` : `${effect.duration} turn left`;
+            const title = `${effect.name} (${durationText})`;
+            const textColor = (visual.color === '#ffeb3b' || visual.color === '#fff176') ? '#000' : '#fff';
+            return `<span class="material-symbols-outlined status-effect-icon" style="background-color: ${visual.color}; color: ${textColor};" title="${title}">${visual.icon}</span>`;
+        }).join('');
+        statusEffectsIconsHTML = `<div class="card-status-effects">${icons}</div>`;
+    }
+    
     let typeInfo = card.type;
     if (card.category && card.category !== 'General') typeInfo += ` / ${card.category}`;
     else if (card.type === 'World Event' && card.tags) typeInfo = card.tags;
@@ -370,7 +396,6 @@ function createCardElement(card, actions = {}) {
     let monsterHologramHTML = '';
     let monsterStatsHTML = '';
     if(card.type === 'Monster') {
-        // Per user request, hiding hologram and health bar as hologram isn't displaying correctly.
         monsterHologramHTML = '';
         
         monsterStatsHTML = `
@@ -382,22 +407,15 @@ function createCardElement(card, actions = {}) {
         `;
     }
 
-    let statusEffectsHTML = '';
-    if (card.statusEffects && card.statusEffects.length > 0) {
-        statusEffectsHTML = `<div class="status-effects-container">` +
-            card.statusEffects.map(e => `<span class="status-effect">${e.name}</span>`).join(' ') +
-            `</div>`;
-    }
-    
     const cardTitle = card.isMagical ? `<span class="magical-item">${card.name}</span>` : card.name;
 
     cardDiv.innerHTML = `
+        ${statusEffectsIconsHTML}
         ${monsterHologramHTML}
         <div class="card-content">
             <h3 class="card-title">${cardTitle}</h3>
             <p class="card-effect">${card.effect?.description || card.description || card.outcome || ''}</p>
         </div>
-        ${statusEffectsHTML}
         <div class="card-footer">
             ${monsterStatsHTML}
             <div class="card-bonuses-grid">${bonusesHTML}</div>
@@ -449,8 +467,14 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
         const classText = player.class && player.role !== 'DM' ? `<span class="player-class"> - ${player.class}</span>` : '';
         
         const statusEffectsHTML = (player.statusEffects || [])
-            .map(e => `<span class="status-effect-sm">${e.name}</span>`)
-            .join(' ');
+            .map(effect => {
+                const visual = statusEffectVisuals[effect.name];
+                if (!visual) return '';
+                const durationText = effect.duration > 1 ? `${effect.duration} turns left` : `${effect.duration} turn left`;
+                const title = `${effect.name} (${durationText})`;
+                return `<span class="material-symbols-outlined status-effect-icon-sm" style="color: ${visual.color};" title="${title}">${visual.icon}</span>`;
+            })
+            .join('');
 
         li.innerHTML = `
             <div class="player-info">
