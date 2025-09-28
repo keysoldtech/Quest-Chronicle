@@ -655,32 +655,44 @@ class GameManager {
                         this._resolveUseClassAbility(room, currentPlayerState, null);
                         break;
                     case 'attack':
-                        this.sendMessageToRoom(room.id, {
-                            channel: 'game',
-                            type: 'system',
-                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack.`
-                        });
-                        const d20Roll = Math.floor(Math.random() * 20) + 1;
-                        this._resolveAttack(room, {
-                            attackerId: player.id,
-                            targetId: bestAction.targetId,
-                            weaponId: bestAction.weaponId,
-                            narrative: narrative
-                        }, d20Roll);
+                    case 'unarmedAttack': {
+                        if (room.gameState.board.monsters.length === 0) {
+                            this.sendMessageToRoom(room.id, {
+                                channel: 'game', type: 'system',
+                                message: `<b>${player.name}</b> prepares to strike, but there are no enemies.`
+                            });
+                            currentPlayerState.currentAp += bestAction.apCost; // Refund AP
+                            break;
+                        }
+
+                        if (bestAction.action === 'attack') {
+                             this.sendMessageToRoom(room.id, {
+                                channel: 'game',
+                                type: 'system',
+                                message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack.`
+                            });
+                            const d20Roll = Math.floor(Math.random() * 20) + 1;
+                            this._resolveAttack(room, {
+                                attackerId: player.id,
+                                targetId: bestAction.targetId,
+                                weaponId: bestAction.weaponId,
+                                narrative: narrative
+                            }, d20Roll);
+                        } else { // Unarmed Attack
+                            this.sendMessageToRoom(room.id, {
+                                channel: 'game',
+                                type: 'system',
+                                message: `<b>${player.name}</b> used ${bestAction.apCost} AP for an Unarmed Strike.`
+                            });
+                            const unarmedD20Roll = Math.floor(Math.random() * 20) + 1;
+                            this._resolveUnarmedAttack(room, {
+                                attackerId: player.id,
+                                targetId: bestAction.targetId,
+                                narrative: `${player.name} lashes out with their bare fists!`
+                            }, unarmedD20Roll);
+                        }
                         break;
-                     case 'unarmedAttack':
-                        this.sendMessageToRoom(room.id, {
-                            channel: 'game',
-                            type: 'system',
-                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP for an Unarmed Strike.`
-                        });
-                        const unarmedD20Roll = Math.floor(Math.random() * 20) + 1;
-                        this._resolveUnarmedAttack(room, {
-                            attackerId: player.id,
-                            targetId: bestAction.targetId,
-                            narrative: `${player.name} lashes out with their bare fists!`
-                        }, unarmedD20Roll);
-                        break;
+                    }
                     case 'guard':
                         const guardBonus = currentPlayerState.equipment.armor?.guardBonus || 2;
                         currentPlayerState.stats.shieldHp += guardBonus;
@@ -717,8 +729,19 @@ class GameManager {
                     case 'useCard': {
                         const cardIndex = currentPlayerState.hand.findIndex(c => c.id === bestAction.cardId);
                         if (cardIndex > -1) {
-                            const card = currentPlayerState.hand.splice(cardIndex, 1)[0];
+                            const card = currentPlayerState.hand[cardIndex];
                             const effect = card.effect;
+                            
+                            if ((effect.type === 'utility' || effect.type === 'damage') && room.gameState.board.monsters.length === 0) {
+                                this.sendMessageToRoom(room.id, {
+                                    channel: 'game', type: 'system',
+                                    message: `<b>${player.name}</b> tries to use ${card.name}, but has no valid targets.`
+                                });
+                                currentPlayerState.currentAp += bestAction.apCost; // Refund AP
+                                break;
+                            }
+
+                            currentPlayerState.hand.splice(cardIndex, 1);
                             let message = `<b>${player.name}</b> used ${bestAction.apCost} AP to use ${card.name}`;
 
                             if (effect.type === 'heal') {
