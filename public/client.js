@@ -1696,7 +1696,6 @@ if ('serviceWorker' in navigator) {
 function initDiceScene() {
     const container = diceSceneContainer;
     if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
-        // This can happen if the modal is hidden. We check this before calling.
         console.warn("Dice container not ready (zero dimensions).");
         return false;
     }
@@ -1704,7 +1703,6 @@ function initDiceScene() {
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // If renderer exists, just resize it.
     if (diceRenderer) { 
         const currentSize = diceRenderer.getSize(new THREE.Vector2());
         if(currentSize.x !== width || currentSize.y !== height) {
@@ -1715,7 +1713,6 @@ function initDiceScene() {
         return true;
     }
 
-    // First-time initialization
     try {
         diceScene = new THREE.Scene();
         diceScene.background = null;
@@ -1737,7 +1734,7 @@ function initDiceScene() {
         return true;
     } catch (e) {
         console.error("Error initializing 3D dice scene:", e);
-        diceRenderer = null; // Mark as uninitialized
+        diceRenderer = null; 
         return false;
     }
 }
@@ -1786,17 +1783,26 @@ function showDiceRoll(options) {
 
     addToModalQueue(() => {
         if (diceAnimationId) cancelAnimationFrame(diceAnimationId);
+        diceAnimationId = null;
 
-        // 1. Prepare modal UI
         diceRollTitle.textContent = title;
         diceRollResult.classList.add('hidden');
         diceRollContinueBtn.classList.add('hidden');
         diceSceneContainer.style.display = 'block';
         diceRollOverlay.classList.remove('hidden');
         
-        // 2. Define the function to show results and enable continuation
+        let hasContinued = false;
+        let safetyTimeout = null;
+
         const showResultsAndContinue = () => {
-            diceSceneContainer.style.display = 'none'; // Hide canvas container
+            if (hasContinued) return;
+            hasContinued = true;
+            
+            if (safetyTimeout) clearTimeout(safetyTimeout);
+            if (diceAnimationId) cancelAnimationFrame(diceAnimationId);
+            diceAnimationId = null;
+
+            diceSceneContainer.style.display = 'none';
             diceRollResult.innerHTML = resultHTML;
             diceRollResult.classList.remove('hidden');
             diceRollContinueBtn.classList.remove('hidden');
@@ -1807,24 +1813,19 @@ function showDiceRoll(options) {
             };
         };
 
-        // 3. Attempt to initialize the 3D scene.
-        let sceneReady = false;
-        try {
-            sceneReady = initDiceScene();
-        } catch (e) {
-            console.error("A critical error occurred during dice scene initialization:", e);
-            sceneReady = false;
-        }
-
-        // 4. If scene initialization fails, immediately use the fallback.
-        if (!sceneReady) {
-            console.warn("Dice scene failed to initialize. Skipping animation and showing fallback.");
+        safetyTimeout = setTimeout(() => {
+            console.warn("Dice animation timed out. Forcing fallback.");
             showResultsAndContinue();
-            return;
-        }
+        }, 4000);
 
-        // 5. If scene is ready, proceed with the animation.
         try {
+            const sceneReady = initDiceScene();
+            if (!sceneReady) {
+                console.warn("Dice scene failed to initialize. Skipping animation.");
+                showResultsAndContinue();
+                return;
+            }
+
             if (diceMesh) diceScene.remove(diceMesh);
             
             let geometry, materials;
@@ -1853,6 +1854,7 @@ function showDiceRoll(options) {
             const targetRotation = getDiceTargetRotation(dieType, roll);
 
             function animate() {
+                if (hasContinued) return;
                 const elapsed = Date.now() - startTime;
                 
                 if (elapsed < duration) {
@@ -1860,12 +1862,12 @@ function showDiceRoll(options) {
                     diceMesh.rotation.y += (Math.random() - 0.5) * 0.2;
                     diceAnimationId = requestAnimationFrame(animate);
                 } else if (elapsed < duration + settleDuration) {
-                    const settleProgress = (elapsed - duration) / settleDuration;
                     THREE.Quaternion.slerp(diceMesh.quaternion, targetRotation, diceMesh.quaternion, 0.1);
                     diceAnimationId = requestAnimationFrame(animate);
                 } else {
                     diceMesh.quaternion.copy(targetRotation);
                     showResultsAndContinue();
+                    return; 
                 }
                 
                 if (diceRenderer) {
@@ -1874,12 +1876,11 @@ function showDiceRoll(options) {
             }
             animate();
         } catch(e) {
-            console.error("An error occurred during the dice animation. Falling back.", e);
-            showResultsAndContinue(); // Fallback if animation logic itself errors
+            console.error("An error occurred during the dice animation. Triggering fallback.", e);
+            showResultsAndContinue();
         }
     }, `dice-roll-${Math.random()}`);
 }
-
 
 function playEffectAnimation(targetElement, effectType) {
     if (!targetElement) return;
