@@ -1673,7 +1673,24 @@ class GameManager {
                 break;
             }
             case 'attack':
-                this.handleAttack(socket, data);
+                if (data.cardId === 'unarmed') {
+                    const apCost = 1; 
+                    if (player.currentAp < apCost) {
+                        return socket.emit('actionError', 'Not enough Action Points.');
+                    }
+                    if (player.equipment.weapon) {
+                        return socket.emit('actionError', 'You cannot make an unarmed strike while wielding a weapon.');
+                    }
+                    player.currentAp -= apCost;
+                    const d20Roll = Math.floor(Math.random() * 20) + 1;
+                    this._resolveUnarmedAttack(room, {
+                        attackerId: player.id,
+                        targetId: data.targetId,
+                        narrative: data.narrative
+                    }, d20Roll);
+                } else {
+                    this.handleAttack(socket, data);
+                }
                 break;
             case 'guard':
                 if (player.currentAp >= gameData.actionCosts.guard) {

@@ -804,22 +804,57 @@ function renderGameState(room) {
 
     [equippedItemsDiv, mobileEquippedItems].forEach(container => {
         container.innerHTML = '';
-        ['weapon', 'armor'].forEach(type => {
-            const item = myPlayerInfo.equipment[type];
-            if (item) {
-                const cardEl = createCardElement(item, {});
-                if (type === 'weapon' && isMyTurn) {
-                    cardEl.classList.add('attackable-weapon');
-                    if (item.id === selectedWeaponId) cardEl.classList.add('selected-weapon');
-                    cardEl.onclick = () => {
-                        selectedWeaponId = (selectedWeaponId === item.id) ? null : item.id;
-                        selectedTargetId = null; 
-                        renderGameState(currentRoomState);
-                    };
-                }
-                container.appendChild(cardEl);
+        const weapon = myPlayerInfo.equipment.weapon;
+        if (weapon) {
+            const cardEl = createCardElement(weapon, {});
+            if (isMyTurn) {
+                cardEl.classList.add('attackable-weapon');
+                if (weapon.id === selectedWeaponId) cardEl.classList.add('selected-weapon');
+                cardEl.onclick = (e) => {
+                    e.stopPropagation();
+                    selectedWeaponId = (selectedWeaponId === weapon.id) ? null : weapon.id;
+                    selectedTargetId = null;
+                    document.querySelectorAll('.attackable-weapon').forEach(el => el.classList.remove('selected-weapon'));
+                    if (selectedWeaponId) {
+                        cardEl.classList.add('selected-weapon');
+                    }
+                };
             }
-        });
+            container.appendChild(cardEl);
+        } else {
+            const fistsCard = document.createElement('div');
+            fistsCard.className = 'card';
+            fistsCard.dataset.cardId = 'unarmed';
+            fistsCard.innerHTML = `
+                <div class="card-content">
+                    <h3 class="card-title">Fists</h3>
+                    <p class="card-effect">A basic unarmed strike. Costs 1 AP. Damage is based on your Strength.</p>
+                </div>
+                <div class="card-footer">
+                    <p class="card-type">Unarmed</p>
+                </div>
+            `;
+            if (isMyTurn) {
+                fistsCard.classList.add('attackable-weapon');
+                if ('unarmed' === selectedWeaponId) fistsCard.classList.add('selected-weapon');
+                fistsCard.onclick = (e) => {
+                    e.stopPropagation();
+                    selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
+                    selectedTargetId = null;
+                    document.querySelectorAll('.attackable-weapon').forEach(el => el.classList.remove('selected-weapon'));
+                    if (selectedWeaponId) {
+                        fistsCard.classList.add('selected-weapon');
+                    }
+                };
+            }
+            container.appendChild(fistsCard);
+        }
+
+        const armor = myPlayerInfo.equipment.armor;
+        if (armor) {
+            const cardEl = createCardElement(armor, {});
+            container.appendChild(cardEl);
+        }
     });
 
     [playerHandDiv, mobilePlayerHand].forEach(container => {
@@ -850,7 +885,7 @@ function renderGameState(room) {
             if (!isMyTurn || isStunned) return;
 
             if (!selectedWeaponId) {
-                showToast("Select your equipped weapon before choosing a target.");
+                showToast("Select your equipped weapon or fists before choosing a target.");
                 const equippedContainer = get('equipped-items-container');
                 equippedContainer.classList.add('pulse-highlight');
                 setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
@@ -858,15 +893,17 @@ function renderGameState(room) {
             }
             
             selectedTargetId = monster.id;
-
             const weapon = myPlayerInfo.equipment.weapon;
-            if (weapon && weapon.id === selectedWeaponId) {
-                const apCost = weapon.apCost || 2;
+            
+            if ((weapon && weapon.id === selectedWeaponId) || selectedWeaponId === 'unarmed') {
+                const isUnarmed = selectedWeaponId === 'unarmed';
+                const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
                 if (myPlayerInfo.currentAp < apCost) {
-                    showToast('Not enough Action Points to attack.');
+                    showToast(`Not enough Action Points. Needs ${apCost} AP.`);
                     return;
                 }
-                openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
+                const cardName = isUnarmed ? 'Fists' : weapon.name;
+                openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, cardName);
             }
         };
 
