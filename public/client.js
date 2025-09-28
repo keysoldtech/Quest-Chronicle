@@ -1696,14 +1696,16 @@ if ('serviceWorker' in navigator) {
 function initDiceScene() {
     const container = diceSceneContainer;
     if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
-        console.warn("Dice container not ready.");
+        // This can happen if the modal is hidden. We check this before calling.
+        console.warn("Dice container not ready (zero dimensions).");
         return false;
     }
 
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    if (diceRenderer) { // Already initialized, just resize
+    // If renderer exists, just resize it.
+    if (diceRenderer) { 
         const currentSize = diceRenderer.getSize(new THREE.Vector2());
         if(currentSize.x !== width || currentSize.y !== height) {
             diceRenderer.setSize(width, height);
@@ -1713,23 +1715,19 @@ function initDiceScene() {
         return true;
     }
 
-    // First time initialization
+    // First-time initialization
     try {
-        // Scene
         diceScene = new THREE.Scene();
         diceScene.background = null;
 
-        // Camera
         diceCamera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
         diceCamera.position.z = 2.5;
 
-        // Renderer
         diceRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         diceRenderer.setSize(width, height);
-        container.innerHTML = ''; // Clear first
+        container.innerHTML = ''; 
         container.appendChild(diceRenderer.domElement);
 
-        // Lights
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         diceScene.add(ambientLight);
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
@@ -1739,7 +1737,7 @@ function initDiceScene() {
         return true;
     } catch (e) {
         console.error("Error initializing 3D dice scene:", e);
-        diceRenderer = null; // Ensure we don't think it's initialized on next try
+        diceRenderer = null; // Mark as uninitialized
         return false;
     }
 }
@@ -1750,11 +1748,11 @@ function createTextTexture(text) {
     canvas.width = 128;
     canvas.height = 128;
     
-    context.fillStyle = '#1a2226'; // var(--color-surface)
+    context.fillStyle = '#1a2226';
     context.fillRect(0, 0, canvas.width, canvas.height);
     
     context.font = "bold 60px 'Inter', sans-serif";
-    context.fillStyle = '#e8eff3'; // var(--color-text-primary)
+    context.fillStyle = '#e8eff3';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText(text, canvas.width / 2, canvas.height / 2);
@@ -1767,8 +1765,6 @@ function getDiceMaterials(faces) {
 }
 
 function getDiceTargetRotation(diceType, result) {
-    // These rotations orient the die so the result face is pointing up (along the Y axis)
-    // Values are approximate and found through experimentation.
     const quarter = Math.PI / 2;
     const rotations = {
         d6: {
@@ -1779,7 +1775,6 @@ function getDiceTargetRotation(diceType, result) {
             5: new THREE.Quaternion().setFromEuler(new THREE.Euler(quarter, 0, 0)),
             6: new THREE.Quaternion().setFromEuler(new THREE.Euler(2 * quarter, 0, 0)),
         },
-        // Approximations for other dice
         d20: { default: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)) },
         d8: { default: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)) }
     };
@@ -1792,18 +1787,16 @@ function showDiceRoll(options) {
     addToModalQueue(() => {
         if (diceAnimationId) cancelAnimationFrame(diceAnimationId);
 
-        // Setup modal first so container has dimensions
+        // 1. Prepare modal UI
         diceRollTitle.textContent = title;
         diceRollResult.classList.add('hidden');
         diceRollContinueBtn.classList.add('hidden');
+        diceSceneContainer.style.display = 'block';
         diceRollOverlay.classList.remove('hidden');
         
-        // Try to initialize or resize the scene
-        const sceneReady = initDiceScene();
-        
-        if (!sceneReady) {
-            console.warn("Dice scene not ready. Skipping animation.");
-            // Fallback for when WebGL fails.
+        // 2. Define the function to show results and enable continuation
+        const showResultsAndContinue = () => {
+            diceSceneContainer.style.display = 'none'; // Hide canvas container
             diceRollResult.innerHTML = resultHTML;
             diceRollResult.classList.remove('hidden');
             diceRollContinueBtn.classList.remove('hidden');
@@ -1812,76 +1805,81 @@ function showDiceRoll(options) {
                 if (continueCallback) continueCallback();
                 finishModal();
             };
+        };
+
+        // 3. Attempt to initialize the 3D scene.
+        let sceneReady = false;
+        try {
+            sceneReady = initDiceScene();
+        } catch (e) {
+            console.error("A critical error occurred during dice scene initialization:", e);
+            sceneReady = false;
+        }
+
+        // 4. If scene initialization fails, immediately use the fallback.
+        if (!sceneReady) {
+            console.warn("Dice scene failed to initialize. Skipping animation and showing fallback.");
+            showResultsAndContinue();
             return;
         }
 
-        // Clear previous die
-        if (diceMesh) diceScene.remove(diceMesh);
-        
-        // Create new die
-        let geometry, materials;
-        switch (dieType) {
-            case 'd8':
-                geometry = new THREE.OctahedronGeometry(1);
-                materials = getDiceMaterials(['1','2','3','4','5','6','7','8']);
-                break;
-            case 'd20':
-                geometry = new THREE.IcosahedronGeometry(1);
-                materials = getDiceMaterials(['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20']);
-                break;
-            case 'd6':
-            default:
-                geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
-                materials = getDiceMaterials(['1','2','3','4','5','6']);
-                break;
-        }
-        diceMesh = new THREE.Mesh(geometry, materials);
-        diceScene.add(diceMesh);
-
-        // Animation variables
-        const duration = 2000; // 2s roll
-        const settleDuration = 500; // 0.5s settle
-        const startTime = Date.now();
-        const startRotation = new THREE.Quaternion().random();
-        const targetRotation = getDiceTargetRotation(dieType, roll);
-        diceMesh.quaternion.copy(startRotation);
-
-        const angularVelocity = {
-            x: (Math.random() - 0.5) * 10,
-            y: (Math.random() - 0.5) * 10,
-            z: (Math.random() - 0.5) * 10
-        };
-
-        function animate() {
-            const now = Date.now();
-            const elapsed = now - startTime;
+        // 5. If scene is ready, proceed with the animation.
+        try {
+            if (diceMesh) diceScene.remove(diceMesh);
             
-            if (elapsed < duration) {
-                diceMesh.rotation.x += angularVelocity.x * 0.01;
-                diceMesh.rotation.y += angularVelocity.y * 0.01;
-                diceMesh.rotation.z += angularVelocity.z * 0.01;
-                diceAnimationId = requestAnimationFrame(animate);
-            } else if (elapsed < duration + settleDuration) {
-                const settleProgress = (elapsed - duration) / settleDuration;
-                THREE.Quaternion.slerp(diceMesh.quaternion, targetRotation, diceMesh.quaternion, 0.1);
-                diceAnimationId = requestAnimationFrame(animate);
-            } else {
-                diceMesh.quaternion.copy(targetRotation);
-                // Animation finished
-                diceRollResult.innerHTML = resultHTML;
-                diceRollResult.classList.remove('hidden');
-                diceRollContinueBtn.classList.remove('hidden');
-                diceRollContinueBtn.onclick = () => {
-                    diceRollOverlay.classList.add('hidden');
-                    if (continueCallback) continueCallback();
-                    finishModal();
-                };
+            let geometry, materials;
+            switch (dieType) {
+                case 'd8':
+                    geometry = new THREE.OctahedronGeometry(1);
+                    materials = getDiceMaterials(['1','2','3','4','5','6','7','8']);
+                    break;
+                case 'd20':
+                    geometry = new THREE.IcosahedronGeometry(1);
+                    materials = getDiceMaterials(Array.from({length: 20}, (_, i) => String(i + 1)));
+                    break;
+                case 'd6':
+                default:
+                    geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+                    materials = getDiceMaterials(['1','2','3','4','5','6']);
+                    break;
             }
-            diceRenderer.render(diceScene, diceCamera);
+            diceMesh = new THREE.Mesh(geometry, materials);
+            diceScene.add(diceMesh);
+
+            const duration = 2000;
+            const settleDuration = 500;
+            const startTime = Date.now();
+            diceMesh.quaternion.random();
+            const targetRotation = getDiceTargetRotation(dieType, roll);
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                
+                if (elapsed < duration) {
+                    diceMesh.rotation.x += (Math.random() - 0.5) * 0.2;
+                    diceMesh.rotation.y += (Math.random() - 0.5) * 0.2;
+                    diceAnimationId = requestAnimationFrame(animate);
+                } else if (elapsed < duration + settleDuration) {
+                    const settleProgress = (elapsed - duration) / settleDuration;
+                    THREE.Quaternion.slerp(diceMesh.quaternion, targetRotation, diceMesh.quaternion, 0.1);
+                    diceAnimationId = requestAnimationFrame(animate);
+                } else {
+                    diceMesh.quaternion.copy(targetRotation);
+                    showResultsAndContinue();
+                }
+                
+                if (diceRenderer) {
+                    diceRenderer.render(diceScene, diceCamera);
+                }
+            }
+            animate();
+        } catch(e) {
+            console.error("An error occurred during the dice animation. Falling back.", e);
+            showResultsAndContinue(); // Fallback if animation logic itself errors
         }
-        animate();
     }, `dice-roll-${Math.random()}`);
 }
+
 
 function playEffectAnimation(targetElement, effectType) {
     if (!targetElement) return;
