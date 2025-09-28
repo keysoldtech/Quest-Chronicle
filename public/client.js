@@ -212,9 +212,6 @@ const narrativeInput = get('narrative-input');
 const narrativeCancelBtn = get('narrative-cancel-btn');
 const narrativeConfirmBtn = get('narrative-confirm-btn');
 const yourTurnPopup = get('your-turn-popup');
-const noApModal = get('no-ap-modal');
-const noApMessage = get('no-ap-message');
-const noApCloseBtn = get('no-ap-close-btn');
 const endTurnConfirmModal = get('end-turn-confirm-modal');
 const endTurnCancelBtn = get('end-turn-cancel-btn');
 const endTurnConfirmBtn = get('end-turn-confirm-btn');
@@ -252,9 +249,6 @@ const equippedItemDisplay = get('equipped-item-display');
 const newItemDisplay = get('new-item-display');
 const keepCurrentBtn = get('keep-current-btn');
 const equipNewBtn = get('equip-new-btn');
-const toastNotification = get('toast-notification');
-const toastMessage = get('toast-message');
-const toastCloseBtn = get('toast-close-btn');
 const animationOverlay = get('animation-overlay');
 const itemSwapModal = get('item-swap-modal');
 const itemSwapPrompt = get('item-swap-prompt');
@@ -272,15 +266,31 @@ const toastContainer = get('toast-container');
 // --- 2. HELPER FUNCTIONS ---
 
 // --- 2.1. Toast Notifications ---
-let toastTimeout;
+function showInfoToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast-notification-entry toast-${type}`;
+    toast.textContent = message;
 
-function showToast(message) {
-    clearTimeout(toastTimeout);
-    toastMessage.textContent = message;
-    toastNotification.classList.remove('hidden');
-    toastTimeout = setTimeout(() => {
-        toastNotification.classList.add('hidden');
-    }, 4000);
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.className = 'toast-close-btn';
+    closeBtn.onclick = () => {
+        toast.style.opacity = 0;
+        setTimeout(() => toast.remove(), 300);
+    };
+
+    toast.appendChild(closeBtn);
+    toastContainer.appendChild(toast);
+
+    // Force reflow to enable animation
+    getComputedStyle(toast).opacity;
+    toast.style.opacity = 1;
+    toast.style.transform = 'translateY(0)';
+    
+    setTimeout(() => {
+        toast.style.opacity = 0;
+        setTimeout(() => toast.remove(), 5000);
+    }, 5000);
 }
 
 const randomAttackDescriptions = [
@@ -468,7 +478,7 @@ function createCardElement(card, actions = {}) {
         playBtn.className = 'btn btn-xs btn-primary';
         playBtn.onclick = () => {
             if ((cardEffect.type === 'damage' || cardEffect.target === 'any-monster') && !selectedTargetId) {
-                showToast("You must select a monster to target!");
+                showInfoToast("You must select a monster to target!", 'error');
                 return;
             }
             const action = card.type === 'Spell' ? 'castSpell' : 'useItem';
@@ -534,10 +544,10 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
         settingsDisplayElement.innerHTML = `
             <h4>Custom Game Settings</h4>
             <ul>
-                <li><strong>Pressure:</strong> ${s.dungeonPressure}%</li>
+                <li><strong>Bag Size:</strong> ${s.maxHandSize}</li>
+                <li><strong>Start Gear:</strong> ${s.startWithWeapon ? 'Weapon' : ''} ${s.startWithArmor ? 'Armor' : ''}</li>
+                <li><strong>Start Hand:</strong> ${s.startingItems} Items, ${s.startingSpells} Spells</li>
                 <li><strong>Loot Drop:</strong> ${s.lootDropRate}%</li>
-                <li><strong>Magical Item:</strong> ${s.magicalItemChance}%</li>
-                <li><strong>Hand Size:</strong> ${s.maxHandSize}</li>
                 <li><strong>Enemy Scaling:</strong> ${s.enemyScaling ? `Enabled (${s.scalingRate}%)` : 'Disabled'}</li>
             </ul>
         `;
@@ -714,14 +724,23 @@ function renderGameState(room) {
     
     if (isMyTurn && myPlayerInfo.pendingEventRoll) {
         addToModalQueue(() => {
-            eventOverlay.classList.remove('hidden');
-            eventTitle.textContent = "An Event is Triggered!";
-            eventPrompt.textContent = "Roll the dice to see what happens.";
-            eventRollBtn.classList.remove('hidden');
-            eventCardSelection.classList.add('hidden');
+            // New sequence: show the full dice roll modal immediately
+            diceRollOverlay.classList.remove('hidden');
+            diceRollTitle.textContent = "An Event Occurs!";
+            diceRollResult.innerHTML = `<p>Roll a d20 to see what happens on your journey.</p>`;
+            diceRollResult.classList.remove('hidden');
+            diceSpinner.classList.add('hidden');
+            diceRollContinueBtn.classList.add('hidden');
+            diceRollActionBtn.classList.remove('hidden');
+            diceRollActionBtn.textContent = "Roll d20";
+            diceRollActionBtn.disabled = false;
+            diceRollActionBtn.onclick = () => {
+                socket.emit('rollForEvent');
+                diceRollActionBtn.disabled = true;
+            };
         }, 'event-roll');
     } else if (!myPlayerInfo.pendingEventChoice) {
-        eventOverlay.classList.add('hidden');
+        eventOverlay.classList.add('hidden'); // Ensure the old modal is hidden
     }
     
     if (myPlayerInfo.pendingItemSwap) {
@@ -1016,7 +1035,7 @@ function renderGameState(room) {
             if (!isMyTurn || isStunned) return;
 
             if (!selectedWeaponId) {
-                showToast("Select your equipped weapon or fists before choosing a target.");
+                showInfoToast("Select your equipped weapon or fists before choosing a target.", 'error');
                 const equippedContainer = get('equipped-items-container');
                 equippedContainer.classList.add('pulse-highlight');
                 setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
@@ -1030,7 +1049,7 @@ function renderGameState(room) {
                 const isUnarmed = selectedWeaponId === 'unarmed';
                 const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
                 if (myPlayerInfo.currentAp < apCost) {
-                    socket.emit('actionError', `Not enough Action Points. Needs ${apCost} AP.`);
+                    showInfoToast(`Not enough Action Points. Needs ${apCost} AP.`, 'error');
                     return;
                 }
                 const cardName = isUnarmed ? 'Fists' : weapon.name;
@@ -1081,14 +1100,7 @@ socket.on('gameStarted', (room) => {
 socket.on('gameStateUpdate', (room) => renderGameState(room));
 socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
 socket.on('actionError', (errorMessage) => {
-    if(typeof errorMessage === 'string' && errorMessage.toLowerCase().includes('action points')) {
-        noApMessage.textContent = errorMessage;
-        addToModalQueue(() => {
-            noApModal.classList.remove('hidden');
-        }, 'no-ap-modal');
-    } else {
-        showToast(errorMessage);
-    }
+    showInfoToast(errorMessage, 'error');
 });
 
 // --- 5.3. Action/Animation Events ---
@@ -1213,33 +1225,55 @@ socket.on('monsterAttackAnimation', (data) => {
 
 socket.on('eventRollResult', ({ roll, outcome }) => {
     const resultHTML = `<p class="result-line">${roll}</p><p>${outcome.message}</p>`;
-    showDiceRoll({
-        dieType: 'd20',
-        roll: roll,
-        title: "Event Roll",
-        resultHTML,
-        continueCallback: () => {
-            if (outcome.type === 'playerEvent') {
-                 addToModalQueue(() => {
-                    eventOverlay.classList.remove('hidden');
-                    eventTitle.textContent = 'A player event occurs!';
-                    eventPrompt.textContent = 'Choose one:';
-                    eventCardSelection.classList.remove('hidden');
-                    eventRollBtn.classList.add('hidden');
-                    eventCardSelection.innerHTML = '';
-                    outcome.options.forEach(card => {
-                        const cardEl = createCardElement(card);
-                        cardEl.onclick = () => {
-                            socket.emit('selectEventCard', { cardId: card.id });
-                            eventOverlay.classList.add('hidden');
-                            finishModal();
-                        };
-                        eventCardSelection.appendChild(cardEl);
-                    });
-                }, `event-result-${roll}`);
-            }
+
+    const continueCallback = () => {
+        diceRollOverlay.classList.add('hidden');
+        finishModal(); // Finish the dice roll modal
+
+        if (outcome.type === 'playerEvent') {
+            addToModalQueue(() => {
+                eventOverlay.classList.remove('hidden');
+                eventTitle.textContent = 'A player event occurs!';
+                eventPrompt.textContent = 'Choose one:';
+                eventCardSelection.classList.remove('hidden');
+                eventRollBtn.classList.add('hidden');
+                eventCardSelection.innerHTML = '';
+                outcome.options.forEach(card => {
+                    const cardEl = createCardElement(card);
+                    cardEl.onclick = () => {
+                        socket.emit('selectEventCard', { cardId: card.id });
+                        eventOverlay.classList.add('hidden');
+                        finishModal();
+                    };
+                    eventCardSelection.appendChild(cardEl);
+                });
+            }, `event-result-${roll}`);
         }
-    });
+    };
+    
+    // Animate the result in the already-open dice modal
+    const spinnerValue = diceSpinner.querySelector('.spinner-value');
+    diceAnimationContainer.style.height = '200px';
+    diceSpinner.classList.remove('hidden');
+    
+    let counter = 0;
+    const interval = setInterval(() => {
+        spinnerValue.textContent = Math.floor(Math.random() * 20) + 1;
+        counter += 50;
+        if (counter >= 1500) {
+            clearInterval(interval);
+            spinnerValue.textContent = roll;
+            setTimeout(() => {
+                diceSpinner.classList.add('hidden');
+                diceAnimationContainer.style.height = '0px';
+
+                diceRollResult.innerHTML = resultHTML;
+                diceRollResult.classList.remove('hidden');
+                diceRollContinueBtn.classList.remove('hidden');
+                diceRollContinueBtn.onclick = continueCallback;
+            }, 500);
+        }
+    }, 50);
 });
 
 socket.on('eventItemFound', (card) => {
@@ -1320,7 +1354,7 @@ async function joinVoice() {
         socket.emit('join-voice');
     } catch (err) {
         console.error("Error accessing microphone:", err);
-        showToast("Could not access microphone. Please check permissions.");
+        showInfoToast("Could not access microphone. Please check permissions.", 'error');
     }
 }
 
@@ -1517,28 +1551,32 @@ document.addEventListener('DOMContentLoaded', () => {
     createRoomBtn.addEventListener('click', () => {
         const playerName = playerNameInput.value.trim();
         if (!playerName) {
-            return showToast('Please enter a player name.');
+            return showInfoToast('Please enter a player name.', 'error');
         }
         
         const checkedRadio = document.querySelector('input[name="gameMode"]:checked');
         if (!checkedRadio) {
-            return showToast('Please select a game mode.');
+            return showInfoToast('Please select a game mode.', 'error');
         }
         const gameMode = checkedRadio.value;
         
         let customSettings = {};
         if (gameMode === 'Beginner') {
-            customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50 };
+            customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50, startWithWeapon: true, startWithArmor: true, startingItems: 2, startingSpells: 2 };
         } else if (gameMode === 'Advanced') {
-            customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60 };
+            customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60, startWithWeapon: false, startWithArmor: false, startingItems: 0, startingSpells: 0 };
         } else { // Custom
             customSettings = {
-                dungeonPressure: parseInt(get('dungeon-pressure').value, 10),
-                lootDropRate: parseInt(get('loot-drop-rate').value, 10),
-                magicalItemChance: parseInt(get('magical-item-chance').value, 10),
                 maxHandSize: parseInt(get('max-hand-size').value, 10),
+                startWithWeapon: get('start-with-weapon').checked,
+                startWithArmor: get('start-with-armor').checked,
+                startingItems: parseInt(get('starting-items').value, 10),
+                startingSpells: parseInt(get('starting-spells').value, 10),
+                lootDropRate: parseInt(get('loot-drop-rate').value, 10),
                 enemyScaling: get('enemy-scaling').checked,
                 scalingRate: parseInt(get('scaling-rate').value, 10),
+                dungeonPressure: 25, // Placeholder, not implemented
+                magicalItemChance: 20 // Placeholder, not implemented
             };
         }
 
@@ -1550,7 +1588,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (playerName && roomId) {
             socket.emit('joinRoom', { roomId, playerName });
         } else {
-            showToast('Please enter a player name and a room code.');
+            showInfoToast('Please enter a player name and a room code.', 'error');
         }
     });
 
@@ -1568,7 +1606,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 4.2. Turn & Action Controls ---
     [actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => {
-        socket.emit('endTurn');
+        addToModalQueue(() => {
+            endTurnConfirmModal.classList.remove('hidden');
+        }, 'end-turn-confirm');
     }));
 
     [actionGuardBtn, mobileActionGuardBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
@@ -1663,14 +1703,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     eventRollBtn.onclick = () => {
         socket.emit('rollForEvent');
-        eventRollBtn.classList.add('hidden');
-        eventOverlay.classList.add('hidden');
-        finishModal();
+        eventPrompt.textContent = "Rolling...";
+        eventRollBtn.disabled = true;
     };
-    noApCloseBtn.addEventListener('click', () => {
-        noApModal.classList.add('hidden');
-        finishModal();
-    });
     worldEventSaveRollBtn.addEventListener('click', () => {
         socket.emit('rollForWorldEventSave');
         worldEventSaveRollBtn.classList.add('hidden');
@@ -1686,10 +1721,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentSkipHandler) {
             currentSkipHandler();
         }
-    });
-    toastCloseBtn.addEventListener('click', () => {
-        clearTimeout(toastTimeout);
-        toastNotification.classList.add('hidden');
     });
 
     // SKILL CHALLENGE LISTENERS

@@ -327,10 +327,13 @@ class GameManager {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
         if (!player || player.class || player.role !== 'Explorer') return;
-
+    
         this.assignClassToPlayer(room.id, player, classId);
         
-        if (room.gameState.gameMode === 'Beginner') {
+        const gameMode = room.gameState.gameMode;
+        const settings = room.gameState.customSettings;
+    
+        if (gameMode === 'Beginner') {
             this.dealCard(room.id, player.id, 'weapon', 1);
             this.dealCard(room.id, player.id, 'armor', 1);
             this.dealCard(room.id, player.id, 'item', 2);
@@ -341,10 +344,25 @@ class GameManager {
             const armor = player.hand.find(c => c.type === 'Armor');
             if (armor) this._internalEquipItem(room, player, armor.id);
             
-        } else {
+        } else if (gameMode === 'Custom') {
+            if (settings.startWithWeapon) this.dealCard(room.id, player.id, 'weapon', 1);
+            if (settings.startWithArmor) this.dealCard(room.id, player.id, 'armor', 1);
+            if (settings.startingItems > 0) this.dealCard(room.id, player.id, 'item', settings.startingItems);
+            if (settings.startingSpells > 0) this.dealCard(room.id, player.id, 'spell', settings.startingSpells);
+    
+            // Auto-equip logic from beginner mode, respecting the custom settings
+            if (settings.startWithWeapon) {
+                const weapon = player.hand.find(c => c.type === 'Weapon');
+                if (weapon) this._internalEquipItem(room, player, weapon.id);
+            }
+            if (settings.startWithArmor) {
+                const armor = player.hand.find(c => c.type === 'Armor');
+                if (armor) this._internalEquipItem(room, player, armor.id);
+            }
+        } else { // Advanced
             player.madeAdvancedChoice = false;
         }
-
+    
         this.checkAllPlayersReady(room);
         this.emitGameState(room.id);
     }
@@ -422,24 +440,35 @@ class GameManager {
 
     checkAllPlayersReady(room) {
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
-        if (explorers.length === 0) return;
-
+        if (explorers.length === 0 && room.gameState.phase !== 'lobby') return;
+    
+        // CRITICAL FIX: Do not start the game if any player has a pending action from setup.
+        if (explorers.some(p => p.pendingItemSwap)) {
+            return;
+        }
+    
         if (room.gameState.phase === 'class_selection') {
             const allSelectedClass = explorers.every(p => p.class);
             if (allSelectedClass) {
                 if (room.gameState.gameMode === 'Advanced') {
                     room.gameState.phase = 'advanced_setup_choice';
                 } else {
+                    // For Beginner/Custom, check for pending swaps one last time before starting
+                    if (!explorers.some(p => p.pendingItemSwap)) {
+                        room.gameState.phase = 'started';
+                        this.startFirstTurn(room.id);
+                    }
+                }
+            }
+        } else if (room.gameState.phase === 'advanced_setup_choice') {
+            const allMadeChoice = explorers.every(p => p.madeAdvancedChoice);
+            if (allMadeChoice) {
+                // For Advanced, check for pending swaps one last time before starting
+                if (!explorers.some(p => p.pendingItemSwap)) {
                     room.gameState.phase = 'started';
                     this.startFirstTurn(room.id);
                 }
             }
-        } else if (room.gameState.phase === 'advanced_setup_choice') {
-             const allMadeChoice = explorers.every(p => p.madeAdvancedChoice);
-             if(allMadeChoice) {
-                room.gameState.phase = 'started';
-                this.startFirstTurn(room.id);
-             }
         }
     }
     
@@ -1176,13 +1205,6 @@ class GameManager {
         
         socket.emit('eventRollResult', { roll, outcome });
         
-        io.to(room.id).emit('simpleRollAnimation', {
-            playerId: player.id,
-            title: `${player.name}'s Event Roll`,
-            roll: roll,
-            resultHTML: `<p class="result-line">${roll}</p><p class="roll-details">${outcome.message}</p>`
-        });
-        
         this.emitGameState(room.id);
     }
     
@@ -1233,6 +1255,9 @@ class GameManager {
     
         player.pendingItemSwap = null; // CRITICAL: Clear the pending state
         this.emitGameState(room.id);
+        
+        // CRITICAL: Re-check if the game can now start after the swap is resolved.
+        this.checkAllPlayersReady(room);
     }
 }
 

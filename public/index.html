@@ -36,7 +36,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">v4.5.2 (Playtest-v1.2)</p>
+        <p class="subtitle-font">v4.5.3 (Playtest-v1.3)</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -63,22 +63,30 @@
         
         <div id="custom-settings-panel" class="custom-settings-panel hidden">
             <div class="slider-group">
-                <label for="dungeon-pressure">Dungeon Pressure: <span id="dungeon-pressure-value">25</span>%</label>
-                <input type="range" id="dungeon-pressure" min="0" max="100" value="25" class="slider">
-            </div>
-             <div class="slider-group">
-                <label for="loot-drop-rate">Loot Drop Rate: <span id="loot-drop-rate-value">25</span>%</label>
-                <input type="range" id="loot-drop-rate" min="0" max="100" value="25" class="slider">
-            </div>
-             <div class="slider-group">
-                <label for="magical-item-chance">Magical Item Chance: <span id="magical-item-chance-value">20</span>%</label>
-                <input type="range" id="magical-item-chance" min="0" max="100" value="20" class="slider">
-            </div>
-            <div class="slider-group">
-                <label for="max-hand-size">Max Hand Size: <span id="max-hand-size-value">5</span></label>
+                <label for="max-hand-size">Bag Capacity: <span id="max-hand-size-value">5</span></label>
                 <input type="range" id="max-hand-size" min="3" max="7" value="5" class="slider">
             </div>
             <div class="toggle-group">
+                <label for="start-with-weapon">Start with Weapon?</label>
+                <input type="checkbox" id="start-with-weapon" class="toggle-switch" checked>
+            </div>
+            <div class="toggle-group">
+                <label for="start-with-armor">Start with Armor?</label>
+                <input type="checkbox" id="start-with-armor" class="toggle-switch" checked>
+            </div>
+            <div class="slider-group">
+                <label for="starting-items">Starting Items: <span id="starting-items-value">2</span></label>
+                <input type="range" id="starting-items" min="0" max="5" value="2" class="slider">
+            </div>
+            <div class="slider-group">
+                <label for="starting-spells">Starting Spells: <span id="starting-spells-value">2</span></label>
+                <input type="range" id="starting-spells" min="0" max="5" value="2" class="slider">
+            </div>
+            <div class="slider-group">
+                <label for="loot-drop-rate">Loot Drop Rate: <span id="loot-drop-rate-value">25</span>%</label>
+                <input type="range" id="loot-drop-rate" min="0" max="100" value="25" class="slider">
+            </div>
+             <div class="toggle-group">
                 <label for="enemy-scaling">Enable Enemy Power Scaling?</label>
                 <input type="checkbox" id="enemy-scaling" class="toggle-switch">
             </div>
@@ -109,7 +117,7 @@
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                 </div>
                  <div class="header-controls">
-                    <p class="build-number-font">v4.5.2 (Playtest-v1.2)</p>
+                    <p class="build-number-font">v4.5.3 (Playtest-v1.3)</p>
                     <div id="dm-controls" class="dm-controls hidden">
                          <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                     </div>
@@ -369,16 +377,6 @@
         </div>
     </div>
 
-    <div id="no-ap-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <h2 class="panel-header">Action Points Needed</h2>
-            <p id="no-ap-message">You do not have enough Action Points to perform that action.</p>
-            <div class="modal-actions">
-                <button id="no-ap-close-btn" class="btn btn-primary">OK</button>
-            </div>
-        </div>
-    </div>
-
     <div id="end-turn-confirm-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <h2 class="panel-header">End Your Turn?</h2>
@@ -530,11 +528,6 @@
     <div id="toast-container" class="toast-container"></div>
     
     <button id="skip-popup-btn" class="btn btn-secondary btn-sm skip-popup-btn hidden">Skip</button>
-    
-    <div id="toast-notification" class="toast-notification hidden">
-        <p id="toast-message"></p>
-        <button id="toast-close-btn">&times;</button>
-    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>
