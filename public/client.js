@@ -1043,6 +1043,7 @@ itemSelectConfirmBtn.addEventListener('click', () => {
 // --- SOCKET.IO EVENT HANDLERS ---
 socket.on('connect', () => { myId = socket.id; });
 socket.on('roomCreated', (room) => {
+    document.body.classList.add('in-game');
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
     roomCodeDisplay.textContent = room.id;
@@ -1051,6 +1052,7 @@ socket.on('roomCreated', (room) => {
     renderGameState(room);
 });
 socket.on('joinSuccess', (room) => {
+    document.body.classList.add('in-game');
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
     roomCodeDisplay.textContent = room.id;
