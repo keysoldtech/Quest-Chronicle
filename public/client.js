@@ -180,6 +180,11 @@ const itemSelectModal = get('item-select-modal');
 const itemSelectContainer = get('item-select-container');
 const itemSelectCancelBtn = get('item-select-cancel-btn');
 const itemSelectConfirmBtn = get('item-select-confirm-btn');
+const equipmentChoiceModal = get('equipment-choice-modal');
+const equippedItemDisplay = get('equipped-item-display');
+const newItemDisplay = get('new-item-display');
+const keepCurrentBtn = get('keep-current-btn');
+const equipNewBtn = get('equip-new-btn');
 const toastNotification = get('toast-notification');
 const toastMessage = get('toast-message');
 const toastCloseBtn = get('toast-close-btn');
@@ -221,6 +226,7 @@ function closeAllModals() {
     worldEventSaveModal.classList.add('hidden');
     skillChallengeOverlay.classList.add('hidden');
     itemSelectModal.classList.add('hidden');
+    equipmentChoiceModal.classList.add('hidden');
     modalQueue.length = 0; // Clear the queue
     finishModal(); // Reset state, including watchdog
 }
@@ -568,6 +574,25 @@ function renderGameState(room) {
         eventOverlay.classList.add('hidden');
     }
     
+    if (isMyTurn && myPlayerInfo.pendingEquipmentChoice) {
+        addToModalQueue(() => {
+            const { newCard, type } = myPlayerInfo.pendingEquipmentChoice;
+            const currentItem = myPlayerInfo.equipment[type];
+            
+            equippedItemDisplay.innerHTML = '';
+            newItemDisplay.innerHTML = '';
+            
+            if (currentItem) {
+                equippedItemDisplay.appendChild(createCardElement(currentItem));
+            }
+            if (newCard) {
+                newItemDisplay.appendChild(createCardElement(newCard));
+            }
+            
+            equipmentChoiceModal.classList.remove('hidden');
+        }, `equipment-choice-${myPlayerInfo.pendingEquipmentChoice.newCard.id}`);
+    }
+
     if (myPlayerInfo.pendingWorldEventSave) {
         addToModalQueue(() => {
             worldEventSaveModal.classList.remove('hidden');
@@ -1038,6 +1063,22 @@ itemSelectConfirmBtn.addEventListener('click', () => {
     selectedItemIdForChallenge = null;
 });
 
+// Equipment Choice Listeners
+keepCurrentBtn.addEventListener('click', () => {
+    if (myPlayerInfo.pendingEquipmentChoice) {
+        socket.emit('resolveEquipmentChoice', { choice: 'keep', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id });
+        equipmentChoiceModal.classList.add('hidden');
+        finishModal();
+    }
+});
+equipNewBtn.addEventListener('click', () => {
+     if (myPlayerInfo.pendingEquipmentChoice) {
+        socket.emit('resolveEquipmentChoice', { choice: 'swap', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id });
+        equipmentChoiceModal.classList.add('hidden');
+        finishModal();
+    }
+});
+
 
 
 // --- SOCKET.IO EVENT HANDLERS ---
@@ -1215,19 +1256,21 @@ socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
         skipPopupBtn.classList.add('hidden');
         dice.classList.remove('is-rolling');
         eventDiceAnimationContainer.classList.add('hidden');
-        eventResultContainer.classList.remove('hidden');
-        
-        eventResultTitle.textContent = `You rolled a ${roll}!`;
-        if(outcome === 'none') {
-            eventResultSubtitle.textContent = 'Nothing happens this time.';
+
+        if (outcome === 'none' || outcome === 'equipmentDraw' || outcome === 'partyEvent') {
+            eventResultContainer.classList.remove('hidden');
+            eventResultTitle.textContent = `You rolled a ${roll}!`;
+            eventResultSubtitle.textContent = (outcome === 'none') ? 'Nothing happens this time.' : 'The event resolves...';
             eventCardSelection.classList.add('hidden');
             eventResultOkayBtn.classList.remove('hidden');
             eventResultOkayBtn.onclick = () => {
                 eventOverlay.classList.add('hidden');
                 finishModal();
             };
-        } else {
-            eventResultSubtitle.textContent = outcome === 'discovery' ? 'You made a discovery! Choose one:' : 'A player event occurs! Choose one:';
+        } else if (outcome === 'playerEvent') {
+            eventResultContainer.classList.remove('hidden');
+            eventResultTitle.textContent = `You rolled a ${roll}!`;
+            eventResultSubtitle.textContent = 'A player event occurs! Choose one:';
             eventCardSelection.classList.remove('hidden');
             eventResultOkayBtn.classList.add('hidden');
             eventCardSelection.innerHTML = '';

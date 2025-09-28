@@ -114,17 +114,17 @@
 
             <aside class="info-tabs-panel">
                 <div class="tab-buttons">
-                    <button class="tab-btn active" data-tab="world-events-tab">World Events</button>
+                    <button class="tab-btn" data-tab="world-events-tab">World Events</button>
                     <button class="tab-btn" data-tab="party-loot-tab">Party Discoveries</button>
-                    <button class="tab-btn" data-tab="game-log-tab">Game Log</button>
+                    <button class="tab-btn active" data-tab="game-log-tab">Game Log</button>
                 </div>
-                <div id="world-events-tab" class="tab-content active">
+                <div id="world-events-tab" class="tab-content">
                     <div id="world-events-container" class="card-container-row"></div>
                 </div>
                 <div id="party-loot-tab" class="tab-content">
                     <div id="party-loot-container" class="card-container-row"></div>
                 </div>
-                 <div id="game-log-tab" class="tab-content">
+                 <div id="game-log-tab" class="tab-content active">
                     <div id="game-log-content" class="log-content-area"></div>
                 </div>
             </aside>
@@ -378,6 +378,27 @@
             <div class="modal-actions">
                 <button id="item-select-cancel-btn" class="btn btn-secondary">Cancel</button>
                 <button id="item-select-confirm-btn" class="btn btn-primary">Confirm Roll</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="equipment-choice-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <h2 class="panel-header">Choose Your Equipment</h2>
+            <p>You found a new piece of gear. You can swap it with your currently equipped item, or keep what you have.</p>
+            <div class="equipment-choice-container">
+                <div class="equipment-choice-item">
+                    <h3 class="sub-header-font">Currently Equipped</h3>
+                    <div id="equipped-item-display"></div>
+                </div>
+                 <div class="equipment-choice-item">
+                    <h3 class="sub-header-font">New Item Found</h3>
+                    <div id="new-item-display"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="keep-current-btn" class="btn btn-secondary">Keep Current</button>
+                <button id="equip-new-btn" class="btn btn-primary">Equip New</button>
             </div>
         </div>
     </div>

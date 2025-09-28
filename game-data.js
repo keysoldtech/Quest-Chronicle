@@ -448,10 +448,11 @@ const playerEventCards = [
     { id: nextId(), name: "Twisted Ankle", type: "Player Event", outcome: "You misstep on the uneven ground, twisting your ankle.", effect: { name: 'Slowed', type: 'stat_modifier', bonuses: { ap: -1 }, duration: 2 } },
 ];
 
-const discoveryCards = [
-    { id: nextId(), name: "Cryptic Map", type: "Discovery", description: "A piece of a map, showing a location you don't recognize." },
-    { id: nextId(), name: "Forgotten Idol", type: "Discovery", description: "A small, strange idol made of an unknown, oily black stone." },
+const partyEventCards = [
+    { id: nextId(), name: "Shared Vigor", type: "Party Event", outcome: "A wave of positive energy washes over the party.", effect: { type: "heal", dice: "1d4" } },
+    { id: nextId(), name: "Sudden Adrenaline", type: "Party Event", outcome: "The thrill of battle sharpens everyone's senses.", effect: { type: "stat_change", stat: "currentAp", value: 1 } },
 ];
+
 
 module.exports = {
   classes,
@@ -462,7 +463,7 @@ module.exports = {
   armorCards,
   worldEventCards,
   playerEventCards,
-  discoveryCards,
+  partyEventCards,
   statusEffectDefinitions,
   npcDialogue,
   skillChallenges,

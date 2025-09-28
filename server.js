@@ -97,12 +97,13 @@ class GameManager {
                 decks: { 
                     item: [], spell: [], monster: [], weapon: [], armor: [], worldEvent: [],
                     playerEvent: [...gameData.playerEventCards],
-                    discovery: [...gameData.discoveryCards],
+                    partyEvent: [...gameData.partyEventCards],
+                    treasure: [],
                 },
                 turnOrder: [],
                 currentPlayerIndex: -1,
                 board: { monsters: [] },
-                lootPool: [],
+                lootPool: [], // Retained for future use, but not currently added to.
                 turnCount: 0,
                 worldEvents: {
                     currentEvent: null,
@@ -190,6 +191,7 @@ class GameManager {
             statusEffects: [],
             pendingEventRoll: false,
             pendingEventChoice: null,
+            pendingEquipmentChoice: null, // New state for equipment decisions
             madeAdvancedChoice: false,
             pendingWorldEventSave: null,
             healthDice: { current: 0, max: 0 }
@@ -263,6 +265,14 @@ class GameManager {
         room.gameState.decks.weapon = createDeck(gameData.weaponCards);
         room.gameState.decks.armor = createDeck(gameData.armorCards);
         room.gameState.decks.worldEvent = createDeck(gameData.worldEventCards);
+        room.gameState.decks.partyEvent = createDeck(gameData.partyEventCards);
+
+        // Create combined Treasure deck
+        room.gameState.decks.treasure = [
+            ...room.gameState.decks.item,
+            ...room.gameState.decks.weapon,
+            ...room.gameState.decks.armor
+        ];
         
         Object.values(room.gameState.decks).forEach(deck => shuffle(deck));
 
@@ -828,6 +838,7 @@ class GameManager {
             await this.handleMonsterTurns(room);
             await new Promise(res => setTimeout(res, 1500)); // Pause after monster attacks
 
+            // Regular threat generation if board is clear
             if (room.gameState.board.monsters.length === 0 && !room.gameState.skillChallenge.isActive) {
                 const roll = Math.random();
                 if (roll < 0.25 && room.gameState.decks.worldEvent.length > 0) {
@@ -875,6 +886,49 @@ class GameManager {
                     }
                 }
             }
+            
+            // --- DM ESCALATION LOGIC ---
+            const { turnCount } = room.gameState;
+            let escalationChance = 0;
+            if (turnCount >= 15) escalationChance = 0.75;
+            else if (turnCount >= 10) escalationChance = 0.50;
+            else if (turnCount >= 5) escalationChance = 0.25;
+
+            if (Math.random() < escalationChance) {
+                this.sendMessageToRoom(room.id, {
+                    channel: 'game', type: 'system',
+                    message: 'The dungeon grows restless... another threat appears!'
+                });
+                 await new Promise(res => setTimeout(res, 1000));
+                
+                // 75% chance for a monster, 25% for a world event
+                if (Math.random() < 0.75 && room.gameState.decks.monster.length > 0) {
+                    const monsterCard = room.gameState.decks.monster.pop();
+                    if (monsterCard) {
+                        monsterCard.currentHp = monsterCard.maxHp;
+                        room.gameState.board.monsters.push(monsterCard);
+                         this.sendMessageToRoom(room.id, {
+                            channel: 'game', senderName: 'Dungeon Master',
+                            message: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)],
+                            isNarrative: true
+                        });
+                    }
+                } else if (room.gameState.decks.worldEvent.length > 0) {
+                    const worldEventCard = room.gameState.decks.worldEvent.pop();
+                    if (worldEventCard) {
+                        room.gameState.worldEvents.currentEvent = worldEventCard;
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game', senderName: 'Dungeon Master',
+                            message: gameData.npcDialogue.dm.worldEvent[Math.floor(Math.random() * gameData.npcDialogue.dm.worldEvent.length)],
+                            isNarrative: true
+                        });
+                        Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc).forEach(p => {
+                            p.pendingWorldEventSave = { ...worldEventCard.saveInfo, eventName: worldEventCard.name };
+                        });
+                    }
+                }
+            }
+
 
             this.emitGameState(roomId);
             
@@ -1028,27 +1082,96 @@ class GameManager {
         if (!player || !player.pendingEventRoll) return;
 
         player.pendingEventRoll = false;
-
         const roll = Math.floor(Math.random() * 20) + 1;
         let outcome = 'none';
         let cardOptions = [];
 
-        if (roll > 10) { 
-            outcome = Math.random() > 0.5 ? 'discovery' : 'playerEvent';
-            const deckName = outcome === 'discovery' ? 'discovery' : 'playerEvent';
-            const deck = room.gameState.decks[deckName];
-            
-            if (deck.length >= 2) {
+        if (roll > 10) {
+            const eventTypeRoll = Math.random();
+
+            if (eventTypeRoll < 0.5 && room.gameState.decks.treasure.length > 0) { // 50% Treasure Draw
+                outcome = 'equipmentDraw';
+                const card = room.gameState.decks.treasure.pop();
+                const cardType = card.type.toLowerCase();
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} found a ${card.name}!` });
+
+                if ((cardType === 'weapon' || cardType === 'armor') && player.equipment[cardType]) {
+                    player.pendingEquipmentChoice = { newCard: card, type: cardType };
+                } else if (cardType === 'weapon' || cardType === 'armor') {
+                    player.equipment[cardType] = card;
+                    player.stats = this.calculatePlayerStats(player);
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `It has been automatically equipped.` });
+                } else {
+                    player.hand.push(card);
+                }
+            } else if (eventTypeRoll < 0.75 && room.gameState.decks.playerEvent.length >= 2) { // 25% Player Event
+                outcome = 'playerEvent';
+                const deck = room.gameState.decks.playerEvent;
                 cardOptions = [deck.pop(), deck.pop()];
-                player.pendingEventChoice = { outcome: deckName, options: cardOptions };
-            } else {
-                outcome = 'none';
+                player.pendingEventChoice = { outcome: 'playerEvent', options: cardOptions };
+            } else if (room.gameState.decks.partyEvent.length > 0) { // 25% Party Event
+                outcome = 'partyEvent';
+                const eventCard = room.gameState.decks.partyEvent.pop();
+                this.resolvePartyEvent(room, eventCard);
+                room.gameState.decks.partyEvent.unshift(eventCard); // Return to bottom
             }
         }
 
         socket.emit('eventRollResult', { roll, outcome, cardOptions });
         this.emitGameState(room.id);
     }
+    
+    resolvePartyEvent(room, card) {
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `A party event occurs: <b>${card.name}</b>! ${card.outcome}`});
+        const effect = card.effect;
+        if (!effect) return;
+
+        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+        
+        switch(effect.type) {
+            case 'heal':
+                explorers.forEach(p => {
+                    const healAmount = this.rollDice(effect.dice);
+                    p.stats.currentHp = Math.min(p.stats.maxHp, p.stats.currentHp + healAmount);
+                });
+                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The whole party feels revitalized.`});
+                break;
+            case 'stat_change':
+                explorers.forEach(p => {
+                    if (effect.stat === 'currentAp') {
+                        p.currentAp = Math.max(0, p.currentAp + effect.value);
+                    }
+                });
+                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party feels a shift in momentum.`});
+                break;
+        }
+    }
+    
+    resolveEquipmentChoice(socket, { choice, newCardId }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingEquipmentChoice || player.pendingEquipmentChoice.newCard.id !== newCardId) {
+            return socket.emit('actionError', 'Invalid equipment choice.');
+        }
+
+        const { newCard, type } = player.pendingEquipmentChoice;
+        const currentItem = player.equipment[type];
+
+        if (choice === 'swap') {
+            player.hand.push(currentItem);
+            player.equipment[type] = newCard;
+            player.stats = this.calculatePlayerStats(player);
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} equipped the new ${newCard.name} and moved ${currentItem.name} to their hand.` });
+        } else { // 'keep'
+            room.gameState.decks.treasure.unshift(newCard); // Return to bottom
+            shuffle(room.gameState.decks.treasure); // Reshuffle to be safe
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} decided to keep their ${currentItem.name}.` });
+        }
+
+        player.pendingEquipmentChoice = null;
+        this.emitGameState(room.id);
+    }
+
 
     selectEventCard(socket, { cardId }) {
         const room = this.findRoomBySocket(socket);
@@ -1059,9 +1182,7 @@ class GameManager {
         const selectedCard = choice.options.find(c => c.id === cardId);
         if (!selectedCard) return;
 
-        if (choice.outcome === 'discovery') {
-            room.gameState.lootPool.push(selectedCard);
-        } else if (choice.outcome === 'playerEvent') {
+        if (choice.outcome === 'playerEvent') {
             if (selectedCard.effect) {
                 const effectCopy = JSON.parse(JSON.stringify(selectedCard.effect));
                 player.statusEffects.push(effectCopy);
@@ -1200,10 +1321,10 @@ class GameManager {
                     this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>Challenge Succeeded!</b> ${challengeData.success.message}` });
                     if (challengeData.success.reward && challengeData.success.reward.type === 'loot') {
                         for (let i = 0; i < challengeData.success.reward.count; i++) {
-                            const card = room.gameState.decks.discovery.pop();
+                            const card = room.gameState.decks.treasure.pop();
                             if (card) room.gameState.lootPool.push(card);
                         }
-                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party found ${challengeData.success.reward.count} new discovery cards!` });
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party found ${challengeData.success.reward.count} new treasure cards!` });
                     }
                     room.gameState.skillChallenge = { isActive: false };
                 } else if (challenge.failures >= challenge.failureThreshold) {
@@ -1310,6 +1431,7 @@ class GameManager {
             statusEffects: JSON.parse(JSON.stringify(player.statusEffects)),
             pendingEventRoll: false,
             pendingEventChoice: null,
+            pendingEquipmentChoice: null,
             madeAdvancedChoice: player.madeAdvancedChoice,
             pendingWorldEventSave: null,
             healthDice: { ...player.healthDice }
@@ -1342,6 +1464,7 @@ io.on('connection', (socket) => {
     socket.on('endTurn', () => gameManager.endTurn(socket));
     socket.on('rollForEvent', () => gameManager.rollForEvent(socket));
     socket.on('selectEventCard', (data) => gameManager.selectEventCard(socket, data));
+    socket.on('resolveEquipmentChoice', (data) => gameManager.resolveEquipmentChoice(socket, data));
     socket.on('rollForWorldEventSave', () => gameManager.rollForWorldEventSave(socket));
     socket.on('dmAction', (data) => gameManager.handleDmAction(socket, data));
     socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));
