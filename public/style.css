@@ -395,7 +395,7 @@ body.in-game {
     box-shadow: var(--shadow-md);
     transition: all 0.2s ease-in-out;
     position: relative;
-    overflow: hidden;
+    /* overflow: hidden; -- This was preventing the hologram from showing */
 }
 .card:hover { transform: translateY(-5px) scale(1.05); border-color: var(--color-primary); }
 .card-content { flex-grow: 1; }
@@ -663,7 +663,6 @@ body.in-game {
     display: flex; align-items: center; justify-content: center;
     background: var(--color-surface-light);
     color: var(--color-text-primary);
-    font-size: 40px;
     font-weight: bold;
     border: 2px solid var(--color-text-primary);
     backface-visibility: hidden;
@@ -676,7 +675,7 @@ body.in-game {
 
 /* D6 Cube */
 .d6 { width: 100px; height: 100px; }
-.d6 .face { width: 100px; height: 100px; }
+.d6 .face { width: 100px; height: 100px; font-size: 40px; }
 .d6 .face-1 { transform: rotateY(0deg) translateZ(50px); }
 .d6 .face-2 { transform: rotateY(90deg) translateZ(50px); }
 .d6 .face-3 { transform: rotateY(180deg) translateZ(50px); }
@@ -692,21 +691,25 @@ body.in-game {
 
 
 /* D8 Octahedron */
-.d8 { width: 100px; height: 115.47px; }
+.d8 { width: 100px; height: 100px; }
 .d8 .face {
     width: 0; height: 0;
     border-style: solid;
-    border-width: 0 50px 86.6px 50px; /* 0 top, 50px right, 86.6 bottom, 50px left */
+    border-width: 0 43.3px 75px 43.3px;
     border-color: transparent transparent var(--color-surface-light) transparent;
-    background: none;
-    font-size: 24px;
-    padding-bottom: 20px;
+    background: none; font-size: 24px;
+    padding-bottom: 25px; line-height: 1;
 }
-/* Simplified positions for demo */
-.d8 .face-1 { transform: rotateX(109.47deg) rotateY(0deg) translateZ(28.87px); }
-.d8 .face-8 { transform: rotateY(0deg) translateZ(57.74px); }
-.d8.stop-on-8 { transform: rotateX(0); } /* Placeholder */
-/* Stop positions for d8 are more complex and omitted for brevity */
+.d8 .face-1 { transform: rotateX(180deg) translateZ(35.35px) rotateY(0deg); }
+.d8 .face-2 { transform: rotateX(180deg) translateZ(35.35px) rotateY(90deg); }
+.d8 .face-3 { transform: rotateX(180deg) translateZ(35.35px) rotateY(180deg); }
+.d8 .face-4 { transform: rotateX(180deg) translateZ(35.35px) rotateY(270deg); }
+.d8 .face-5 { transform: translateZ(35.35px) rotateY(0deg); }
+.d8 .face-6 { transform: translateZ(35.35px) rotateY(90deg); }
+.d8 .face-7 { transform: translateZ(35.35px) rotateY(180deg); }
+.d8 .face-8 { transform: translateZ(35.35px) rotateY(270deg); }
+.d8.stop-on-8 { transform: rotateX(-35.26deg) rotateY(-45deg); }
+.d8.stop-on-1 { transform: rotateX(35.26deg) rotateY(45deg) rotateZ(180deg); }
 
 
 /* D20 Icosahedron */
@@ -716,16 +719,31 @@ body.in-game {
     border-style: solid;
     border-width: 0 43.3px 75px 43.3px;
     border-color: transparent transparent var(--color-surface-light) transparent;
-    background: none;
-    font-size: 20px;
-    padding-bottom: 25px;
+    background: none; font-size: 20px;
+    padding-bottom: 25px; line-height: 1;
 }
-/* Simplified positions for d20, real ones are very complex */
-.d20 .face-1 { transform: rotateX(138.19deg) rotateY(0deg) translateZ(44.72px); }
-.d20 .face-20 { transform: rotateX(41.81deg) rotateY(180deg) translateZ(44.72px); }
-.d20.stop-on-20 { transform: rotateX(-41.81deg) rotateY(0deg); }
-.d20.stop-on-1 { transform: rotateX(41.81deg) rotateY(180deg); }
-/* Other stop positions are complex and require precise rotations */
+.d20 .face-1  { transform: rotateY(0deg)   rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-2  { transform: rotateY(72deg)  rotateX(79.188deg)  translateZ(44.72px); }
+.d20 .face-3  { transform: rotateY(216deg) rotateX(79.188deg)  translateZ(44.72px); }
+.d20 .face-4  { transform: rotateY(180deg) rotateX(41.81deg)   translateZ(44.72px); }
+.d20 .face-5  { transform: rotateY(324deg) rotateX(41.81deg)   translateZ(44.72px); }
+.d20 .face-6  { transform: rotateY(36deg)  rotateX(41.81deg)   translateZ(44.72px); }
+.d20 .face-7  { transform: rotateY(252deg) rotateX(41.81deg)   translateZ(44.72px); }
+.d20 .face-8  { transform: rotateY(108deg) rotateX(41.81deg)   translateZ(44.72px); }
+.d20 .face-9  { transform: rotateY(144deg) rotateX(41.81deg)   translateZ(44.72px); }
+.d20 .face-10 { transform: rotateY(288deg) rotateX(41.81deg)   translateZ(44.72px); }
+.d20 .face-11 { transform: rotateY(0deg)   rotateX(-41.81deg)  translateZ(44.72px); }
+.d20 .face-12 { transform: rotateY(216deg) rotateX(-41.81deg)  translateZ(44.72px); }
+.d20 .face-13 { transform: rotateY(72deg)  rotateX(-41.81deg)  translateZ(44.72px); }
+.d20 .face-14 { transform: rotateY(288deg) rotateX(-41.81deg)  translateZ(44.72px); }
+.d20 .face-15 { transform: rotateY(144deg) rotateX(-41.81deg)  translateZ(44.72px); }
+.d20 .face-16 { transform: rotateY(36deg)  rotateX(-79.188deg) translateZ(44.72px); }
+.d20 .face-17 { transform: rotateY(252deg) rotateX(-79.188deg) translateZ(44.72px); }
+.d20 .face-18 { transform: rotateY(108deg) rotateX(-79.188deg) translateZ(44.72px); }
+.d20 .face-19 { transform: rotateY(324deg) rotateX(-79.188deg) translateZ(44.72px); }
+.d20 .face-20 { transform: rotateY(180deg) rotateX(-116.565deg) translateZ(44.72px); }
+.d20.stop-on-20 { transform: rotateX(63.435deg) rotateZ(0deg); }
+.d20.stop-on-1 { transform: rotateX(-63.435deg) rotateZ(180deg); }
 
 
 .dice-roll-result-container {

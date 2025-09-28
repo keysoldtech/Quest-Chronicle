@@ -25,6 +25,7 @@ let isModalActive = false;
 let currentSkipHandler = null; // Holds the function to skip the current skippable modal
 let modalWatchdog = null;
 let selectedItemIdForChallenge = null;
+let isPerformingAction = false; // To prevent modals during an action sequence
 const iceServers = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -821,7 +822,7 @@ function renderGameState(room) {
         mobileBoardCards.appendChild(mobileCardEl);
     });
     
-    if (isMyTurn && myPlayerInfo.currentAp === 0 && !apModalShownThisTurn) {
+    if (isMyTurn && myPlayerInfo.currentAp === 0 && !apModalShownThisTurn && !isPerformingAction) {
         addToModalQueue(() => {
             apModal.classList.remove('hidden');
         }, 'ap-modal');
@@ -965,6 +966,7 @@ narrativeConfirmBtn.addEventListener('click', () => {
     }
 
     if (pendingActionData) {
+        isPerformingAction = true;
         socket.emit('playerAction', { ...pendingActionData, narrative: narrativeText });
         closeNarrativeModal();
     }
@@ -1182,10 +1184,21 @@ function playEffectAnimation(targetElement, effectType) {
     }, 1000); // Duration of the animation
 }
 
+socket.on('simpleRollAnimation', (data) => {
+    showDiceRoll(data);
+});
+
 socket.on('attackAnimation', (data) => {
     const { attackerId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, damageBonus, totalDamage } = data;
 
-    // --- Stage 1: To-Hit Roll ---
+    const finalCallback = () => {
+        isPerformingAction = false;
+        // After action is done, we can re-render to check for AP modal.
+        if (currentRoomState.id) {
+            renderGameState(currentRoomState);
+        }
+    };
+
     const toHitResultHTML = `
         ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
         <p class="roll-details">Roll: ${d20Roll} + ${damageBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
@@ -1197,26 +1210,26 @@ socket.on('attackAnimation', (data) => {
     showDiceRoll({
         dieType: 'd20',
         roll: d20Roll,
-        title: `You Attack!`,
+        title: `${myId === attackerId ? 'You Attack!' : 'Ally Attacks!'}`,
         resultHTML: toHitResultHTML,
-        continueDelay: hit ? 1500 : 3000, // Shorter delay if there's a damage roll coming
+        continueDelay: hit ? 1500 : 3000,
         continueCallback: () => {
             if (hit) {
-                // --- Stage 2: Damage Roll ---
                 const damageResultHTML = `
                     <p class="result-line">DAMAGE!</p>
                     <p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>
                 `;
-                
                 const damageDieType = `d${damageDice.split('d')[1]}`;
-
                 showDiceRoll({
                     dieType: damageDieType,
-                    roll: rawDamageRoll, // Note: This won't work for multiple dice, shows first die result
+                    roll: rawDamageRoll,
                     title: `Damage Roll`,
                     resultHTML: damageResultHTML,
                     continueDelay: 3000,
+                    continueCallback: finalCallback,
                 });
+            } else {
+                finalCallback();
             }
         }
     });
@@ -1261,28 +1274,18 @@ socket.on('monsterAttackAnimation', (data) => {
 });
 
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
-    const resultHTML = `<p class="result-line">You rolled a ${roll}!</p>`;
+    const resultHTML = `<p class="result-line">You rolled a ${roll}!</p><p>${outcome === 'none' ? 'Nothing happened.' : 'An event occurred!'}</p>`;
     showDiceRoll({
         dieType: 'd20',
         roll: roll,
         title: "Event Roll",
         resultHTML,
         continueCallback: () => {
-            addToModalQueue(() => {
-                eventOverlay.classList.remove('hidden');
-                eventTitle.textContent = `You rolled a ${roll}!`;
-                
-                if (outcome === 'none' || outcome === 'equipmentDraw' || outcome === 'partyEvent') {
-                    eventPrompt.textContent = (outcome === 'none') ? 'Nothing happens this time.' : 'The event resolves...';
-                    eventCardSelection.classList.add('hidden');
-                    eventRollBtn.classList.remove('hidden');
-                    eventRollBtn.textContent = "Okay";
-                    eventRollBtn.onclick = () => {
-                        eventOverlay.classList.add('hidden');
-                        finishModal();
-                    };
-                } else if (outcome === 'playerEvent') {
-                    eventPrompt.textContent = 'A player event occurs! Choose one:';
+            if (outcome === 'playerEvent') {
+                 addToModalQueue(() => {
+                    eventOverlay.classList.remove('hidden');
+                    eventTitle.textContent = 'A player event occurs!';
+                    eventPrompt.textContent = 'Choose one:';
                     eventCardSelection.classList.remove('hidden');
                     eventRollBtn.classList.add('hidden');
                     eventCardSelection.innerHTML = '';
@@ -1295,8 +1298,8 @@ socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
                         };
                         eventCardSelection.appendChild(cardEl);
                     });
-                }
-            }, `event-result-${roll}`);
+                }, `event-result-${roll}`);
+            }
         }
     });
 });
@@ -1315,6 +1318,7 @@ socket.on('skillChallengeRollResult', ({ d20Roll, bonus, itemBonus, totalRoll, d
 });
 
 socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
+    worldEventSaveModal.classList.add('hidden');
     const resultHTML = `
         ${success ? `<p class="result-line hit">Success!</p>` : `<p class="result-line miss">Failure!</p>`}
         <p class="roll-details">Roll: ${d20Roll} + ${bonus} = <strong>${totalRoll}</strong> vs DC ${dc}</p>
@@ -1325,7 +1329,6 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
         title: 'World Event Save',
         resultHTML,
     });
-    worldEventSaveModal.classList.add('hidden');
     finishModal();
 });
 

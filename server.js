@@ -634,27 +634,31 @@ class GameManager {
                             message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Guard, gaining ${guardBonus} Shield HP.` 
                         });
                         break;
-                    case 'briefRespite':
+                    case 'briefRespite': {
                         currentPlayerState.healthDice.current -= 1;
                         const healAmount = this.rollDice('1d8');
                         currentPlayerState.stats.currentHp = Math.min(currentPlayerState.stats.maxHp, currentPlayerState.stats.currentHp + healAmount);
-                        this.sendMessageToRoom(room.id, { 
-                            channel: 'game', 
-                            type: 'system', 
-                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP for a Brief Respite, healing for ${healAmount} HP.` 
+                        const message = `<b>${player.name}</b> used ${bestAction.apCost} AP for a Brief Respite, healing for ${healAmount} HP.`;
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message });
+                        io.to(room.id).emit('simpleRollAnimation', {
+                            dieType: 'd8', roll: healAmount, title: `${player.name}'s Respite`,
+                            resultHTML: `<p class="result-line hit">+${healAmount} HP</p>`
                         });
                         break;
-                    case 'fullRest':
+                    }
+                    case 'fullRest': {
                         currentPlayerState.healthDice.current -= 2;
                         const totalHeal = this.rollDice('2d8');
                         currentPlayerState.stats.currentHp = Math.min(currentPlayerState.stats.maxHp, currentPlayerState.stats.currentHp + totalHeal);
-                        this.sendMessageToRoom(room.id, { 
-                            channel: 'game', 
-                            type: 'system', 
-                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP for a Full Rest, healing for ${totalHeal} HP.` 
+                        const message = `<b>${player.name}</b> used ${bestAction.apCost} AP for a Full Rest, healing for ${totalHeal} HP.`;
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message });
+                        io.to(room.id).emit('simpleRollAnimation', {
+                            dieType: 'd8', roll: totalHeal, title: `${player.name}'s Rest`,
+                            resultHTML: `<p class="result-line hit">+${totalHeal} HP</p>`
                         });
                         break;
-                    case 'useCard':
+                    }
+                    case 'useCard': {
                         const cardIndex = currentPlayerState.hand.findIndex(c => c.id === bestAction.cardId);
                         if (cardIndex > -1) {
                             const card = currentPlayerState.hand.splice(cardIndex, 1)[0];
@@ -667,6 +671,12 @@ class GameManager {
                                     const healAmountCard = this.rollDice(effect.dice);
                                     healTarget.stats.currentHp = Math.min(healTarget.stats.maxHp, healTarget.stats.currentHp + healAmountCard);
                                     message += ` on ${healTarget.name}, healing for ${healAmountCard} HP.`;
+                                    
+                                    const dieType = `d${effect.dice.split('d')[1]}`;
+                                    io.to(room.id).emit('simpleRollAnimation', {
+                                        dieType: dieType, roll: healAmountCard, title: `${card.name}`,
+                                        resultHTML: `<p class="result-line hit">+${healAmountCard} HP to ${healTarget.name}</p>`
+                                    });
                                 }
                             } else if (effect.type === 'utility') {
                                 const statusToApply = effect.statusToApply || { name: effect.status, type: effect.statusType || 'utility_debuff', duration: effect.duration };
@@ -698,6 +708,7 @@ class GameManager {
                             });
                         }
                         break;
+                    }
                 }
                 
                 currentPlayerState.stats = this.calculatePlayerStats(currentPlayerState);
