@@ -1101,79 +1101,117 @@ socket.on('simpleRollAnimation', (data) => {
 });
 
 socket.on('attackAnimation', (data) => {
-    isPerformingAction = true;
     const { attackerId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, damageBonus, totalDamage } = data;
     const isMyAttack = attackerId === myId;
     
-    const finalCallback = () => {
-        isPerformingAction = false;
-        processModalQueue(); // Resume modal queue after action completes
-        if (currentRoomState.id) {
-            renderGameState(currentRoomState);
-        }
-    };
-
+    // --- Create result HTMLs ---
     const toHitResultHTML = `
         ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
         <p class="roll-details">Roll: ${d20Roll} + ${damageBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
     `;
+    const damageResultHTML = damageDice === 'unarmed'
+            ? `<p class="result-line">DAMAGE!</p><p class="roll-details">Dealt <strong>${totalDamage}</strong> damage.</p>`
+            : `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>`;
+
+    const attacker = currentRoomState.players[attackerId];
+    const toHitTitle = isMyAttack ? 'You Attack!' : `${attacker?.name || 'Ally'} Attacks!`;
+    const damageTitle = 'Damage Roll';
     
     const targetEl = document.querySelector(`.card[data-monster-id="${targetId}"]`);
     playEffectAnimation(targetEl, hit ? 'hit' : 'miss');
-    const attacker = currentRoomState.players[attackerId];
-    const title = isMyAttack ? 'You Attack!' : `${attacker?.name || 'Ally'} Attacks!`;
+
+    // --- Define the sequence ---
+    const finalCallback = () => {
+        diceRollOverlay.classList.add('hidden');
+        isPerformingAction = false;
+        finishModal(); // This correctly sets isModalActive=false and processes any pending modals.
+    };
     
-    const toHitData = {
-        title: title,
-        resultHTML: toHitResultHTML
-    };
+    const showRoll = (rollOptions) => {
+        const { dieType, roll, title, resultHTML, onContinue } = rollOptions;
 
-    const damageData = {
-        title: 'Damage Roll',
-        resultHTML: damageDice === 'unarmed'
-            ? `<p class="result-line">DAMAGE!</p><p class="roll-details">Dealt <strong>${totalDamage}</strong> damage.</p>`
-            : `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>`
-    };
+        diceRollTitle.textContent = title;
+        diceRollResult.classList.add('hidden');
+        diceRollContinueBtn.classList.add('hidden');
+        diceAnimationContainer.style.height = '200px';
+        diceSpinner.classList.remove('hidden');
+        
+        const spinnerValue = diceSpinner.querySelector('.spinner-value');
+        const max = parseInt(dieType.slice(1), 10);
+        let counter = 0;
+        const interval = setInterval(() => {
+            spinnerValue.textContent = Math.floor(Math.random() * max) + 1;
+            counter += 50;
+            if (counter >= 1500) {
+                clearInterval(interval);
+                spinnerValue.textContent = roll;
+                setTimeout(() => {
+                    diceSpinner.classList.add('hidden');
+                    diceAnimationContainer.style.height = '0px';
 
-    if (isMyAttack) {
-        showDiceRoll({
-            dieType: 'd20', roll: d20Roll, ...toHitData,
-            continueCallback: () => {
-                if (hit) {
-                    showDiceRoll({ dieType: `d${damageDice.split('d')[1] || 6}`, roll: rawDamageRoll, ...damageData, continueCallback: finalCallback });
-                } else {
-                    finalCallback();
-                }
+                    diceRollResult.innerHTML = resultHTML;
+                    diceRollResult.classList.remove('hidden');
+                    diceRollContinueBtn.classList.remove('hidden');
+                    diceRollContinueBtn.onclick = onContinue;
+                }, 500);
             }
-        });
+        }, 50);
+    };
+
+    const damageStep = () => showRoll({
+        dieType: `d${(damageDice || 'd6').split('d')[1] || 6}`,
+        roll: rawDamageRoll,
+        title: damageTitle,
+        resultHTML: damageResultHTML,
+        onContinue: finalCallback,
+    });
+    
+    const toHitStep = () => showRoll({
+        dieType: 'd20',
+        roll: d20Roll,
+        title: toHitTitle,
+        resultHTML: toHitResultHTML,
+        onContinue: hit ? damageStep : finalCallback,
+    });
+
+    // --- Execute sequence ---
+    if (isMyAttack) {
+        isPerformingAction = true;
+        isModalActive = true; // Manually claim the modal state
+        diceRollOverlay.classList.remove('hidden');
+        toHitStep();
     } else {
-        showNonBlockingRollToast(toHitData);
-        if(hit) {
-            setTimeout(() => showNonBlockingRollToast(damageData), 1000); // Show damage toast after a delay
+        // Non-attacker just sees toasts. This is non-blocking.
+        showNonBlockingRollToast({ title: toHitTitle, resultHTML: toHitResultHTML });
+        if (hit) {
+            setTimeout(() => showNonBlockingRollToast({ title: damageTitle, resultHTML: damageResultHTML }), 1000);
         }
-        finalCallback(); // For non-player attacks, just end the action state immediately after showing toasts
     }
 });
 
 socket.on('monsterAttackAnimation', (data) => {
-    const { targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, attackBonus, totalDamage } = data;
+    const { monsterId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, attackBonus, totalDamage } = data;
 
     const targetPlayerEl = get(`player-${targetId}`);
     playEffectAnimation(targetPlayerEl, hit ? 'hit' : 'miss');
+    
+    const monster = currentRoomState.gameState.board.monsters.find(m => m.id === monsterId);
+    const monsterName = monster?.name || 'Monster';
 
     const toHitResultHTML = `
         ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
         <p class="roll-details">Roll: ${d20Roll} + ${attackBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
     `;
-    const toHitData = { title: 'Monster Attacks!', resultHTML: toHitResultHTML };
-    showNonBlockingRollToast(toHitData);
+    showNonBlockingRollToast({ title: `${monsterName} Attacks!`, resultHTML: toHitResultHTML });
     
     if (hit) {
         const damageResultHTML = `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) = <strong>${totalDamage}</strong></p>`;
-        const damageData = { title: 'Damage Roll', resultHTML: damageResultHTML };
-        setTimeout(() => showNonBlockingRollToast(damageData), 1000);
+        setTimeout(() => {
+            showNonBlockingRollToast({ title: 'Damage Roll', resultHTML: damageResultHTML });
+        }, 1000);
     }
 });
+
 
 socket.on('eventRollResult', ({ roll, outcome }) => {
     const resultHTML = `<p class="result-line">You rolled a ${roll}!</p><p>${outcome.type === 'none' ? 'Nothing happened.' : 'An event occurred!'}</p>`;
