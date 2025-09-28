@@ -783,7 +783,7 @@ function renderGameState(room) {
             if (!isMyTurn) return;
 
             if (!selectedWeaponId) {
-                logMessage("Select your equipped weapon before choosing a target.", { channel: 'game' });
+                showToast("Select your equipped weapon before choosing a target.");
                 const equippedContainer = get('equipped-items-container');
                 equippedContainer.classList.add('pulse-highlight');
                 setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
@@ -860,7 +860,7 @@ joinRoomBtn.addEventListener('click', () => {
     if (weapon && weapon.id === selectedWeaponId) {
         const apCost = weapon.apCost || 1;
         if (myPlayerInfo.currentAp < apCost) {
-            logMessage('Not enough Action Points to attack.', { channel: 'game' });
+            showToast('Not enough Action Points to attack.');
             return;
         }
         openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);

@@ -225,13 +225,8 @@ class GameManager {
                 npc.role = 'Explorer';
                 
                 const randomClassId = classKeys[Math.floor(Math.random() * classKeys.length)];
-                npc.class = randomClassId;
-                const classStats = gameData.classes[randomClassId];
-                npc.stats = this.calculatePlayerStats(npc);
-                npc.stats.currentHp = npc.stats.maxHp;
-                npc.healthDice.max = classStats.healthDice;
-                npc.healthDice.current = classStats.healthDice;
-
+                this.assignClassToPlayer(room.id, npc, randomClassId);
+                
                 this.dealCard(room.id, npc.id, 'weapon', 1);
                 this.dealCard(room.id, npc.id, 'armor', 1);
                 this.dealCard(room.id, npc.id, 'item', 2);
@@ -275,16 +270,9 @@ class GameManager {
         io.to(room.id).emit('gameStarted', room);
     }
     
-    chooseClass(socket, { classId }) {
-        const room = this.findRoomBySocket(socket);
-        const player = room?.players[socket.id];
-        if (!player || player.class || player.role !== 'Explorer') return;
-
+    assignClassToPlayer(roomId, player, classId) {
         const classStats = gameData.classes[classId];
-        if (!classStats) {
-            socket.emit('actionError', 'Invalid class selected.');
-            return;
-        }
+        if (!classStats || !player) return;
 
         player.class = classId;
         player.stats = this.calculatePlayerStats(player);
@@ -292,6 +280,14 @@ class GameManager {
         
         player.healthDice.max = classStats.healthDice;
         player.healthDice.current = classStats.healthDice;
+    }
+
+    chooseClass(socket, { classId }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || player.class || player.role !== 'Explorer') return;
+
+        this.assignClassToPlayer(room.id, player, classId);
         
         if (room.gameState.gameMode === 'Beginner') {
             this.dealCard(room.id, player.id, 'weapon', 1);
@@ -365,15 +361,44 @@ class GameManager {
         }
     }
     
-    dealCard(roomId, playerId, deck, count) {
+    dealCard(roomId, playerId, deckName, count) {
         const room = this.rooms[roomId];
         const player = room?.players[playerId];
         if (!room || !player) return;
 
-        for (let i = 0; i < count; i++) {
-            const card = room.gameState.decks[deck].pop();
-            if (card) {
-                player.hand.push(card);
+        if ((deckName === 'weapon' || deckName === 'armor') && player.class) {
+            const mainDeck = room.gameState.decks[deckName];
+            
+            const availableCards = mainDeck.filter(card => 
+                !card.class || card.class.includes("Any") || card.class.includes(player.class)
+            );
+
+            for (let i = 0; i < count; i++) {
+                if (availableCards.length === 0) {
+                    console.log(`No more suitable ${deckName} cards for ${player.class}`);
+                    break;
+                }
+
+                const cardToDealIndex = Math.floor(Math.random() * availableCards.length);
+                const cardToDeal = availableCards.splice(cardToDealIndex, 1)[0];
+                
+                player.hand.push(cardToDeal);
+
+                const mainDeckIndex = mainDeck.findIndex(c => c.id === cardToDeal.id);
+                if (mainDeckIndex > -1) {
+                    mainDeck.splice(mainDeckIndex, 1);
+                }
+            }
+        } else {
+            // Default behavior for items, spells, or players without a class yet
+            for (let i = 0; i < count; i++) {
+                const card = room.gameState.decks[deckName].pop();
+                if (card) {
+                    player.hand.push(card);
+                } else {
+                    console.log(`Deck ${deckName} is empty.`);
+                    break;
+                }
             }
         }
     }

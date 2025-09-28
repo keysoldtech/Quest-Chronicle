@@ -306,7 +306,7 @@ const itemCards = [
     { id: nextId(), name: "Lockpicks & Shims", type: "Utility", class: "Any", category: "Utility", apCost: 0, effect: { type: "utility", description: "Provides advantage on Skill Challenges related to picking locks or disarming simple traps." } },
     { id: nextId(), name: "Spark & Steel", type: "Utility", class: "Any", category: "Utility", apCost: 0, effect: { type: "utility", description: "Allows the user to light fires or other flammable objects quickly. Can be used in Skill Challenges related to survival or setting fires." } },
     { id: nextId(), name: "Spark & Steel", type: "Utility", class: "Any", category: "Utility", apCost: 0, effect: { type: "utility", description: "Allows the user to light fires or other flammable objects quickly. Can be used in Skill Challenges related to survival or setting fires." } },
-    { id: nextId(), name: "Spark & Steel", type: "Utility", class: "Any", category: "Utility", apCost: 0, effect: { type: "utility", description: "Allows the user to light fires or other flammable objects quickly. Can be used in Skill Challenges related to survival or setting fires." } },
+    { id: nextId(), name: "Spark & Steel", type: "Utility", class: "Any", category: "Utility", apCost: 0, effect: { type: "utility", description: "Allows the user to light fires or other flammable. Can be used in Skill Challenges related to survival or setting fires." } },
     { id: nextId(), name: "Sturdy Cord (50 ft)", type: "Utility", class: "Any", category: "Utility", apCost: 0, effect: { type: "utility", description: "Can be used for climbing, tying, or other tasks requiring rope. Useful in Skill Challenges (Strength or Dexterity based)." } },
     { id: nextId(), name: "Sturdy Cord (50 ft)", type: "Utility", class: "Any", category: "Utility", apCost: 0, effect: { type: "utility", description: "Can be used for climbing, tying, or other tasks requiring rope. Useful in Skill Challenges (Strength or Dexterity based)." } },
     { id: nextId(), name: "Sturdy Cord (50 ft)", type: "Utility", class: "Any", category: "Utility", apCost: 0, effect: { type: "utility", description: "Can be used for climbing, tying, or other tasks requiring rope. Useful in Skill Challenges (Strength or Dexterity based)." } },
@@ -418,23 +418,23 @@ const monsterCards = [
 ];
 
 const weaponCards = [
-    { id: nextId(), name: "Shortsword", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "1d6" } },
-    { id: nextId(), name: "Dagger", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "1d4" } },
-    { id: nextId(), name: "Greatsword", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "2d6" } },
-    { id: nextId(), name: "Handaxe", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "1d6" } },
-    { id: nextId(), name: "Longbow", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "1d8" } },
-    { id: nextId(), name: "Warhammer", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "1d8" } },
-    { id: nextId(), name: "Staff of the Magi", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "1d6", bonuses: { damageBonus: 2, shieldBonus: 1 } } },
-    { id: nextId(), name: "Sun Blade", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "1d8", bonuses: { damageBonus: 2 } } },
-    { id: nextId(), name: "Vorpal Sword", type: "Weapon", apCost: 2, effect: { type: "damage", dice: "1d10", bonuses: { damageBonus: 3 } } },
+    { id: nextId(), name: "Shortsword", type: "Weapon", class: ["Rogue", "Warrior", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d6" } },
+    { id: nextId(), name: "Dagger", type: "Weapon", class: ["Rogue", "Mage", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d4" } },
+    { id: nextId(), name: "Greatsword", type: "Weapon", class: ["Warrior", "Barbarian"], apCost: 2, effect: { type: "damage", dice: "2d6" } },
+    { id: nextId(), name: "Handaxe", type: "Weapon", class: ["Barbarian", "Warrior", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d6" } },
+    { id: nextId(), name: "Longbow", type: "Weapon", class: ["Ranger"], apCost: 2, effect: { type: "damage", dice: "1d8" } },
+    { id: nextId(), name: "Warhammer", type: "Weapon", class: ["Warrior", "Cleric", "Barbarian"], apCost: 2, effect: { type: "damage", dice: "1d8" } },
+    { id: nextId(), name: "Staff of the Magi", type: "Weapon", class: ["Mage", "Cleric"], apCost: 2, effect: { type: "damage", dice: "1d6", bonuses: { damageBonus: 2, shieldBonus: 1 } } },
+    { id: nextId(), name: "Sun Blade", type: "Weapon", class: ["Cleric", "Warrior", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d8", bonuses: { damageBonus: 2 } } },
+    { id: nextId(), name: "Vorpal Sword", type: "Weapon", class: ["Warrior", "Barbarian", "Rogue"], apCost: 2, effect: { type: "damage", dice: "1d10", bonuses: { damageBonus: 3 } } },
 ];
 
 const armorCards = [
-    { id: nextId(), name: "Leather Armor", type: "Armor", effect: { bonuses: { shieldBonus: 1 } } },
-    { id: nextId(), name: "Chain Mail", type: "Armor", effect: { bonuses: { shieldBonus: 3 } } },
-    { id: nextId(), name: "Plate Armor", type: "Armor", effect: { bonuses: { shieldBonus: 5 } } },
-    { id: nextId(), name: "Shield of Faith", type: "Armor", effect: { bonuses: { shieldBonus: 2, hp: 5 } } },
-    { id: nextId(), name: "Dragon Scale Mail", type: "Armor", effect: { bonuses: { shieldBonus: 4, damageBonus: 1 } } },
+    { id: nextId(), name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 1 } } },
+    { id: nextId(), name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric"], effect: { bonuses: { shieldBonus: 3 } } },
+    { id: nextId(), name: "Plate Armor", type: "Armor", class: ["Warrior", "Cleric"], effect: { bonuses: { shieldBonus: 5 } } },
+    { id: nextId(), name: "Shield of Faith", type: "Armor", class: ["Cleric"], effect: { bonuses: { shieldBonus: 2, hp: 5 } } },
+    { id: nextId(), name: "Dragon Scale Mail", type: "Armor", class: ["Warrior", "Ranger"], effect: { bonuses: { shieldBonus: 4, damageBonus: 1 } } },
 ];
 
 const worldEventCards = [

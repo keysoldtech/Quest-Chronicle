@@ -594,6 +594,25 @@ textarea.input-field { resize: vertical; }
     opacity: 1;
 }
 
+/* --- DICE ROLL ANIMATION --- */
+.dice-roll-content {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+}
+.dice-roll-result-container {
+    margin-top: 1.5rem;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+.result-line.hit { color: var(--color-success); }
+.result-line.miss { color: var(--color-danger); }
+.damage-breakdown { color: var(--color-text-secondary); font-size: 1rem; margin-top: 0.5rem; }
+
+
 /* CHAT */
 .chat-log {
     height: 100%;
