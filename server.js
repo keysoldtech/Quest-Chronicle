@@ -711,14 +711,21 @@ class GameManager {
     _resolveMonsterAttack(room, monster, target) {
         const requiredRollToHit = 10 + target.stats.shieldBonus;
         const d20Roll = Math.floor(Math.random() * 20) + 1;
+
+        const isCrit = d20Roll === 20;
+        const isFumble = d20Roll === 1;
+
         const totalRollToHit = d20Roll + monster.attackBonus;
-        const hit = totalRollToHit >= requiredRollToHit;
+        const hit = isCrit || (!isFumble && totalRollToHit >= requiredRollToHit);
         
         let totalDamage = 0;
         let rawDamageRoll = 0;
 
         if (hit) {
             rawDamageRoll = this.rollDice(monster.effect.dice);
+            if (isCrit) {
+                rawDamageRoll += this.rollDice(monster.effect.dice); // Double dice on crit
+            }
             totalDamage = rawDamageRoll; 
             
             let damageToShield = 0;
@@ -738,11 +745,13 @@ class GameManager {
             attackerName: monster.name,
             targetName: target.name,
             d20Roll,
+            isCrit,
+            isFumble,
             totalRollToHit,
             requiredRoll: requiredRollToHit,
             hit,
             rawDamageRoll,
-            damageBonus: 0,
+            attackBonus: monster.attackBonus,
             totalDamage,
         });
 
@@ -937,7 +946,7 @@ class GameManager {
         }
         player.currentAp -= apCost;
 
-        // Resolve attack automatically by rolling a d20
+        // Resolve attack by rolling a d20
         const d20Roll = Math.floor(Math.random() * 20) + 1;
         this._resolveAttack(room, {
             attackerId: player.id,
@@ -963,13 +972,23 @@ class GameManager {
             message: attackData.narrative, isNarrative: true
         });
 
+        const isCrit = d20Roll === 20;
+        const isFumble = d20Roll === 1;
+
         const totalRollToHit = d20Roll + player.stats.damageBonus;
-        const hit = totalRollToHit >= target.requiredRollToHit;
+        const hit = isCrit || (!isFumble && totalRollToHit >= target.requiredRollToHit);
+        
         let totalDamage = 0;
         let rawDamageRoll = 0;
 
         if (hit) {
             rawDamageRoll = this.rollDice(weapon.effect.dice);
+            if (isCrit) {
+                rawDamageRoll += this.rollDice(weapon.effect.dice); // Double dice for base crit
+                if (weapon.effect.critBonusDice) {
+                    rawDamageRoll += this.rollDice(weapon.effect.critBonusDice); // Add special weapon crit damage
+                }
+            }
             totalDamage = rawDamageRoll + player.stats.damageBonus;
             target.currentHp -= totalDamage;
         }
@@ -977,6 +996,8 @@ class GameManager {
         io.to(room.id).emit('attackAnimation', {
             attackerName: player.name,
             d20Roll,
+            isCrit,
+            isFumble,
             totalRollToHit,
             requiredRoll: target.requiredRollToHit,
             hit,

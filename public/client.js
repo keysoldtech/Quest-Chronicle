@@ -1078,10 +1078,19 @@ socket.on('attackAnimation', (data) => {
 
         const renderResult = () => {
             attackDice.classList.remove('is-rolling');
-            let resultHTML = data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
-            resultHTML += `<p>Rolled ${data.totalRollToHit} vs DC ${data.requiredRoll}</p>`;
+            let resultHTML = '';
+            if (data.isCrit) {
+                resultHTML += `<p class="result-line hit">CRITICAL HIT!</p>`;
+            } else if (data.isFumble) {
+                resultHTML += `<p class="result-line miss">CRITICAL MISS!</p>`;
+            } else {
+                resultHTML += data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
+            }
+            
+            resultHTML += `<p class="roll-details">Roll: ${data.d20Roll} + ${data.damageBonus} (Bonus) = <strong>${data.totalRollToHit}</strong> vs DC ${data.requiredRoll}</p>`;
+
             if (data.hit) {
-                resultHTML += `<p class="damage-breakdown">Damage: ${data.rawDamageRoll}(d) + ${data.damageBonus}(b) = ${data.totalDamage}</p>`;
+                resultHTML += `<p class="roll-details">Damage: ${data.rawDamageRoll}(dice) + ${data.damageBonus}(bonus) = <strong>${data.totalDamage}</strong></p>`;
             }
             diceRollResult.innerHTML = resultHTML;
             diceRollResult.classList.remove('hidden');
@@ -1137,10 +1146,19 @@ socket.on('monsterAttackAnimation', (data) => {
 
         const renderResult = () => {
             attackDice.classList.remove('is-rolling');
-            let resultHTML = data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
-            resultHTML += `<p>Rolled ${data.totalRollToHit} vs DC ${data.requiredRoll}</p>`;
+            let resultHTML = '';
+            if (data.isCrit) {
+                resultHTML += `<p class="result-line hit">CRITICAL HIT!</p>`;
+            } else if (data.isFumble) {
+                resultHTML += `<p class="result-line miss">CRITICAL MISS!</p>`;
+            } else {
+                resultHTML += data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
+            }
+
+            resultHTML += `<p class="roll-details">Roll: ${data.d20Roll} + ${data.attackBonus} (Bonus) = <strong>${data.totalRollToHit}</strong> vs DC ${data.requiredRoll}</p>`;
+            
             if (data.hit) {
-                resultHTML += `<p class="damage-breakdown">Damage: ${data.rawDamageRoll}(d) = ${data.totalDamage}</p>`;
+                resultHTML += `<p class="roll-details">Damage: ${data.rawDamageRoll}(dice) = <strong>${data.totalDamage}</strong></p>`;
             }
             diceRollResult.innerHTML = resultHTML;
             diceRollResult.classList.remove('hidden');

@@ -420,13 +420,14 @@ const monsterCards = [
 const weaponCards = [
     { id: nextId(), name: "Shortsword", type: "Weapon", class: ["Rogue", "Warrior", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d6" } },
     { id: nextId(), name: "Dagger", type: "Weapon", class: ["Rogue", "Mage", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d4" } },
+    { id: nextId(), name: "Vicious Dagger", type: "Weapon", class: ["Rogue", "Mage", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d4", critBonusDice: "2d4", description: "On a critical hit, this weapon deals an extra 2d4 damage." } },
     { id: nextId(), name: "Greatsword", type: "Weapon", class: ["Warrior", "Barbarian"], apCost: 2, effect: { type: "damage", dice: "2d6" } },
     { id: nextId(), name: "Handaxe", type: "Weapon", class: ["Barbarian", "Warrior", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d6" } },
     { id: nextId(), name: "Longbow", type: "Weapon", class: ["Ranger"], apCost: 2, effect: { type: "damage", dice: "1d8" } },
     { id: nextId(), name: "Warhammer", type: "Weapon", class: ["Warrior", "Cleric", "Barbarian"], apCost: 2, effect: { type: "damage", dice: "1d8" } },
     { id: nextId(), name: "Staff of the Magi", type: "Weapon", class: ["Mage", "Cleric"], apCost: 2, effect: { type: "damage", dice: "1d6", bonuses: { damageBonus: 2, shieldBonus: 1 } } },
     { id: nextId(), name: "Sun Blade", type: "Weapon", class: ["Cleric", "Warrior", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d8", bonuses: { damageBonus: 2 } } },
-    { id: nextId(), name: "Vorpal Sword", type: "Weapon", class: ["Warrior", "Barbarian", "Rogue"], apCost: 2, effect: { type: "damage", dice: "1d10", bonuses: { damageBonus: 3 } } },
+    { id: nextId(), name: "Vorpal Sword", type: "Weapon", class: ["Warrior", "Barbarian", "Rogue"], apCost: 2, effect: { type: "damage", dice: "1d10", bonuses: { damageBonus: 3 }, critBonusDice: "2d10", description: "A legendary blade that feels unnaturally sharp. On a critical hit, this weapon deals an extra 2d10 damage." } },
 ];
 
 const armorCards = [

@@ -607,10 +607,27 @@ textarea.input-field { resize: vertical; }
     margin-top: 1.5rem;
     font-size: 1.2rem;
     font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 .result-line.hit { color: var(--color-success); }
 .result-line.miss { color: var(--color-danger); }
-.damage-breakdown { color: var(--color-text-secondary); font-size: 1rem; margin-top: 0.5rem; }
+.roll-details {
+    color: var(--color-text-secondary);
+    font-size: 1rem;
+    margin-top: 0.25rem;
+    background: var(--color-surface-light);
+    padding: 0.5rem;
+    border-radius: 4px;
+    border-left: 3px solid var(--color-border);
+    font-weight: normal;
+    text-align: left;
+}
+.roll-details strong {
+    color: var(--color-text-primary);
+    font-weight: bold;
+}
 
 
 /* CHAT */
@@ -633,144 +650,4 @@ textarea.input-field { resize: vertical; }
 .chat-message .channel { margin-right: 0.5rem; font-weight: bold; }
 .chat-message .channel.party { color: var(--color-success); }
 .chat-message .channel.game { color: var(--color-text-secondary); }
-.chat-message .sender { font-weight: bold; }
-.chat-message .sender.self { color: var(--color-primary); }
-
-/* --- DESKTOP SPECIFIC STYLES (min-width: 1024px) --- */
-@media (min-width: 1024px) {
-    .game-area-mobile { display: none; }
-    .game-area-desktop {
-        display: grid;
-        grid-template-columns: 280px 1fr 320px;
-        grid-template-rows: auto 1fr 280px;
-        grid-template-areas:
-            "header header header"
-            "players board info"
-            "character hand hand";
-        height: 100vh;
-        gap: 0.75rem;
-        padding: 0.75rem;
-    }
-
-    .game-header  { grid-area: header; }
-    .players-panel { grid-area: players; }
-    .board-panel  { grid-area: board; }
-    .info-tabs-panel { grid-area: info; }
-    .character-panel { grid-area: character; }
-    .hand-panel   { grid-area: hand; }
-
-    .panel {
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-    }
-    .panel-content {
-        flex-grow: 1;
-        overflow-y: auto;
-    }
-
-    /* Header */
-    .game-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background-color: var(--color-surface);
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-    }
-    .header-info, .header-controls { display: flex; align-items: center; gap: 1rem; }
-    .room-code-display { text-align: right; }
-    .room-code-display p:first-child { font-size: 0.8rem; color: var(--color-text-secondary); }
-    #room-code { font-weight: bold; font-size: 1.2rem; letter-spacing: 2px; }
-
-    /* Hand & Equipment */
-    .hand-panel { padding-bottom: 50px; /* Space for action bar */ }
-    .hand-and-equipped-container { display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; }
-    .equipped-items-container { padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-border); margin-bottom: 0.5rem; }
-    #equipped-items { justify-content: center; }
-    .player-hand-container { flex-grow: 1; overflow-y: hidden; }
-
-    /* Info Tabs */
-    .info-tabs-panel { padding: 0; }
-    .tab-buttons {
-        display: flex;
-        border-bottom: 1px solid var(--color-border);
-    }
-    .tab-btn {
-        flex: 1;
-        padding: 0.75rem;
-        background: none;
-        border: none;
-        color: var(--color-text-secondary);
-        font-weight: bold;
-        cursor: pointer;
-        position: relative;
-    }
-    .tab-btn.active { color: var(--color-primary); }
-    .tab-btn.active::after {
-        content: '';
-        position: absolute;
-        bottom: -1px; left: 0; right: 0;
-        height: 2px;
-        background-color: var(--color-primary);
-    }
-    .tab-btn.highlight::before {
-        content: '';
-        position: absolute;
-        top: 8px; right: 12px;
-        width: 8px; height: 8px;
-        background-color: var(--color-special);
-        border-radius: 50%;
-        border: 1px solid var(--color-bg-dark);
-    }
-    .tab-content { display: none; padding: 0.75rem; flex-grow: 1; overflow-y: auto; }
-    .tab-content.active { display: block; }
-    .log-content-area { height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
-
-    /* Fixed Action Bar */
-    .fixed-action-bar {
-        position: fixed;
-        bottom: 0.75rem;
-        left: calc(280px + 0.75rem); /* players panel width + gap */
-        right: 0.75rem;
-        background-color: var(--color-surface);
-        padding: 0.75rem;
-        border-radius: 8px;
-        border: 1px solid var(--color-border);
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.5rem;
-        z-index: 100;
-    }
-
-    /* Chat Overlay */
-    .chat-overlay {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 350px;
-        height: 500px;
-        background-color: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: 8px;
-        box-shadow: var(--shadow-lg);
-        z-index: 1000;
-        display: flex;
-        flex-direction: column;
-    }
-    .chat-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem;
-        border-bottom: 1px solid var(--color-border);
-    }
-    .chat-header .panel-header { border: none; margin: 0; padding: 0; }
-    .chat-close-btn { background: none; border: none; color: var(--color-text-secondary); font-size: 2rem; cursor: pointer; }
-    .chat-form {
-        display: flex;
-        gap: 0.5rem;
-        padding: 0.75rem;
-        border-top: 1px solid var(--color-border);
-    }
-}
+.chat-message .sender { font-weight: bold;
