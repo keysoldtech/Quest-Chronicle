@@ -29,7 +29,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">Prototype 4.5.26 - The New War (Clarity)</p>
+        <p class="subtitle-font">Prototype 4.5.28 - The New War (Clarity)</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -99,7 +99,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.5.26 - The New War (Clarity)</p>
+                     <p class="build-number-font">v4.5.28 - The New War (Clarity)</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -148,6 +148,7 @@
                 <div id="player-stats-container" class="panel-content hidden">
                      <h2 id="player-class-name" class="panel-header player-class-header hidden">Your Class</h2>
                      <div id="player-stats" class="player-stats"></div>
+                     <div id="class-ability-card" class="class-ability-card hidden"></div>
                 </div>
             </aside>
 
@@ -251,6 +252,7 @@
                     <div id="mobile-player-stats" class="panel mobile-panel">
                          <h2 id="mobile-player-class-name" class="panel-header player-class-header hidden">Your Class</h2>
                          <div id="mobile-stats-display" class="player-stats"></div>
+                         <div id="mobile-class-ability-card" class="class-ability-card hidden"></div>
                     </div>
                 </div>
 
@@ -296,9 +298,9 @@
 
             <div id="mobile-action-bar" class="mobile-action-bar hidden">
                 <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge</button>
-                <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard</button>
-                <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite</button>
-                <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest</button>
+                <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard (-1 AP)</button>
+                <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite (-1 AP)</button>
+                <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest (-2 AP)</button>
                 <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
             </div>
             

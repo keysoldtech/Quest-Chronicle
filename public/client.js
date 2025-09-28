@@ -35,12 +35,12 @@ const iceServers = {
 
 // Static data for rendering class cards without needing a server round-trip
 const classData = {
-    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, description: "\"Unchecked Assault\" - Discard a spell to deal +6 damage, but lose 2 Shield Points." },
-    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, description: "\"Divine Aid\" - Add 1d4 to an attack roll or saving throw." },
-    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, description: "\"Mystic Recall\" - Draw an additional spell card." },
-    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, description: "\"Focused Shot\" - If range roll is exact, deal double damage." },
-    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, description: "\"Opportunist Strike\" - If first spell is Close range, deal +2 damage." },
-    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, description: "\"Weapon Surge\" - Discard a drawn spell card to add +4 to your damage." },
+    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Unchecked Assault', apCost: 1, description: 'Discard a Spell to add +6 damage to your next successful weapon attack this turn.' } },
+    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Aid', apCost: 1, description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
+    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, ability: { name: 'Mystic Recall', apCost: 1, description: 'Draw one card from the Spell deck.' } },
+    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, ability: { name: 'Hunters Mark', apCost: 1, description: 'Mark a monster. All attacks against it deal +2 damage for one round.' } },
+    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, ability: { name: 'Evasion', apCost: 2, description: 'For one round, all attacks against you have disadvantage (DM rerolls hits).' } },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, ability: { name: 'Weapon Surge', apCost: 1, description: 'Discard a Spell to add +4 damage to your next successful weapon attack this turn.' } },
 };
 
 const statVisuals = {
@@ -99,6 +99,7 @@ const confirmClassBtn = get('confirm-class-btn');
 const playerStatsContainer = get('player-stats-container');
 const playerClassName = get('player-class-name');
 const playerStatsDiv = get('player-stats');
+const classAbilityCard = get('class-ability-card');
 const equippedItemsDiv = get('equipped-items');
 const advancedCardChoiceDiv = get('advanced-card-choice');
 const advancedChoiceButtonsDiv = get('advanced-choice-buttons');
@@ -130,6 +131,7 @@ const mobileConfirmClassBtn = get('mobile-confirm-class-btn');
 const mobilePlayerStats = get('mobile-player-stats');
 const mobilePlayerClassName = get('mobile-player-class-name');
 const mobileStatsDisplay = get('mobile-stats-display');
+const mobileClassAbilityCard = get('mobile-class-ability-card');
 const mobilePlayerEquipment = get('mobile-player-equipment');
 const mobileEquippedItems = get('mobile-equipped-items');
 const mobilePlayerList = get('mobile-player-list');
@@ -485,6 +487,33 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
     }
 }
 
+function renderClassAbilityCard(player, container) {
+    if (!player || !player.class) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    const ability = classData[player.class]?.ability;
+    if (!ability) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    const canUse = player.currentAp >= ability.apCost;
+    container.innerHTML = `
+        <h3 class="sub-header-font">Class Ability</h3>
+        <p class="ability-title">${ability.name} (-${ability.apCost} AP)</p>
+        <p class="ability-desc">${ability.description}</p>
+        <button id="use-ability-btn" class="btn btn-special btn-sm" ${canUse ? '' : 'disabled'}>Use Ability</button>
+    `;
+    container.classList.remove('hidden');
+
+    get('use-ability-btn').onclick = () => {
+        socket.emit('playerAction', { action: 'useClassAbility' });
+    };
+}
+
+
 function renderGameState(room) {
     const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
     currentRoomState = room;
@@ -696,7 +725,7 @@ function renderGameState(room) {
                     card.dataset.classId = classId;
                     card.innerHTML = `
                         <h3 class="class-card-title">${classId}</h3>
-                        <p class="class-card-desc">${data.description}</p>
+                        <p class="class-card-desc">${data.ability.description}</p>
                         <div class="class-card-stats">
                             <span>STR:</span><span>${data.stats.str}</span>
                             <span>DEX:</span><span>${data.stats.dex}</span>
@@ -746,9 +775,13 @@ function renderGameState(room) {
         mobilePlayerClassName.textContent = `The ${className}`;
         playerClassName.classList.remove('hidden');
         mobilePlayerClassName.classList.remove('hidden');
+        renderClassAbilityCard(myPlayerInfo, classAbilityCard);
+        renderClassAbilityCard(myPlayerInfo, mobileClassAbilityCard);
     } else {
         playerClassName.classList.add('hidden');
         mobilePlayerClassName.classList.add('hidden');
+        classAbilityCard.classList.add('hidden');
+        mobileClassAbilityCard.classList.add('hidden');
     }
 
     let statsHTML = '';
@@ -1013,6 +1046,9 @@ narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
 eventRollBtn.onclick = () => {
     socket.emit('rollForEvent');
     eventRollBtn.classList.add('hidden');
+    // Hide the modal and advance the queue so the next modal (dice roll) can appear.
+    eventOverlay.classList.add('hidden');
+    finishModal();
 };
 apModalConfirmBtn.addEventListener('click', () => {
     socket.emit('endTurn');
@@ -1555,8 +1591,8 @@ document.querySelector('.radio-group').addEventListener('change', (e) => {
 const tutorialContent = [
     { title: "Welcome to Quest & Chronicle!", content: "<p>This is a quick guide to get you started. On your turn, you'll gain <strong>Action Points (AP)</strong> based on your class and gear. Use them wisely!</p><p>Your primary goal is to work with your party to defeat monsters and overcome challenges thrown at you by the Dungeon Master.</p>" },
     { title: "Your Turn", content: "<p>At the start of your turn, you'll get to roll a <strong>d20</strong> for a random event. This could lead to finding new items, special player events, or nothing at all.</p><p>After that, you can spend your AP on actions. The main actions are attacking, guarding, or resting to heal.</p>" },
-    { title: "Combat", content: "<p>To attack, first click your <strong>equipped weapon</strong>, then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Hitting is determined by a d20 roll + your Damage Bonus vs. the monster's Armor Class (the shield icon on their card).</p>" },
-    { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, and items. Drag and drop them from your hand to your equipment slots to use them.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
+    { title: "Combat & Abilities", content: "<p>To attack, first click your <strong>equipped weapon</strong>, then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Your <strong>Class Ability</strong> is a powerful, unique skill. Check the Character tab to see its description and cost, and use it to turn the tide of battle!</p>" },
+    { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, and items. Click an equippable item in your hand to equip it.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
 ];
 let currentTutorialPage = 0;
 
@@ -1593,17 +1629,27 @@ get('tutorial-skip-btn').addEventListener('click', closeTutorial);
 
 const helpContentHTML = `
     <h3>Core Mechanics</h3>
-    <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or guarding, cost AP.</p>
+    <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or using abilities, cost AP. Your total AP is determined by your class and equipment.</p>
     <p><strong>Health (HP):</strong> Your life force. If it reaches 0, you fall but can get back up by spending a Life. If you're out of Lives, you're out of the game!</p>
     <p><strong>Dice Rolls:</strong> Most actions are resolved with a d20 roll. To succeed, you usually need to roll a number that meets or exceeds a target's Defense Class (DC) or Armor Class (AC).</p>
-    <h3>Common Actions</h3>
-    <p><strong>Attack:</strong> Select your weapon, then a monster. Costs AP based on the weapon.</p>
-    <p><strong>Guard (-1 AP):</strong> Increase your Shield HP for one round. A great defensive option.</p>
-    <p><strong>Respite (-1 AP):</strong> Spend a Health Die to recover a small amount of HP.</p>
-    <p><strong>Rest (-2 AP):</strong> Spend two Health Dice to recover more HP.</p>
-    <p><strong>Skill Challenge (-1 AP):</strong> When a skill challenge is active, you can contribute by rolling against the DC.</p>
-    <h3>The Game Board</h3>
-    <p>The board shows all active monsters. You can see their current health via the health bar on their hologram, and their key stats (Attack, AC, AP) on their card.</p>
+
+    <h3>Player Stats</h3>
+    <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit.</p>
+    <p><strong>Shield Bonus:</strong> Your Armor Class (AC). Monsters must roll higher than this number to hit you.</p>
+    <p><strong>Health Dice:</strong> A resource used for the Respite and Rest actions to heal outside of combat.</p>
+    <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes, used for Skill Challenges and certain card effects.</p>
+    
+    <h3>Turn Events & Challenges</h3>
+    <p><strong>Turn Event:</strong> At the start of your turn, you roll a d20. On a 11+, something happens! This can be finding an item, a personal story event, or a party-wide event.</p>
+    <p><strong>World Events:</strong> The DM can trigger these powerful, ongoing events that affect the whole party. You may need to make a "saving throw" (a d20 roll) to resist their negative effects.</p>
+    <p><strong>Skill Challenges:</strong> A party-wide objective, like climbing a cliff or disarming a trap. On your turn, you can spend 1 AP to contribute by making a skill check.</p>
+
+    <h3>UI Navigation</h3>
+    <p><strong>Game Tab:</strong> Your main view, showing the monster board, your equipment, and your hand.</p>
+    <p><strong>Character Tab:</strong> Shows your detailed stats and your unique Class Ability.</p>
+    <p><strong>Party Tab:</strong> A list of all players in the game, their current health, and status.</p>
+    <p><strong>Info Tab:</strong> Displays active World Events and any treasure the party has discovered but not yet distributed.</p>
+    <p><strong>Log Tab:</strong> A running log of all game events and player chat.</p>
 `;
 
 get('help-content').innerHTML = helpContentHTML;

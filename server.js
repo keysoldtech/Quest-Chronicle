@@ -525,22 +525,16 @@ class GameManager {
 
     determine_ai_action(player, gameState, allPlayers) {
         const { board, skillChallenge } = gameState;
-        const { currentAp, stats, hand, healthDice, equipment } = player;
+        const { currentAp, stats, hand, healthDice, equipment, class: playerClass } = player;
         const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
         
-        if (skillChallenge.isActive && currentAp >= 1) {
-            const challengeData = gameData.skillChallenges.find(c => c.id === skillChallenge.challengeId);
-            const myStat = stats[challengeData.skill] || 0;
-            if (myStat >= 0) {
-                return { action: 'contributeToSkillChallenge', apCost: 1 };
-            }
-        }
-
+        // --- PRIORITY 1: HEALING ---
         let bestHealTarget = { utility: -1, target: null, card: null };
         hand.forEach(card => {
             const cardApCost = card.apCost || 1;
             if (currentAp >= cardApCost && card.effect && card.effect.type === 'heal') {
                 partyMembers.forEach(ally => {
+                    // Heal allies below 50% health
                     if (ally.stats.currentHp < ally.stats.maxHp * 0.5) {
                         const healthDeficit = 1 - (ally.stats.currentHp / ally.stats.maxHp);
                         if (healthDeficit > bestHealTarget.utility) {
@@ -554,21 +548,12 @@ class GameManager {
             return { action: 'useCard', cardId: bestHealTarget.card.id, targetId: bestHealTarget.target.id, apCost: bestHealTarget.card.apCost || 1 };
         }
 
-        if (board.monsters.length > 0) {
-            for (const card of hand) {
-                const cardApCost = card.apCost || 1;
-                if (currentAp >= cardApCost && card.effect && card.effect.type === 'utility') {
-                    // Simple logic for now: use first available utility card
-                    const target = board.monsters[0];
-                    return { action: 'useCard', cardId: card.id, targetId: target.id, apCost: cardApCost };
-                }
-            }
-        }
-
+        // --- PRIORITY 2: COMBAT (ATTACKING) ---
         const weapon = equipment.weapon;
         if (weapon && board.monsters.length > 0) {
             const apCost = weapon.apCost; 
             if (apCost && currentAp >= apCost) {
+                // Target the monster with the lowest current HP
                 let bestTarget = board.monsters.reduce((prev, curr) => (prev.currentHp < curr.currentHp) ? prev : curr);
                 if (bestTarget) {
                     return { action: 'attack', targetId: bestTarget.id, weaponId: weapon.id, apCost: apCost };
@@ -576,11 +561,41 @@ class GameManager {
             }
         }
         
+        // --- PRIORITY 3: USE CLASS ABILITY ---
+        const classAbility = gameData.classes[playerClass]?.ability;
+        if (classAbility && currentAp >= classAbility.apCost) {
+            if (playerClass === 'Mage') return { action: 'useClassAbility', apCost: classAbility.apCost }; // Always good to draw a spell
+            if (playerClass === 'Cleric' && board.monsters.length > 0) return { action: 'useClassAbility', apCost: classAbility.apCost }; // Buff next attack
+        }
+        
+        // --- PRIORITY 4: USE UTILITY/DAMAGE CARDS ---
+        if (board.monsters.length > 0) {
+            for (const card of hand) {
+                const cardApCost = card.apCost || 1;
+                if (currentAp >= cardApCost && card.effect && (card.effect.type === 'utility' || card.effect.type === 'damage')) {
+                    const target = board.monsters[0]; // Simple logic: use first available utility card on first monster
+                    return { action: 'useCard', cardId: card.id, targetId: target.id, apCost: cardApCost };
+                }
+            }
+        }
+        
+        // --- PRIORITY 5: CONTRIBUTE TO CHALLENGE ---
+        if (skillChallenge.isActive && currentAp >= 1) {
+            const challengeData = gameData.skillChallenges.find(c => c.id === skillChallenge.challengeId);
+            const myStat = stats[challengeData.skill] || 0;
+            // Only contribute if they have a non-negative stat for it
+            if (myStat >= 0) {
+                return { action: 'contributeToSkillChallenge', apCost: 1 };
+            }
+        }
+
+        // --- PRIORITY 6: DEFENSIVE/RECOVERY ---
         const guardApCost = gameData.actionCosts.guard;
         if (currentAp >= guardApCost && stats.currentHp < stats.maxHp * 0.75) {
             return { action: 'guard', apCost: guardApCost };
         }
         
+        // Only rest if there are no monsters
         if (board.monsters.length === 0) {
             const fullRestApCost = gameData.actionCosts.fullRest;
             if (currentAp >= fullRestApCost && healthDice.current >= 2 && stats.currentHp < stats.maxHp) {
@@ -592,6 +607,7 @@ class GameManager {
             }
         }
 
+        // --- LAST RESORT: WAIT ---
         return { action: 'wait', apCost: 0 };
     }
 
@@ -629,6 +645,9 @@ class GameManager {
                 const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
 
                 switch (bestAction.action) {
+                    case 'useClassAbility':
+                        this._resolveUseClassAbility(room, currentPlayerState, null);
+                        break;
                     case 'attack':
                         this.sendMessageToRoom(room.id, {
                             channel: 'game',
@@ -696,10 +715,11 @@ class GameManager {
                                         resultHTML: `<p class="result-line hit">+${healAmountCard} HP to ${healTarget.name}</p>`
                                     });
                                 }
-                            } else if (effect.type === 'utility') {
+                            } else if (effect.type === 'utility' || effect.type === 'damage') {
                                 const monsterTarget = room.gameState.board.monsters.find(m => m.id === bestAction.targetId);
                                 if (monsterTarget) {
                                      message += `, targeting the ${monsterTarget.name}.`;
+                                     // Here you would resolve the damage/utility effect similar to an attack
                                 }
                             }
                             
@@ -750,16 +770,26 @@ class GameManager {
         const success = totalRoll >= challenge.dc;
         let logText = `<b>${player.name}</b> attempts to help... They roll a ${d20Roll} + ${playerStat}(stat) = <b>${totalRoll}</b> vs DC ${challenge.dc}. `;
         
+        let resultHTML;
         if (success) {
             challenge.successes++;
             logText += "<span style='color: var(--color-success)'>Success!</span>";
+            resultHTML = `<p class="result-line hit">SUCCESS!</p>`;
         } else {
             challenge.failures++;
             logText += "<span style='color: var(--color-danger)'>Failure!</span>";
+            resultHTML = `<p class="result-line miss">FAILURE!</p>`;
         }
+        resultHTML += `<p class="roll-details">Roll: ${d20Roll} + ${playerStat}(stat) = <strong>${totalRoll}</strong> vs DC ${challenge.dc}</p>`;
+
         challenge.log.push(logText);
         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logText });
         
+        io.to(room.id).emit('simpleRollAnimation', {
+            dieType: 'd20', roll: d20Roll, title: `${player.name}'s Challenge`,
+            resultHTML: resultHTML
+        });
+
         this._checkSkillChallengeCompletion(room, player);
     }
 
@@ -1133,8 +1163,16 @@ class GameManager {
     
         const isCrit = d20Roll === 20;
         const isFumble = d20Roll === 1;
+        
+        // Handle Divine Aid
+        let divineAidBonus = 0;
+        const divineAidIndex = player.statusEffects.findIndex(e => e.name === 'Divine Aid');
+        if (divineAidIndex > -1) {
+            divineAidBonus = this.rollDice('1d4');
+            player.statusEffects.splice(divineAidIndex, 1);
+        }
     
-        const totalRollToHit = d20Roll + player.stats.damageBonus;
+        const totalRollToHit = d20Roll + player.stats.damageBonus + divineAidBonus;
         const hit = isCrit || (!isFumble && totalRollToHit >= target.requiredRollToHit);
         
         let totalDamage = 0;
@@ -1149,10 +1187,23 @@ class GameManager {
                 }
             }
             totalDamage = rawDamageRoll + player.stats.damageBonus;
+
+            // Handle ability-based damage bonuses
+            const assaultIndex = player.statusEffects.findIndex(e => e.name === 'Unchecked Assault');
+            if (assaultIndex > -1) {
+                totalDamage += 6;
+                player.statusEffects.splice(assaultIndex, 1);
+            }
+            const surgeIndex = player.statusEffects.findIndex(e => e.name === 'Weapon Surge');
+            if (surgeIndex > -1) {
+                totalDamage += 4;
+                player.statusEffects.splice(surgeIndex, 1);
+            }
+
             target.currentHp -= totalDamage;
         }
         
-        let logMessageText = `<b>${player.name}</b> attacks ${target.name}! Roll: ${d20Roll} + ${player.stats.damageBonus} = <b>${totalRollToHit}</b> vs DC ${target.requiredRollToHit}. `;
+        let logMessageText = `<b>${player.name}</b> attacks ${target.name}! Roll: ${d20Roll} ${divineAidBonus > 0 ? `+ ${divineAidBonus}(DA)` : ''} + ${player.stats.damageBonus} = <b>${totalRollToHit}</b> vs DC ${target.requiredRollToHit}. `;
         if (isCrit) logMessageText = `<b>CRITICAL HIT!</b> ` + logMessageText;
         else if (isFumble) logMessageText = `<b>FUMBLE!</b> ` + logMessageText;
         
@@ -1480,6 +1531,45 @@ class GameManager {
         }
     }
 
+    _resolveUseClassAbility(room, player, data) {
+        const ability = gameData.classes[player.class]?.ability;
+        if (!ability) return;
+    
+        let message = `<b>${player.name}</b> uses their <b>${ability.name}</b> ability!`;
+    
+        switch(player.class) {
+            case 'Barbarian':
+            case 'Warrior': {
+                const spellIndex = player.hand.findIndex(c => c.type === 'Spell');
+                if (spellIndex === -1) {
+                    if (!player.isNpc) {
+                         const socket = io.sockets.sockets.get(player.id);
+                         if (socket) socket.emit('actionError', 'You need a Spell card to discard.');
+                    }
+                    player.currentAp += ability.apCost; // Refund AP
+                    return;
+                }
+                const spellCard = player.hand.splice(spellIndex, 1)[0];
+                const effectName = player.class === 'Barbarian' ? 'Unchecked Assault' : 'Weapon Surge';
+                player.statusEffects.push({ name: effectName, type: 'damage_boost', duration: 2 });
+                message += ` They discard ${spellCard.name} to empower their next attack.`;
+                break;
+            }
+            case 'Cleric':
+                player.statusEffects.push({ name: 'Divine Aid', type: 'roll_boost', duration: 2 });
+                message += ` Their next roll will be blessed.`;
+                break;
+            case 'Mage':
+                this.dealCard(room.id, player.id, 'spell', 1);
+                message += ` They draw a new spell from the ether.`;
+                break;
+            // Other classes can be added here
+        }
+    
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message });
+    }
+    
+
     handlePlayerAction(socket, data) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
@@ -1492,6 +1582,16 @@ class GameManager {
         }
 
         switch(data.action) {
+            case 'useClassAbility': {
+                const ability = gameData.classes[player.class]?.ability;
+                if (!ability) return socket.emit('actionError', 'No ability found for your class.');
+                if (player.currentAp < ability.apCost) return socket.emit('actionError', 'Not enough AP.');
+                
+                player.currentAp -= ability.apCost;
+                this._resolveUseClassAbility(room, player, data);
+                this.emitGameState(room.id);
+                break;
+            }
             case 'attack':
                 this.handleAttack(socket, data);
                 break;
