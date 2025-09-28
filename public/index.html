@@ -141,7 +141,8 @@
                     </div>
                 </div>
                 <div id="advanced-card-choice" class="panel-content hidden">
-                    <h2 class="panel-header">Choose Starting Card</h2>
+                    <h2 class="panel-header">Advanced Setup</h2>
+                    <p class="subtitle-font" style="text-align: center;">Choose your starting advantage.</p>
                     <div id="advanced-choice-buttons" class="button-grid"></div>
                 </div>
                 <div id="player-stats-container" class="panel-content hidden">
@@ -247,6 +248,11 @@
                         <div class="class-confirm-container">
                              <button id="mobile-confirm-class-btn" class="btn btn-primary hidden">Confirm Class</button>
                         </div>
+                    </div>
+                    <div id="mobile-advanced-card-choice" class="panel-content panel hidden">
+                        <h2 class="panel-header">Advanced Setup</h2>
+                        <p class="subtitle-font" style="text-align: center;">Choose your starting advantage.</p>
+                        <div id="mobile-advanced-choice-buttons" class="button-grid"></div>
                     </div>
                     <div id="mobile-player-stats" class="panel mobile-panel">
                          <h2 id="mobile-player-class-name" class="panel-header player-class-header hidden">Your Class</h2>
@@ -370,8 +376,14 @@
     <div id="dice-roll-overlay" class="modal-overlay hidden">
         <div class="modal-content dice-roll-content">
             <h2 id="dice-roll-title" class="panel-header">Rolling...</h2>
-            <div class="dice-scene" id="dice-scene-container">
-                <!-- 3D Canvas will be inserted here by JavaScript -->
+            <div class="dice-animation-container">
+                <div class="dice-scene" id="dice-scene-container">
+                    <!-- 3D Canvas will be inserted here by JavaScript -->
+                </div>
+                <div id="dice-spinner" class="dice-spinner hidden">
+                    <div class="spinner-wheel"></div>
+                    <div class="spinner-value">?</div>
+                </div>
             </div>
             <button id="dice-roll-action-btn" class="btn btn-special hidden">Roll</button>
             <div id="dice-roll-result" class="dice-roll-result-container hidden"></div>

@@ -144,6 +144,8 @@ const mobilePlayerHand = get('mobile-player-hand');
 const mobileClassSelection = get('mobile-class-selection');
 const mobileClassCardsContainer = get('mobile-class-cards-container');
 const mobileConfirmClassBtn = get('mobile-confirm-class-btn');
+const mobileAdvancedCardChoiceDiv = get('mobile-advanced-card-choice');
+const mobileAdvancedChoiceButtonsDiv = get('mobile-advanced-choice-buttons');
 const mobilePlayerStats = get('mobile-player-stats');
 const mobilePlayerClassName = get('mobile-player-class-name');
 const mobileStatsDisplay = get('mobile-stats-display');
@@ -197,6 +199,7 @@ const endTurnConfirmBtn = get('end-turn-confirm-btn');
 const diceRollOverlay = get('dice-roll-overlay');
 const diceRollTitle = get('dice-roll-title');
 const diceSceneContainer = get('dice-scene-container');
+const diceSpinner = get('dice-spinner');
 const diceRollActionBtn = get('dice-roll-action-btn');
 const diceRollResult = get('dice-roll-result');
 const diceRollContinueBtn = get('dice-roll-continue-btn');
@@ -569,13 +572,13 @@ function renderGameState(room) {
     [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.classList.toggle('hidden', gameState.phase === 'lobby'));
     
     classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || !isExplorer);
-    advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice);
+    advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice || !isExplorer);
     playerStatsContainer.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
     gameModeSelector.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby');
     customSettingsPanel.classList.toggle('hidden', !(isHost && gameState.phase === 'lobby' && document.querySelector('input[name="gameMode"]:checked').value === 'Custom'));
 
-    const inMobileClassSelection = gameState.phase === 'class_selection' && !hasConfirmedClass && isExplorer;
+    const inMobileClassSelection = (gameState.phase === 'class_selection' || gameState.phase === 'advanced_setup_choice') && !myPlayerInfo.madeAdvancedChoice && isExplorer;
     if (inMobileClassSelection) {
         if (!get('mobile-screen-character').classList.contains('active')) {
              document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
@@ -583,12 +586,28 @@ function renderGameState(room) {
              mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
              document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
         }
-        mobileClassSelection.classList.remove('hidden');
+        mobileClassSelection.classList.toggle('hidden', gameState.phase !== 'class_selection');
+        mobileAdvancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice');
         mobilePlayerStats.classList.add('hidden');
     } else {
         mobileClassSelection.classList.add('hidden');
+        mobileAdvancedCardChoiceDiv.classList.add('hidden');
         mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     }
+    
+    if (gameState.phase === 'advanced_setup_choice' && !myPlayerInfo.madeAdvancedChoice) {
+        [advancedChoiceButtonsDiv, mobileAdvancedChoiceButtonsDiv].forEach(container => {
+            container.innerHTML = `
+                <button id="adv-choice-gear" class="btn btn-primary">Start with Gear</button>
+                <p class="subtitle-font" style="text-align:center;">Draw 1 Weapon & 1 Armor. Automatically equip the best ones.</p>
+                <button id="adv-choice-resources" class="btn btn-secondary">Start with Resources</button>
+                <p class="subtitle-font" style="text-align:center;">Draw 2 Items & 1 Spell.</p>
+            `;
+            container.querySelector('#adv-choice-gear').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'gear' });
+            container.querySelector('#adv-choice-resources').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'resources' });
+        });
+    }
+
 
     const showActionBar = isMyTurn && isExplorer && !isStunned;
     const challenge = gameState.skillChallenge;
@@ -994,7 +1013,22 @@ joinRoomBtn.addEventListener('click', () => {
 // Game Setup
 [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => {
     const selectedMode = document.querySelector('input[name="gameMode"]:checked').value;
-    socket.emit('startGame', { gameMode: selectedMode });
+     let customSettings = {};
+    if (selectedMode === 'Beginner') {
+        customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50 };
+    } else if (selectedMode === 'Advanced') {
+        customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60 };
+    } else { // Custom
+        customSettings = {
+            dungeonPressure: parseInt(get('dungeon-pressure').value, 10),
+            lootDropRate: parseInt(get('loot-drop-rate').value, 10),
+            magicalItemChance: parseInt(get('magical-item-chance').value, 10),
+            maxHandSize: parseInt(get('max-hand-size').value, 10),
+            enemyScaling: get('enemy-scaling').checked,
+            scalingRate: parseInt(get('scaling-rate').value, 10),
+        };
+    }
+    socket.emit('startGame', { gameMode: selectedMode, customSettings });
 }));
 [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
      if (tempSelectedClassId) {
@@ -1692,7 +1726,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// --- 3D DICE LOGIC ---
+// --- 3D DICE LOGIC & FALLBACK SPINNER ---
 function initDiceScene() {
     const container = diceSceneContainer;
     if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
@@ -1778,6 +1812,27 @@ function getDiceTargetRotation(diceType, result) {
     return rotations[diceType][result] || rotations[diceType].default;
 }
 
+function showSpinnerAnimation(dieType, finalRoll, callback) {
+    diceSceneContainer.style.display = 'none';
+    diceSpinner.classList.remove('hidden');
+
+    const spinnerValue = diceSpinner.querySelector('.spinner-value');
+    const max = parseInt(dieType.slice(1), 10);
+    let counter = 0;
+    const interval = setInterval(() => {
+        spinnerValue.textContent = Math.floor(Math.random() * max) + 1;
+        counter += 50;
+        if (counter >= 1500) {
+            clearInterval(interval);
+            spinnerValue.textContent = finalRoll;
+            setTimeout(() => {
+                diceSpinner.classList.add('hidden');
+                callback();
+            }, 500);
+        }
+    }, 50);
+}
+
 function showDiceRoll(options) {
     const { dieType, roll, title, resultHTML, continueCallback } = options;
 
@@ -1789,6 +1844,7 @@ function showDiceRoll(options) {
         diceRollResult.classList.add('hidden');
         diceRollContinueBtn.classList.add('hidden');
         diceSceneContainer.style.display = 'block';
+        diceSpinner.classList.add('hidden');
         diceRollOverlay.classList.remove('hidden');
         
         let hasContinued = false;
@@ -1803,6 +1859,7 @@ function showDiceRoll(options) {
             diceAnimationId = null;
 
             diceSceneContainer.style.display = 'none';
+            diceSpinner.classList.add('hidden');
             diceRollResult.innerHTML = resultHTML;
             diceRollResult.classList.remove('hidden');
             diceRollContinueBtn.classList.remove('hidden');
@@ -1812,17 +1869,19 @@ function showDiceRoll(options) {
                 finishModal();
             };
         };
+        
+        const runFallback = () => {
+            if (hasContinued) return;
+            console.warn("Dice animation failed. Running spinner fallback.");
+            showSpinnerAnimation(dieType, roll, showResultsAndContinue);
+        };
 
-        safetyTimeout = setTimeout(() => {
-            console.warn("Dice animation timed out. Forcing fallback.");
-            showResultsAndContinue();
-        }, 4000);
+        safetyTimeout = setTimeout(runFallback, 3000);
 
         try {
             const sceneReady = initDiceScene();
             if (!sceneReady) {
-                console.warn("Dice scene failed to initialize. Skipping animation.");
-                showResultsAndContinue();
+                runFallback();
                 return;
             }
 
@@ -1877,7 +1936,7 @@ function showDiceRoll(options) {
             animate();
         } catch(e) {
             console.error("An error occurred during the dice animation. Triggering fallback.", e);
-            showResultsAndContinue();
+            runFallback();
         }
     }, `dice-roll-${Math.random()}`);
 }

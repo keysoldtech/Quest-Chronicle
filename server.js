@@ -94,7 +94,7 @@ class GameManager {
             gameState: {
                 phase: 'lobby',
                 gameMode: gameMode,
-                customSettings: customSettings, // Store the custom settings
+                customSettings: customSettings,
                 decks: { 
                     item: [], spell: [], monster: { tier1: [], tier2: [], tier3: [] }, weapon: [], armor: [], worldEvent: [],
                     playerEvent: [],
@@ -115,7 +115,7 @@ class GameManager {
             },
             chatLog: []
         };
-
+        
         this.rooms[newRoom.id] = newRoom;
         socket.join(newRoom.id);
         socket.emit('roomCreated', newRoom);
@@ -200,11 +200,12 @@ class GameManager {
         };
     }
 
-    startGame(socket, { gameMode }) {
+    startGame(socket, { gameMode, customSettings }) {
         const room = this.findRoomBySocket(socket);
         if (!room || room.hostId !== socket.id || room.gameState.phase !== 'lobby') return;
     
         room.gameState.gameMode = gameMode;
+        room.gameState.customSettings = customSettings;
         
         const players = Object.values(room.players).filter(p => !p.isNpc);
 
@@ -324,6 +325,31 @@ class GameManager {
         this.checkAllPlayersReady(room);
         this.emitGameState(room.id);
     }
+
+    chooseAdvancedSetup(socket, { choice }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!room || !player || room.gameState.phase !== 'advanced_setup_choice' || player.madeAdvancedChoice) {
+            return;
+        }
+
+        player.madeAdvancedChoice = true;
+
+        if (choice === 'gear') {
+            this.dealCard(room.id, player.id, 'weapon', 1);
+            this.dealCard(room.id, player.id, 'armor', 1);
+            const weapon = player.hand.find(c => c.type === 'Weapon');
+            if (weapon) this._internalEquipItem(room, player, weapon.id);
+            const armor = player.hand.find(c => c.type === 'Armor');
+            if (armor) this._internalEquipItem(room, player, armor.id);
+        } else if (choice === 'resources') {
+            this.dealCard(room.id, player.id, 'item', 2);
+            this.dealCard(room.id, player.id, 'spell', 1);
+        }
+        
+        this.checkAllPlayersReady(room);
+        this.emitGameState(room.id);
+    }
     
     calculatePlayerStats(player) {
         if (!player.class) {
@@ -373,15 +399,24 @@ class GameManager {
 
     checkAllPlayersReady(room) {
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
-        const allReady = explorers.every(p => p.class);
-        
-        if (allReady && room.gameState.phase === 'class_selection') {
-            if (room.gameState.gameMode === 'Advanced') {
-                room.gameState.phase = 'advanced_setup_choice';
-            } else {
+        if (explorers.length === 0) return;
+
+        if (room.gameState.phase === 'class_selection') {
+            const allSelectedClass = explorers.every(p => p.class);
+            if (allSelectedClass) {
+                if (room.gameState.gameMode === 'Advanced') {
+                    room.gameState.phase = 'advanced_setup_choice';
+                } else {
+                    room.gameState.phase = 'started';
+                    this.startFirstTurn(room.id);
+                }
+            }
+        } else if (room.gameState.phase === 'advanced_setup_choice') {
+             const allMadeChoice = explorers.every(p => p.madeAdvancedChoice);
+             if(allMadeChoice) {
                 room.gameState.phase = 'started';
                 this.startFirstTurn(room.id);
-            }
+             }
         }
     }
     
@@ -645,13 +680,12 @@ class GameManager {
                 if (!bestAction || bestAction.action === 'wait' || currentPlayerState.currentAp < bestAction.apCost) {
                     break;
                 }
-
-                currentPlayerState.currentAp -= bestAction.apCost;
                 
                 const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
 
                 switch (bestAction.action) {
                     case 'useClassAbility':
+                        currentPlayerState.currentAp -= bestAction.apCost;
                         this._resolveUseClassAbility(room, currentPlayerState, null);
                         break;
                     case 'attack':
@@ -660,13 +694,12 @@ class GameManager {
                             type: 'system',
                             message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack.`
                         });
-                        const d20Roll = Math.floor(Math.random() * 20) + 1;
                         this._resolveAttack(room, {
                             attackerId: player.id,
                             targetId: bestAction.targetId,
                             weaponId: bestAction.weaponId,
                             narrative: narrative
-                        }, d20Roll);
+                        });
                         break;
                      case 'unarmedAttack':
                         this.sendMessageToRoom(room.id, {
@@ -674,14 +707,14 @@ class GameManager {
                             type: 'system',
                             message: `<b>${player.name}</b> used ${bestAction.apCost} AP for an Unarmed Strike.`
                         });
-                        const unarmedD20Roll = Math.floor(Math.random() * 20) + 1;
                         this._resolveUnarmedAttack(room, {
                             attackerId: player.id,
                             targetId: bestAction.targetId,
                             narrative: `${player.name} lashes out with their bare fists!`
-                        }, unarmedD20Roll);
+                        });
                         break;
                     case 'guard':
+                        currentPlayerState.currentAp -= bestAction.apCost;
                         const guardBonus = currentPlayerState.equipment.armor?.guardBonus || 2;
                         currentPlayerState.stats.shieldHp += guardBonus;
                         this.sendMessageToRoom(room.id, { 
@@ -691,6 +724,7 @@ class GameManager {
                         });
                         break;
                     case 'briefRespite': {
+                        currentPlayerState.currentAp -= bestAction.apCost;
                         currentPlayerState.healthDice.current -= 1;
                         const healAmount = this.rollDice('1d8');
                         currentPlayerState.stats.currentHp = Math.min(currentPlayerState.stats.maxHp, currentPlayerState.stats.currentHp + healAmount);
@@ -703,6 +737,7 @@ class GameManager {
                         break;
                     }
                     case 'fullRest': {
+                        currentPlayerState.currentAp -= bestAction.apCost;
                         currentPlayerState.healthDice.current -= 2;
                         const totalHeal = this.rollDice('2d8');
                         currentPlayerState.stats.currentHp = Math.min(currentPlayerState.stats.maxHp, currentPlayerState.stats.currentHp + totalHeal);
@@ -715,6 +750,7 @@ class GameManager {
                         break;
                     }
                     case 'useCard': {
+                        currentPlayerState.currentAp -= bestAction.apCost;
                         const cardIndex = currentPlayerState.hand.findIndex(c => c.id === bestAction.cardId);
                         if (cardIndex > -1) {
                             const card = currentPlayerState.hand.splice(cardIndex, 1)[0];
@@ -751,6 +787,7 @@ class GameManager {
                         break;
                     }
                     case 'contributeToSkillChallenge': {
+                        currentPlayerState.currentAp -= bestAction.apCost;
                         this._resolveNpcSkillChallenge(room, currentPlayerState);
                         break;
                     }
@@ -1137,41 +1174,25 @@ class GameManager {
         this.startTurn(room.id);
     }
 
-    handleAttack(socket, data) {
-        const room = this.findRoomBySocket(socket);
-        const player = room?.players[socket.id];
-        if (!room || !player) return;
-        
-        const target = room.gameState.board.monsters.find(m => m.id === data.targetId);
-        const weapon = player.equipment.weapon;
-
-        if (!target || !weapon || weapon.id !== data.cardId) {
-            return socket.emit('actionError', 'Invalid attack parameters.');
-        }
-        
-        const apCost = weapon.apCost || 2; 
-        if (player.currentAp < apCost) {
-            return socket.emit('actionError', 'Not enough Action Points.');
-        }
-        player.currentAp -= apCost;
-
-        const d20Roll = Math.floor(Math.random() * 20) + 1;
-        this._resolveAttack(room, {
-            attackerId: player.id,
-            targetId: target.id,
-            weaponId: weapon.id,
-            narrative: data.narrative
-        }, d20Roll);
-    }
-
     _resolveUnarmedAttack(room, attackData, d20Roll) {
         const player = room.players[attackData.attackerId];
         const target = room.gameState.board.monsters.find(m => m.id === attackData.targetId);
+        const apCost = 1;
+
         if (!player || !target) {
              console.error("Could not resolve unarmed attack, missing data.");
-             this.emitGameState(room.id);
-             return;
+             return io.sockets.sockets.get(player.id)?.emit('actionError', 'Invalid target for attack.');
         }
+        if (player.currentAp < apCost) {
+            return io.sockets.sockets.get(player.id)?.emit('actionError', 'Not enough Action Points.');
+        }
+        if (player.equipment.weapon) {
+            return io.sockets.sockets.get(player.id)?.emit('actionError', 'You cannot make an unarmed strike while wielding a weapon.');
+        }
+
+        player.currentAp -= apCost; // Deduct AP only after all checks pass
+        
+        if(!d20Roll) d20Roll = Math.floor(Math.random() * 20) + 1;
 
         this.sendMessageToRoom(room.id, {
             channel: 'game', senderName: player.name,
@@ -1225,12 +1246,19 @@ class GameManager {
         const player = room.players[attackData.attackerId];
         const target = room.gameState.board.monsters.find(m => m.id === attackData.targetId);
         const weapon = player.equipment.weapon;
+        const apCost = weapon?.apCost || 2;
     
-        if (!player || !target || !weapon) {
+        if (!player || !target || !weapon || weapon.id !== attackData.weaponId) {
              console.error("Could not resolve attack, missing data.");
-             this.emitGameState(room.id);
-             return;
+             return io.sockets.sockets.get(player.id)?.emit('actionError', 'Invalid attack parameters.');
         }
+        if (player.currentAp < apCost) {
+            return io.sockets.sockets.get(player.id)?.emit('actionError', 'Not enough Action Points.');
+        }
+
+        player.currentAp -= apCost; // Deduct AP only after all checks pass
+
+        if(!d20Roll) d20Roll = Math.floor(Math.random() * 20) + 1;
         
         this.sendMessageToRoom(room.id, {
             channel: 'game', senderName: player.name,
@@ -1674,22 +1702,18 @@ class GameManager {
             }
             case 'attack':
                 if (data.cardId === 'unarmed') {
-                    const apCost = 1; 
-                    if (player.currentAp < apCost) {
-                        return socket.emit('actionError', 'Not enough Action Points.');
-                    }
-                    if (player.equipment.weapon) {
-                        return socket.emit('actionError', 'You cannot make an unarmed strike while wielding a weapon.');
-                    }
-                    player.currentAp -= apCost;
-                    const d20Roll = Math.floor(Math.random() * 20) + 1;
                     this._resolveUnarmedAttack(room, {
                         attackerId: player.id,
                         targetId: data.targetId,
                         narrative: data.narrative
-                    }, d20Roll);
+                    });
                 } else {
-                    this.handleAttack(socket, data);
+                    this._resolveAttack(room, {
+                        attackerId: player.id,
+                        targetId: data.targetId,
+                        weaponId: data.cardId,
+                        narrative: data.narrative
+                    });
                 }
                 break;
             case 'guard':
@@ -1921,6 +1945,7 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', (data) => gameManager.joinRoom(socket, data));
     socket.on('startGame', (data) => gameManager.startGame(socket, data));
     socket.on('chooseClass', (data) => gameManager.chooseClass(socket, data));
+    socket.on('chooseAdvancedSetup', (data) => gameManager.chooseAdvancedSetup(socket, data));
     socket.on('equipItem', (data) => gameManager.equipItem(socket, data));
     socket.on('endTurn', () => gameManager.endTurn(socket));
     socket.on('rollForEvent', () => gameManager.rollForEvent(socket));
