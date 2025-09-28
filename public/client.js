@@ -195,6 +195,7 @@ const equipNewBtn = get('equip-new-btn');
 const toastNotification = get('toast-notification');
 const toastMessage = get('toast-message');
 const toastCloseBtn = get('toast-close-btn');
+const animationOverlay = get('animation-overlay');
 
 
 // --- Helper Functions ---
@@ -365,9 +366,18 @@ function createCardElement(card, actions = {}) {
         }).join('');
     }
     
-    let monsterStatsHTML = '';
+    let monsterHologramHTML = '';
     if(card.type === 'Monster') {
-        monsterStatsHTML = `<div class="card-bonus">HP: ${card.currentHp} / ${card.maxHp}</div>`;
+        const monsterType = card.primaryType ? card.primaryType.toLowerCase() : 'beast';
+        const healthPercentage = (card.currentHp / card.maxHp) * 100;
+        monsterHologramHTML = `
+            <div class="hologram-container">
+                <div class="monster-hologram hologram-${monsterType}"></div>
+                <div class="health-bar-container">
+                    <div class="health-bar-fill" style="width: ${healthPercentage}%;"></div>
+                </div>
+            </div>
+        `;
     }
 
     let statusEffectsHTML = '';
@@ -380,6 +390,7 @@ function createCardElement(card, actions = {}) {
     const cardTitle = card.isMagical ? `<span class="magical-item">${card.name}</span>` : card.name;
 
     cardDiv.innerHTML = `
+        ${monsterHologramHTML}
         <div class="card-content">
             <h3 class="card-title">${cardTitle}</h3>
             <p class="card-effect">${card.effect?.description || card.description || card.outcome || ''}</p>
@@ -387,7 +398,6 @@ function createCardElement(card, actions = {}) {
         ${statusEffectsHTML}
         <div class="card-footer">
             <div class="card-bonuses-grid">${bonusesHTML}</div>
-            ${monsterStatsHTML}
             <p class="card-type">${typeInfo}</p>
         </div>
     `;
@@ -1155,19 +1165,39 @@ function showDiceRoll(options) {
     }, `dice-roll-${Math.random()}`);
 }
 
+function playEffectAnimation(targetElement, effectType) {
+    if (!targetElement) return;
+
+    const effectEl = document.createElement('div');
+    effectEl.className = `effect-animation ${effectType}-effect`;
+    
+    const rect = targetElement.getBoundingClientRect();
+    effectEl.style.top = `${rect.top + rect.height / 2}px`;
+    effectEl.style.left = `${rect.left + rect.width / 2}px`;
+
+    animationOverlay.appendChild(effectEl);
+
+    setTimeout(() => {
+        effectEl.remove();
+    }, 1000); // Duration of the animation
+}
+
 socket.on('attackAnimation', (data) => {
-    const { attackerName, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, damageBonus, totalDamage } = data;
+    const { attackerId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, damageBonus, totalDamage } = data;
 
     // --- Stage 1: To-Hit Roll ---
     const toHitResultHTML = `
         ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
         <p class="roll-details">Roll: ${d20Roll} + ${damageBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
     `;
+    
+    const targetEl = document.querySelector(`.card[data-monster-id="${targetId}"]`);
+    playEffectAnimation(targetEl, hit ? 'hit' : 'miss');
 
     showDiceRoll({
         dieType: 'd20',
         roll: d20Roll,
-        title: `${attackerName} Attacks!`,
+        title: `You Attack!`,
         resultHTML: toHitResultHTML,
         continueDelay: hit ? 1500 : 3000, // Shorter delay if there's a damage roll coming
         continueCallback: () => {
@@ -1193,7 +1223,12 @@ socket.on('attackAnimation', (data) => {
 });
 
 socket.on('monsterAttackAnimation', (data) => {
-    const { attackerName, targetName, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, attackBonus, totalDamage } = data;
+    const { attackerId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, attackBonus, totalDamage } = data;
+
+    const attackerCard = document.querySelector(`.card[data-monster-id="${attackerId}"]`);
+    const targetPlayerEl = get(`player-${targetId}`);
+    
+    playEffectAnimation(targetPlayerEl, hit ? 'hit' : 'miss');
 
     const toHitResultHTML = `
         ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
@@ -1203,7 +1238,7 @@ socket.on('monsterAttackAnimation', (data) => {
     showDiceRoll({
         dieType: 'd20',
         roll: d20Roll,
-        title: `${attackerName} attacks ${targetName}!`,
+        title: `Monster Attacks!`,
         resultHTML: toHitResultHTML,
         continueDelay: hit ? 1500 : 3000,
         continueCallback: () => {

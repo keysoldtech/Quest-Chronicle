@@ -801,8 +801,8 @@ class GameManager {
         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessageText });
 
         io.to(room.id).emit('monsterAttackAnimation', {
-            attackerName: monster.name,
-            targetName: target.name,
+            attackerId: monster.id,
+            targetId: target.id,
             d20Roll,
             isCrit,
             isFumble,
@@ -1141,7 +1141,8 @@ class GameManager {
         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessageText });
     
         io.to(room.id).emit('attackAnimation', {
-            attackerName: player.name,
+            attackerId: player.id,
+            targetId: target.id,
             d20Roll,
             isCrit,
             isFumble,

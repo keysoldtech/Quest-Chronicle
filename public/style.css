@@ -423,6 +423,110 @@ body.in-game {
 .card.attackable-weapon { cursor: pointer; border-style: dashed; border-color: var(--color-success); }
 .card.selected-weapon { border-style: solid; border-color: var(--color-special); box-shadow: 0 0 15px var(--color-glow); }
 
+/* --- HOLOGRAM & HEALTH BAR --- */
+.hologram-container {
+    position: absolute;
+    top: -90px; /* Position above the card */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    pointer-events: none; /* Allows clicks to pass through to the card */
+}
+
+.monster-hologram {
+    width: 60px;
+    height: 60px;
+    position: relative;
+    filter: drop-shadow(0 0 5px #0ff) drop-shadow(0 0 10px #0ff);
+    animation: hologram-flicker 3s infinite linear, hologram-bob 4s infinite ease-in-out;
+}
+.monster-hologram::after { /* Scan lines */
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(to bottom, rgba(0,255,255,0) 0%, rgba(0,255,255,0.3) 50%, rgba(0,255,255,0) 100%);
+    background-size: 100% 5px;
+    animation: scan-lines 2s infinite linear;
+}
+
+/* Hologram Shapes */
+.hologram-humanoid { background-color: #0ff; clip-path: polygon(50% 0%, 60% 35%, 100% 35%, 100% 55%, 60% 55%, 75% 100%, 25% 100%, 40% 55%, 0 55%, 0 35%, 40% 35%); }
+.hologram-beast { background-color: #0ff; clip-path: polygon(20% 40%, 0% 60%, 20% 80%, 30% 60%, 70% 60%, 80% 80%, 100% 60%, 80% 40%, 60% 40%, 50% 20%, 40% 40%); }
+.hologram-undead { background-color: #0ff; clip-path: polygon(50% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%); }
+.hologram-elemental { background-color: #0ff; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+.hologram-monstrosity { background-color: #0ff; clip-path: polygon(0% 0%, 100% 0%, 100% 75%, 75% 75%, 75% 100%, 50% 75%, 25% 100%, 25% 75%, 0% 75%); }
+.hologram-construct { background-color: #0ff; clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%); }
+.hologram-ooze { background-color: #0ff; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; }
+
+@keyframes hologram-flicker { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+@keyframes hologram-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes scan-lines { from { background-position: 0 0; } to { background-position: 0 50px; } }
+
+.health-bar-container {
+    width: 80px;
+    height: 8px;
+    background-color: rgba(0,0,0,0.5);
+    border: 1px solid #0ff;
+    border-radius: 4px;
+    padding: 1px;
+    margin-top: 5px;
+}
+.health-bar-fill {
+    height: 100%;
+    background-color: var(--color-danger);
+    border-radius: 2px;
+    transition: width 0.3s ease-in-out;
+}
+
+/* --- ATTACK ANIMATIONS --- */
+#animation-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 1500;
+}
+.effect-animation {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: 100px;
+    height: 100px;
+}
+.hit-effect::before, .hit-effect::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    background-color: white;
+    box-shadow: 0 0 10px #fff, 0 0 20px #ff0000;
+    animation: hit-slash 0.3s ease-out forwards;
+}
+.hit-effect::before { width: 8px; height: 120px; transform-origin: center; }
+.hit-effect::after { width: 120px; height: 8px; transform-origin: center; }
+@keyframes hit-slash {
+    0% { transform: translate(-50%, -50%) scale(0) rotate(-45deg); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1.2) rotate(45deg); opacity: 0; }
+}
+.miss-effect::before {
+    content: 'MISS';
+    position: absolute;
+    top: 50%; left: 50%;
+    font-family: var(--font-title);
+    font-size: 2rem;
+    color: var(--color-secondary);
+    text-shadow: 1px 1px 2px black;
+    animation: miss-poof 0.5s ease-out forwards;
+}
+@keyframes miss-poof {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+    50% { transform: translate(-50%, -60%); opacity: 1; }
+    100% { transform: translate(-50%, -70%) scale(1.5); opacity: 0; }
+}
+
 
 /* Class Selection */
 .class-cards-container { display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; }
@@ -545,8 +649,9 @@ body.in-game {
 .your-turn-popup:not(.hidden) { top: 0; }
 
 /* Dice Roll Overlay */
+#dice-roll-overlay.modal-overlay { background-color: rgba(0,0,0,0.5); }
 .dice-roll-content { text-align: center; }
-.dice-scene { perspective: 1000px; height: 120px; display: flex; align-items: center; justify-content: center; }
+.dice-scene { perspective: 1000px; height: 120px; display: flex; align-items: center; justify-content: center; margin: 1rem 0; }
 .dice {
     position: relative;
     transform-style: preserve-3d;
@@ -597,13 +702,8 @@ body.in-game {
     font-size: 24px;
     padding-bottom: 20px;
 }
+/* Simplified positions for demo */
 .d8 .face-1 { transform: rotateX(109.47deg) rotateY(0deg) translateZ(28.87px); }
-.d8 .face-2 { transform: rotateX(109.47deg) rotateY(120deg) translateZ(28.87px); }
-.d8 .face-3 { transform: rotateX(109.47deg) rotateY(240deg) translateZ(28.87px); }
-.d8 .face-4 { transform: rotateX(180deg) rotateZ(180deg) translateZ(57.74px); }
-.d8 .face-5 { transform: rotateX(70.53deg) rotateY(60deg) translateZ(28.87px) rotateZ(180deg); }
-.d8 .face-6 { transform: rotateX(70.53deg) rotateY(180deg) translateZ(28.87px) rotateZ(180deg); }
-.d8 .face-7 { transform: rotateX(70.53deg) rotateY(300deg) translateZ(28.87px) rotateZ(180deg); }
 .d8 .face-8 { transform: rotateY(0deg) translateZ(57.74px); }
 .d8.stop-on-8 { transform: rotateX(0); } /* Placeholder */
 /* Stop positions for d8 are more complex and omitted for brevity */
