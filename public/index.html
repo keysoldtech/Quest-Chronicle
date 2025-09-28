@@ -21,11 +21,11 @@
     <link rel="apple-touch-icon" href="/icon-192.png">
 </head>
 <body>
-
+    <div class="background-animation"></div>
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">Prototype 4.5.25 - The New War (REBORN)</p>
+        <p class="subtitle-font">Prototype 4.5.26 - The New War (Clarity)</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -43,6 +43,37 @@
                     <input type="radio" name="gameMode" value="Advanced" class="sr-only">
                     <span>Advanced</span>
                 </label>
+                <label class="radio-label">
+                    <input type="radio" name="gameMode" value="Custom" class="sr-only">
+                    <span>Custom</span>
+                </label>
+            </div>
+        </div>
+        
+        <div id="custom-settings-panel" class="custom-settings-panel hidden">
+            <div class="slider-group">
+                <label for="dungeon-pressure">Dungeon Pressure: <span id="dungeon-pressure-value">25</span>%</label>
+                <input type="range" id="dungeon-pressure" min="0" max="100" value="25" class="slider">
+            </div>
+             <div class="slider-group">
+                <label for="loot-drop-rate">Loot Drop Rate: <span id="loot-drop-rate-value">25</span>%</label>
+                <input type="range" id="loot-drop-rate" min="0" max="100" value="25" class="slider">
+            </div>
+             <div class="slider-group">
+                <label for="magical-item-chance">Magical Item Chance: <span id="magical-item-chance-value">20</span>%</label>
+                <input type="range" id="magical-item-chance" min="0" max="100" value="20" class="slider">
+            </div>
+            <div class="slider-group">
+                <label for="max-hand-size">Max Hand Size: <span id="max-hand-size-value">5</span></label>
+                <input type="range" id="max-hand-size" min="3" max="7" value="5" class="slider">
+            </div>
+            <div class="toggle-group">
+                <label for="enemy-scaling">Enable Enemy Power Scaling?</label>
+                <input type="checkbox" id="enemy-scaling" class="toggle-switch">
+            </div>
+             <div id="scaling-rate-group" class="slider-group hidden">
+                <label for="scaling-rate">Scaling Rate: <span id="scaling-rate-value">50</span>%</label>
+                <input type="range" id="scaling-rate" min="10" max="100" value="50" class="slider">
             </div>
         </div>
 
@@ -64,7 +95,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.5.25 - The New War (REBORN)</p>
+                     <p class="build-number-font">v4.5.26 - The New War (Clarity)</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -77,6 +108,7 @@
                         <p>Room Code:</p>
                         <p id="room-code">----</p>
                     </div>
+                    <button id="help-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">help</span></button>
                     <div class="header-menu">
                         <button id="menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
                         <div id="menu-dropdown" class="menu-dropdown hidden">
@@ -92,6 +124,7 @@
 
             <aside class="players-panel panel">
                  <h2 class="panel-header">Players</h2>
+                 <div id="lobby-settings-display" class="lobby-settings-display hidden"></div>
                  <ul id="player-list" class="player-list"></ul>
             </aside>
             
@@ -150,11 +183,10 @@
             </footer>
 
             <div id="fixed-action-bar" class="fixed-action-bar hidden">
-                <button id="action-attack-btn" class="btn btn-danger hidden">Confirm Attack</button>
-                <button id="action-skill-challenge-btn" class="btn btn-special hidden">Challenge (1 AP)</button>
-                <button id="action-guard-btn" class="btn btn-secondary">Guard (1 AP)</button>
-                <button id="action-brief-respite-btn" class="btn btn-secondary">Brief Respite (1 AP)</button>
-                <button id="action-full-rest-btn" class="btn btn-secondary">Full Rest (2 AP)</button>
+                <button id="action-skill-challenge-btn" class="btn btn-special hidden">Challenge (-1 AP)</button>
+                <button id="action-guard-btn" class="btn btn-secondary">Guard (-1 AP)</button>
+                <button id="action-brief-respite-btn" class="btn btn-secondary">Respite (-1 AP)</button>
+                <button id="action-full-rest-btn" class="btn btn-secondary">Rest (-2 AP)</button>
                 <button id="action-end-turn-btn" class="btn btn-primary">End Turn</button>
             </div>
         </div>
@@ -171,6 +203,7 @@
                     <div id="mobile-header-action-buttons">
                         <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
                     </div>
+                    <button id="mobile-help-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">help</span></button>
                     <div class="header-menu">
                         <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
                         <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
@@ -221,6 +254,7 @@
                 <div id="mobile-screen-party" class="mobile-screen">
                      <div class="panel mobile-panel">
                         <h2 class="panel-header">Players</h2>
+                        <div id="mobile-lobby-settings-display" class="lobby-settings-display hidden"></div>
                         <ul id="mobile-player-list" class="player-list"></ul>
                     </div>
                 </div>
@@ -257,7 +291,6 @@
             </main>
 
             <div id="mobile-action-bar" class="mobile-action-bar hidden">
-                <button id="mobile-action-attack-btn" class="btn btn-danger btn-sm hidden">Attack</button>
                 <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge</button>
                 <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard</button>
                 <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite</button>
@@ -351,7 +384,6 @@
                     <div class="face face-1">1</div><div class="face face-2">2</div><div class="face face-3">3</div><div class="face face-4">4</div>
                     <div class="face face-5">5</div><div class="face face-6">6</div>
                 </div>
-                 <!-- D4 and D10/12 would need more complex geometry -->
             </div>
             <button id="dice-roll-action-btn" class="btn btn-special hidden">Roll</button>
             <div id="dice-roll-result" class="dice-roll-result-container hidden"></div>
@@ -425,7 +457,7 @@
     <div id="item-swap-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width: 800px;">
             <h2 class="panel-header">Inventory Full!</h2>
-            <p>Your hand is full (5 cards max). To keep the new item, you must choose one from your hand to discard.</p>
+            <p id="item-swap-prompt">Your hand is full. To keep the new item, you must choose one from your hand to discard.</p>
             <div class="item-swap-container">
                 <div class="item-swap-column">
                     <h3 class="sub-header-font">New Item</h3>
@@ -438,6 +470,41 @@
             </div>
             <div class="modal-actions">
                 <button id="discard-new-item-btn" class="btn btn-danger">Discard New Item</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="item-found-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="panel-header">Item Found!</h2>
+            <p>Your travels have rewarded you.</p>
+            <div id="item-found-display" class="item-found-display"></div>
+            <div class="modal-actions">
+                <button id="item-found-close-btn" class="btn btn-primary">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tutorial-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div id="tutorial-content"></div>
+            <div class="tutorial-navigation">
+                <button id="tutorial-prev-btn" class="btn btn-secondary">Previous</button>
+                <span id="tutorial-page-indicator"></span>
+                <button id="tutorial-next-btn" class="btn btn-primary">Next</button>
+            </div>
+             <button id="tutorial-skip-btn" class="btn btn-sm" style="position: absolute; top: 10px; right: 10px;">Skip Tutorial</button>
+        </div>
+    </div>
+
+    <div id="help-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 800px; max-height: 80vh; display: flex; flex-direction: column;">
+            <h2 class="panel-header">Game Guide</h2>
+            <div id="help-content" style="overflow-y: auto; padding-right: 1rem;">
+                <!-- Content will be injected by JS -->
+            </div>
+            <div class="modal-actions" style="margin-top: 1rem; border-top: 1px solid var(--color-border); padding-top: 1rem;">
+                <button id="help-close-btn" class="btn btn-primary">Close</button>
             </div>
         </div>
     </div>

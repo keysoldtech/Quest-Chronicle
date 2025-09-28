@@ -14,7 +14,6 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
-const MAX_HAND_SIZE = 5;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -84,7 +83,7 @@ class GameManager {
         return `card-${this.cardIdCounter}`;
     }
 
-    createRoom(socket, playerName) {
+    createRoom(socket, { playerName, customSettings }) {
         const newPlayer = this.createPlayerObject(socket.id, playerName);
         
         const newRoom = {
@@ -95,6 +94,7 @@ class GameManager {
             gameState: {
                 phase: 'lobby',
                 gameMode: null,
+                customSettings: customSettings, // Store the custom settings
                 decks: { 
                     item: [], spell: [], monster: { tier1: [], tier2: [], tier3: [] }, weapon: [], armor: [], worldEvent: [],
                     playerEvent: [],
@@ -104,7 +104,7 @@ class GameManager {
                 turnOrder: [],
                 currentPlayerIndex: -1,
                 board: { monsters: [] },
-                lootPool: [], // Retained for future use, but not currently added to.
+                lootPool: [],
                 turnCount: 0,
                 worldEvents: {
                     currentEvent: null,
@@ -193,7 +193,7 @@ class GameManager {
             pendingEventRoll: false,
             pendingEventChoice: null,
             pendingEquipmentChoice: null, 
-            pendingItemSwap: null, // New state for full inventory
+            pendingItemSwap: null,
             madeAdvancedChoice: false,
             pendingWorldEventSave: null,
             healthDice: { current: 0, max: 0 }
@@ -236,10 +236,7 @@ class GameManager {
                 this.dealCard(room.id, npc.id, 'item', 2);
                 this.dealCard(room.id, npc.id, 'spell', 2);
                 
-                const weapon = npc.hand.find(c => c.type === 'Weapon');
-                if (weapon) this._internalEquipItem(room, npc, weapon.id);
-                const armor = npc.hand.find(c => c.type === 'Armor');
-                if (armor) this._internalEquipItem(room, npc, armor.id);
+                this._npcAutoEquip(room, npc);
                 
                 room.players[npc.id] = npc;
                 explorerNpcs.push(npc);
@@ -273,8 +270,6 @@ class GameManager {
         room.gameState.decks.monster.tier2 = createDeck(gameData.monsterTiers.tier2);
         room.gameState.decks.monster.tier3 = createDeck(gameData.monsterTiers.tier3);
 
-
-        // Create combined Treasure deck
         room.gameState.decks.treasure = [
             ...room.gameState.decks.item,
             ...room.gameState.decks.weapon,
@@ -287,7 +282,6 @@ class GameManager {
         shuffle(room.gameState.decks.monster.tier1);
         shuffle(room.gameState.decks.monster.tier2);
         shuffle(room.gameState.decks.monster.tier3);
-
 
         room.gameState.phase = 'class_selection';
         io.to(room.id).emit('gameStarted', room);
@@ -401,7 +395,6 @@ class GameManager {
     
         const cardsToDeal = [];
     
-        // Always filter deck by class requirements if the player has a class
         const shouldFilter = player.class;
     
         if (shouldFilter) {
@@ -425,7 +418,6 @@ class GameManager {
                 }
             }
         } else {
-            // Default behavior for players without a class (e.g. lobby)
             for (let i = 0; i < count; i++) {
                 if (mainDeck.length > 0) {
                     cardsToDeal.push(mainDeck.pop());
@@ -444,7 +436,7 @@ class GameManager {
     }
 
     _addCardToPlayerHand(room, player, card) {
-        if (player.hand.length >= MAX_HAND_SIZE) {
+        if (player.hand.length >= room.gameState.customSettings.maxHandSize) {
             player.pendingItemSwap = { newCard: card };
             this.sendMessageToRoom(room.id, {
                 channel: 'game', type: 'system',
@@ -463,9 +455,7 @@ class GameManager {
         
         const cardToEquip = player.hand[cardIndex];
 
-        // Check class requirements
         if (cardToEquip.class && !cardToEquip.class.includes("Any") && !cardToEquip.class.includes(player.class)) {
-            // Silently fail for NPCs, send error for players
             if (!player.isNpc) {
                  const socket = io.sockets.sockets.get(player.id);
                  if (socket) socket.emit('actionError', `Your class cannot equip ${cardToEquip.name}.`);
@@ -486,6 +476,33 @@ class GameManager {
         return true;
     }
 
+    _npcAutoEquip(room, player) {
+        const getCardPower = (card) => {
+            if (!card) return 0;
+            if (card.type === 'Weapon') return this.rollDice(card.effect.dice) + (card.effect.bonuses?.damageBonus || 0);
+            if (card.type === 'Armor') return (card.effect.bonuses?.shieldBonus || 0) + (card.effect.bonuses?.ap || 0);
+            return 0;
+        };
+
+        const currentWeaponPower = getCardPower(player.equipment.weapon);
+        const bestWeaponInHand = player.hand
+            .filter(c => c.type === 'Weapon')
+            .sort((a, b) => getCardPower(b) - getCardPower(a))[0];
+
+        if (bestWeaponInHand && getCardPower(bestWeaponInHand) > currentWeaponPower) {
+            this._internalEquipItem(room, player, bestWeaponInHand.id);
+        }
+
+        const currentArmorPower = getCardPower(player.equipment.armor);
+        const bestArmorInHand = player.hand
+            .filter(c => c.type === 'Armor')
+            .sort((a, b) => getCardPower(b) - getCardPower(a))[0];
+
+        if (bestArmorInHand && getCardPower(bestArmorInHand) > currentArmorPower) {
+            this._internalEquipItem(room, player, bestArmorInHand.id);
+        }
+    }
+
     equipItem(socket, { cardId }) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
@@ -493,7 +510,6 @@ class GameManager {
         const success = this._internalEquipItem(room, player, cardId);
         
         if (!success && player) {
-            // Error message is sent inside _internalEquipItem now
             return;
         }
         
@@ -512,17 +528,14 @@ class GameManager {
         const { currentAp, stats, hand, healthDice, equipment } = player;
         const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
         
-        // Priority 0: Contribute to Skill Challenge
         if (skillChallenge.isActive && currentAp >= 1) {
             const challengeData = gameData.skillChallenges.find(c => c.id === skillChallenge.challengeId);
             const myStat = stats[challengeData.skill] || 0;
-            // Simple logic: contribute if not a guaranteed failure and stat isn't terrible.
             if (myStat >= 0) {
                 return { action: 'contributeToSkillChallenge', apCost: 1 };
             }
         }
 
-        // Priority 1: Healing (Cards)
         let bestHealTarget = { utility: -1, target: null, card: null };
         hand.forEach(card => {
             const cardApCost = card.apCost || 1;
@@ -541,42 +554,20 @@ class GameManager {
             return { action: 'useCard', cardId: bestHealTarget.card.id, targetId: bestHealTarget.target.id, apCost: bestHealTarget.card.apCost || 1 };
         }
 
-        // Priority 2: Utility (Cards)
-        if (board.monsters.length > 0) { // Only use combat utility in combat
+        if (board.monsters.length > 0) {
             for (const card of hand) {
                 const cardApCost = card.apCost || 1;
                 if (currentAp >= cardApCost && card.effect && card.effect.type === 'utility') {
-                    switch (card.name) {
-                        case 'Inspire Allies':
-                            if (partyMembers.length >= 2) { // Inspire if there's at least one other explorer
-                                return { action: 'useCard', cardId: card.id, apCost: cardApCost };
-                            }
-                            break;
-                        case 'Force Barrier':
-                            if (stats.currentHp < stats.maxHp * 0.75) {
-                                return { action: 'useCard', cardId: card.id, targetId: player.id, apCost: cardApCost };
-                            }
-                            break;
-                        case 'Immobilize Foe':
-                        case 'Sticky Webbing':
-                            // Target highest HP monster not already stunned/slowed
-                            const validTargets = board.monsters.filter(m => 
-                                !m.statusEffects || (!m.statusEffects.some(e => e.name === 'Stunned' || e.name === 'Slowed'))
-                            );
-                            if (validTargets.length > 0) {
-                                const target = validTargets.reduce((prev, curr) => (prev.currentHp > curr.currentHp) ? prev : curr);
-                                return { action: 'useCard', cardId: card.id, targetId: target.id, apCost: cardApCost };
-                            }
-                            break;
-                    }
+                    // Simple logic for now: use first available utility card
+                    const target = board.monsters[0];
+                    return { action: 'useCard', cardId: card.id, targetId: target.id, apCost: cardApCost };
                 }
             }
         }
 
-        // Priority 3: Attack
         const weapon = equipment.weapon;
         if (weapon && board.monsters.length > 0) {
-            const apCost = weapon.apCost; // Rely on card data for cost
+            const apCost = weapon.apCost; 
             if (apCost && currentAp >= apCost) {
                 let bestTarget = board.monsters.reduce((prev, curr) => (prev.currentHp < curr.currentHp) ? prev : curr);
                 if (bestTarget) {
@@ -585,13 +576,11 @@ class GameManager {
             }
         }
         
-        // Priority 4: Guard
         const guardApCost = gameData.actionCosts.guard;
         if (currentAp >= guardApCost && stats.currentHp < stats.maxHp * 0.75) {
             return { action: 'guard', apCost: guardApCost };
         }
         
-        // Priority 5: Rest (Out of Combat)
         if (board.monsters.length === 0) {
             const fullRestApCost = gameData.actionCosts.fullRest;
             if (currentAp >= fullRestApCost && healthDice.current >= 2 && stats.currentHp < stats.maxHp) {
@@ -603,7 +592,6 @@ class GameManager {
             }
         }
 
-        // Default: Wait
         return { action: 'wait', apCost: 0 };
     }
 
@@ -619,6 +607,10 @@ class GameManager {
             }
 
             await new Promise(res => setTimeout(res, 1500));
+
+            this._npcAutoEquip(room, room.players[player.id]);
+            this.emitGameState(room.id);
+            await new Promise(res => setTimeout(res, 1000));
 
             while (true) {
                 const currentPlayerState = room.players[player.id];
@@ -705,25 +697,9 @@ class GameManager {
                                     });
                                 }
                             } else if (effect.type === 'utility') {
-                                const statusToApply = effect.statusToApply || { name: effect.status, type: effect.statusType || 'utility_debuff', duration: effect.duration };
-                                statusToApply.bonuses = statusToApply.bonuses || {};
-                                
-                                const targetType = effect.target;
-                                if (targetType === 'self' || (targetType === 'any-explorer' && bestAction.targetId === player.id)) {
-                                    currentPlayerState.statusEffects.push(JSON.parse(JSON.stringify(statusToApply)));
-                                    message += `, bolstering their own defenses.`;
-                                } else if (targetType === 'any-monster') {
-                                    const monsterTarget = room.gameState.board.monsters.find(m => m.id === bestAction.targetId);
-                                    if (monsterTarget) {
-                                        if (!monsterTarget.statusEffects) monsterTarget.statusEffects = [];
-                                        monsterTarget.statusEffects.push(JSON.parse(JSON.stringify(statusToApply)));
-                                        message += `, targeting the ${monsterTarget.name}.`;
-                                    }
-                                } else if (targetType === 'all-explorers') {
-                                    Object.values(room.players).filter(p => p.role === 'Explorer').forEach(p => {
-                                        p.statusEffects.push(JSON.parse(JSON.stringify(statusToApply)));
-                                    });
-                                    message += `, inspiring the whole party!`;
+                                const monsterTarget = room.gameState.board.monsters.find(m => m.id === bestAction.targetId);
+                                if (monsterTarget) {
+                                     message += `, targeting the ${monsterTarget.name}.`;
                                 }
                             }
                             
@@ -808,10 +784,9 @@ class GameManager {
                     channel: 'game', type: 'system',
                     message: `The ${monster.name} is stunned and cannot act!`,
                 });
-                continue; // Skip this monster's turn
+                continue;
             }
 
-            // Target lowest HP explorer
             explorers.sort((a, b) => a.stats.currentHp - b.stats.currentHp);
             const target = explorers[0];
             if (!target) continue;
@@ -836,7 +811,7 @@ class GameManager {
         if (hit) {
             rawDamageRoll = this.rollDice(monster.effect.dice);
             if (isCrit) {
-                rawDamageRoll += this.rollDice(monster.effect.dice); // Double dice on crit
+                rawDamageRoll += this.rollDice(monster.effect.dice); 
             }
             totalDamage = rawDamageRoll; 
             
@@ -850,10 +825,9 @@ class GameManager {
             if (totalDamage > 0) {
                  target.stats.currentHp -= totalDamage;
             }
-            totalDamage += damageToShield; // For logging purposes, show total damage dealt
+            totalDamage += damageToShield; 
         }
         
-        // --- LOGGING ---
         let logMessageText = `The <b>${monster.name}</b> attacks ${target.name}! Roll: ${d20Roll} + ${monster.attackBonus} = <b>${totalRollToHit}</b> vs DC ${requiredRollToHit}. `;
         if (isCrit) logMessageText = `<b>CRITICAL HIT!</b> ` + logMessageText;
         else if (isFumble) logMessageText = `<b>FUMBLE!</b> ` + logMessageText;
@@ -903,25 +877,29 @@ class GameManager {
         this.emitGameState(room.id);
     }
 
-    scaleMonsterStats(monster, turnCount) {
-        const scaledMonster = JSON.parse(JSON.stringify(monster)); // Deep copy
+    scaleMonsterStats(monster, room) {
+        const { customSettings, turnCount } = room.gameState;
+        const scaledMonster = JSON.parse(JSON.stringify(monster)); 
 
-        const hpBonus = Math.floor(turnCount / 4) * 5; // +5 HP every 4 turns
-        const attackBonus = Math.floor(turnCount / 5); // +1 attack every 5 turns
-        const defenseBonus = Math.floor(turnCount / 6); // +1 defense every 6 turns
+        const scalingFactor = customSettings.scalingRate / 50; // Normalize slider from 0-100 to 0-2
+        const hpBonus = Math.floor(turnCount / 4) * 5 * scalingFactor;
+        const attackBonus = Math.floor(turnCount / 5) * scalingFactor;
+        const defenseBonus = Math.floor(turnCount / 6) * scalingFactor;
 
-        scaledMonster.maxHp += hpBonus;
+        scaledMonster.maxHp = Math.round(scaledMonster.maxHp + hpBonus);
         scaledMonster.currentHp = scaledMonster.maxHp;
-        scaledMonster.attackBonus += attackBonus;
-        scaledMonster.requiredRollToHit += defenseBonus;
+        scaledMonster.attackBonus = Math.round(scaledMonster.attackBonus + attackBonus);
+        scaledMonster.requiredRollToHit = Math.round(scaledMonster.requiredRollToHit + defenseBonus);
         
-        scaledMonster.name = `Empowered ${scaledMonster.name}`;
+        if (hpBonus > 0 || attackBonus > 0 || defenseBonus > 0) {
+            scaledMonster.name = `Empowered ${scaledMonster.name}`;
+        }
 
         return scaledMonster;
     }
 
     playMonster(room) {
-        const { turnCount, gameMode } = room.gameState;
+        const { turnCount } = room.gameState;
         
         let tier;
         if (turnCount < 10) tier = 'tier1';
@@ -930,18 +908,16 @@ class GameManager {
 
         let monsterDeck = room.gameState.decks.monster[tier];
         if (!monsterDeck || monsterDeck.length === 0) {
-            console.log(`Monster deck for ${tier} is empty.`);
-            // Fallback to lower tiers if empty
             if (tier === 'tier3' && room.gameState.decks.monster.tier2.length > 0) monsterDeck = room.gameState.decks.monster.tier2;
             else if (room.gameState.decks.monster.tier1.length > 0) monsterDeck = room.gameState.decks.monster.tier1;
-            else return; // No monsters left at all
+            else return;
         }
 
         let monsterCard = monsterDeck.pop();
         if (!monsterCard) return;
 
-        if (gameMode === 'Advanced') {
-            monsterCard = this.scaleMonsterStats(monsterCard, turnCount);
+        if (room.gameState.customSettings.enemyScaling) {
+            monsterCard = this.scaleMonsterStats(monsterCard, room);
         }
 
         monsterCard.currentHp = monsterCard.maxHp;
@@ -978,7 +954,6 @@ class GameManager {
         }
         
         if (player.isNpc && player.role === 'DM') {
-            // Process monster status effects at the start of the DM's turn
             if (room.gameState.board.monsters && room.gameState.board.monsters.length > 0) {
                 room.gameState.board.monsters.forEach(monster => {
                     if (monster.statusEffects && monster.statusEffects.length > 0) {
@@ -1001,9 +976,8 @@ class GameManager {
             }
             
             await this.handleMonsterTurns(room);
-            await new Promise(res => setTimeout(res, 1500)); // Pause after monster attacks
+            await new Promise(res => setTimeout(res, 1500));
 
-            // Regular threat generation if board is clear
             if (room.gameState.board.monsters.length === 0 && !room.gameState.skillChallenge.isActive) {
                 const roll = Math.random();
                 if (roll < 0.25 && room.gameState.decks.worldEvent.length > 0) {
@@ -1022,17 +996,10 @@ class GameManager {
                 } else if (roll >= 0.25 && roll < 0.5 && gameData.skillChallenges.length > 0) {
                      const challenge = gameData.skillChallenges[Math.floor(Math.random() * gameData.skillChallenges.length)];
                     room.gameState.skillChallenge = {
-                        isActive: true,
-                        challengeId: challenge.id,
-                        name: challenge.name,
-                        description: challenge.description,
-                        skill: challenge.skill,
-                        dc: challenge.dc,
-                        successes: 0,
-                        failures: 0,
-                        successThreshold: challenge.successThreshold,
-                        failureThreshold: challenge.failureThreshold,
-                        log: [],
+                        isActive: true, challengeId: challenge.id, name: challenge.name,
+                        description: challenge.description, skill: challenge.skill, dc: challenge.dc,
+                        successes: 0, failures: 0, successThreshold: challenge.successThreshold,
+                        failureThreshold: challenge.failureThreshold, log: [],
                     };
                     this.sendMessageToRoom(room.id, {
                         channel: 'game', type: 'system',
@@ -1043,13 +1010,7 @@ class GameManager {
                 }
             }
             
-            // --- DM ESCALATION LOGIC ---
-            const { turnCount } = room.gameState;
-            let escalationChance = 0;
-            if (turnCount >= 15) escalationChance = 0.75;
-            else if (turnCount >= 10) escalationChance = 0.50;
-            else if (turnCount >= 5) escalationChance = 0.25;
-
+            const escalationChance = room.gameState.customSettings.dungeonPressure / 100;
             if (Math.random() < escalationChance) {
                 this.sendMessageToRoom(room.id, {
                     channel: 'game', type: 'system',
@@ -1057,7 +1018,6 @@ class GameManager {
                 });
                  await new Promise(res => setTimeout(res, 1000));
                 
-                // 75% chance for a monster, 25% for a world event
                 if (Math.random() < 0.75) {
                     this.playMonster(room);
                 } else if (room.gameState.decks.worldEvent.length > 0) {
@@ -1075,7 +1035,6 @@ class GameManager {
                     }
                 }
             }
-
 
             this.emitGameState(roomId);
             
@@ -1141,13 +1100,12 @@ class GameManager {
             return socket.emit('actionError', 'Invalid attack parameters.');
         }
         
-        const apCost = weapon.apCost || 2; // Default to 2 for safety, data should have it
+        const apCost = weapon.apCost || 2; 
         if (player.currentAp < apCost) {
             return socket.emit('actionError', 'Not enough Action Points.');
         }
         player.currentAp -= apCost;
 
-        // Resolve attack by rolling a d20
         const d20Roll = Math.floor(Math.random() * 20) + 1;
         this._resolveAttack(room, {
             attackerId: player.id,
@@ -1185,9 +1143,9 @@ class GameManager {
         if (hit) {
             rawDamageRoll = this.rollDice(weapon.effect.dice);
             if (isCrit) {
-                rawDamageRoll += this.rollDice(weapon.effect.dice); // Double dice for base crit
+                rawDamageRoll += this.rollDice(weapon.effect.dice); 
                 if (weapon.effect.critBonusDice) {
-                    rawDamageRoll += this.rollDice(weapon.effect.critBonusDice); // Add special weapon crit damage
+                    rawDamageRoll += this.rollDice(weapon.effect.critBonusDice);
                 }
             }
             totalDamage = rawDamageRoll + player.stats.damageBonus;
@@ -1232,10 +1190,8 @@ class GameManager {
                 message: dialogue[Math.floor(Math.random() * dialogue.length)], isNarrative: true
             });
     
-            // --- MONSTER LOOT DROP LOGIC (CLASS-BASED) ---
-            const monsterTier = target.tier || 1;
-            const lootChances = { 1: 0.15, 2: 0.35, 3: 0.60 };
-            const lootChance = lootChances[monsterTier] || 0.15;
+            const { customSettings } = room.gameState;
+            const lootChance = customSettings.lootDropRate / 100;
     
             if (Math.random() < lootChance) {
                 const suitableTreasure = room.gameState.decks.treasure.filter(card =>
@@ -1246,14 +1202,13 @@ class GameManager {
                     const cardIndex = Math.floor(Math.random() * suitableTreasure.length);
                     let card = suitableTreasure[cardIndex];
     
-                    // Remove from main deck
                     const mainDeckIndex = room.gameState.decks.treasure.findIndex(c => c.id === card.id);
                     if (mainDeckIndex > -1) {
                         room.gameState.decks.treasure.splice(mainDeckIndex, 1);
                     }
     
                     if (card.type === 'Weapon' || card.type === 'Armor') {
-                        card = this.generateMagicalEquipment(card, room.gameState.turnCount, monsterTier);
+                        card = this.generateMagicalEquipment(card, room);
                     }
     
                     this._addCardToPlayerHand(room, player, card);
@@ -1268,22 +1223,21 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
-    generateMagicalEquipment(card, turnCount, monsterTier = 1) {
+    generateMagicalEquipment(card, room) {
+        const { customSettings, turnCount } = room.gameState;
         const newCard = JSON.parse(JSON.stringify(card)); // Deep copy
         
-        // Base chance + turn bonus + monster tier bonus
-        const magicChance = Math.min(0.1 + (turnCount * 0.02) + (monsterTier * 0.1), 0.9);
-        if (Math.random() > magicChance) return newCard; // Not magical this time
+        const magicChance = Math.min(customSettings.magicalItemChance / 100, 1.0);
+        if (Math.random() > magicChance) return newCard;
         
         let availablePrefixes = gameData.magicalAffixes.prefixes.filter(p => p.types.includes(newCard.type.toLowerCase()));
         let availableSuffixes = gameData.magicalAffixes.suffixes.filter(s => s.types.includes(newCard.type.toLowerCase()));
     
-        // Filter by combined power of turn count and monster tier
-        const powerLevel = Math.floor(turnCount / 10) + monsterTier; // Simple power score
-        if (powerLevel < 2) { // Early game, Tier 1 monsters
+        const powerLevel = Math.floor(turnCount / 10) + 1;
+        if (powerLevel < 2) { 
             availablePrefixes = availablePrefixes.filter(p => p.tier === 1);
             availableSuffixes = availableSuffixes.filter(s => s.tier === 1);
-        } else if (powerLevel < 4) { // Mid game, Tier 2 monsters
+        } else if (powerLevel < 4) { 
             availablePrefixes = availablePrefixes.filter(p => p.tier <= 2);
             availableSuffixes = availableSuffixes.filter(s => s.tier <= 2);
         }
@@ -1327,8 +1281,7 @@ class GameManager {
 
         player.pendingEventRoll = false;
         const roll = Math.floor(Math.random() * 20) + 1;
-        let outcome = 'none';
-        let cardOptions = [];
+        let outcome = { type: 'none', card: null, options: [] };
 
         if (roll > 10) {
             const eventTypeRoll = Math.random();
@@ -1336,9 +1289,8 @@ class GameManager {
                 !card.class || card.class.includes("Any") || card.class.includes(player.class)
             );
 
-            // Reduced chance for treasure to balance monster drops
-            if (eventTypeRoll < 0.20 && suitableTreasure.length > 0) { // 20% Treasure Draw
-                outcome = 'equipmentDraw';
+            if (eventTypeRoll < 0.20 && suitableTreasure.length > 0) { 
+                outcome.type = 'equipmentDraw';
                 
                 const cardIndex = Math.floor(Math.random() * suitableTreasure.length);
                 let card = suitableTreasure[cardIndex];
@@ -1346,9 +1298,10 @@ class GameManager {
                 if (mainDeckIndex > -1) room.gameState.decks.treasure.splice(mainDeckIndex, 1);
                 
                 if (card.type === 'Weapon' || card.type === 'Armor') {
-                    card = this.generateMagicalEquipment(card, room.gameState.turnCount);
+                    card = this.generateMagicalEquipment(card, room);
                 }
 
+                outcome.card = card;
                 const cardType = card.type.toLowerCase();
                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} found a ${card.name}!` });
 
@@ -1361,26 +1314,32 @@ class GameManager {
                 } else {
                     this._addCardToPlayerHand(room, player, card);
                 }
-            } else if (eventTypeRoll < 0.60 && room.gameState.decks.playerEvent.length >= 2) { // 40% Player Event
-                outcome = 'playerEvent';
+            } else if (eventTypeRoll < 0.60 && room.gameState.decks.playerEvent.length >= 2) { 
+                outcome.type = 'playerEvent';
                 const deck = room.gameState.decks.playerEvent;
-                cardOptions = [deck.pop(), deck.pop()];
-                player.pendingEventChoice = { outcome: 'playerEvent', options: cardOptions };
-            } else if (room.gameState.decks.partyEvent.length > 0) { // 40% Party Event
-                outcome = 'partyEvent';
+                outcome.options = [deck.pop(), deck.pop()];
+                player.pendingEventChoice = { outcome: 'playerEvent', options: outcome.options };
+            } else if (room.gameState.decks.partyEvent.length > 0) { 
+                outcome.type = 'partyEvent';
                 const eventCard = room.gameState.decks.partyEvent.pop();
+                outcome.card = eventCard;
                 this.resolvePartyEvent(room, eventCard);
-                room.gameState.decks.partyEvent.unshift(eventCard); // Return to bottom
+                room.gameState.decks.partyEvent.unshift(eventCard); 
             }
         }
         
         let logMessage = `<b>${player.name}</b> rolled a <b>${roll}</b> for their turn event. `;
-        if(outcome === 'none') logMessage += "Nothing happened."
-        else logMessage += `A ${outcome} occurred!`;
+        if(outcome.type === 'none') logMessage += "Nothing happened."
+        else logMessage += `A ${outcome.type} occurred!`;
         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessage });
 
+        socket.emit('eventRollResult', { roll, outcome });
+        
+        if (outcome.type === 'equipmentDraw' && outcome.card) {
+            const playerSocket = io.sockets.sockets.get(player.id);
+            if (playerSocket) playerSocket.emit('eventItemFound', outcome.card);
+        }
 
-        socket.emit('eventRollResult', { roll, outcome, cardOptions });
         this.emitGameState(room.id);
     }
     
@@ -1426,7 +1385,7 @@ class GameManager {
             player.stats = this.calculatePlayerStats(player);
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} equipped the new ${newCard.name} and moved ${currentItem.name} to their hand.` });
         } else { // 'keep'
-            this._addCardToPlayerHand(room, player, newCard); // Add to hand instead of returning to deck
+            this._addCardToPlayerHand(room, player, newCard); 
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} kept their ${currentItem.name} and stored the ${newCard.name}.` });
         }
 
@@ -1456,7 +1415,7 @@ class GameManager {
         }
         
         const otherCard = choice.options.find(c => c.id !== cardId);
-        if (otherCard) room.gameState.decks[choice.outcome].unshift(otherCard);
+        if (otherCard) room.gameState.decks.playerEvent.unshift(otherCard);
 
         player.pendingEventChoice = null;
         this.emitGameState(room.id);
@@ -1584,7 +1543,7 @@ class GameManager {
                 if (!challenge || !challenge.isActive) {
                     return socket.emit('actionError', 'There is no active skill challenge.');
                 }
-                if (player.currentAp < 1) { // Cost 1 AP
+                if (player.currentAp < 1) { 
                     return socket.emit('actionError', 'Not enough AP to contribute.');
                 }
                 player.currentAp -= 1;
@@ -1615,7 +1574,6 @@ class GameManager {
                 challenge.log.push(logText);
                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logText });
 
-                // Send detailed results back to the rolling player for animation
                 socket.emit('skillChallengeRollResult', { 
                     d20Roll, 
                     bonus: playerStat, 
@@ -1654,14 +1612,14 @@ class GameManager {
     
         const { newCard } = player.pendingItemSwap;
     
-        if (cardToDiscardId) { // Player chose a card from hand to discard
+        if (cardToDiscardId) { 
             const cardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
             if (cardIndex > -1) {
                 const discardedCard = player.hand[cardIndex];
-                player.hand.splice(cardIndex, 1, newCard); // Swap
+                player.hand.splice(cardIndex, 1, newCard);
                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> discarded ${discardedCard.name} to make room for ${newCard.name}.` });
             }
-        } else { // Player chose to discard the new item (cardToDiscardId is null)
+        } else { 
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> chose to discard the new ${newCard.name}.` });
         }
     
@@ -1685,7 +1643,6 @@ class GameManager {
         const peerIndex = room.voiceChatPeers.indexOf(socket.id);
         if (peerIndex > -1) {
             room.voiceChatPeers.splice(peerIndex, 1);
-            // Notify remaining peers that this one has left
             room.voiceChatPeers.forEach(peerId => io.to(peerId).emit('voice-peer-disconnect', { peerId: socket.id }));
         }
     }
@@ -1705,7 +1662,7 @@ class GameManager {
         const player = room.players[socket.id];
         if (!player) return;
     
-        this.handleLeaveVoice(socket); // Clean up voice chat connection
+        this.handleLeaveVoice(socket);
 
         if (room.gameState.phase === 'lobby') {
             delete room.players[socket.id];
@@ -1763,7 +1720,7 @@ class GameManager {
 const gameManager = new GameManager();
 
 io.on('connection', (socket) => {
-    socket.on('createRoom', (playerName) => gameManager.createRoom(socket, playerName));
+    socket.on('createRoom', (data) => gameManager.createRoom(socket, data));
     socket.on('joinRoom', (data) => gameManager.joinRoom(socket, data));
     socket.on('startGame', (data) => gameManager.startGame(socket, data));
     socket.on('chooseClass', (data) => gameManager.chooseClass(socket, data));
@@ -1789,7 +1746,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Voice Chat
     socket.on('join-voice', () => gameManager.handleJoinVoice(socket));
     socket.on('leave-voice', () => gameManager.handleLeaveVoice(socket));
     socket.on('voice-offer', (data) => gameManager.relayVoice(socket, 'voice-offer', data));

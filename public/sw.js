@@ -2,7 +2,7 @@
 // It handles caching of assets for offline functionality and manages the update process
 // to ensure users seamlessly receive new versions of the app.
 
-const CACHE_NAME = 'quest-and-chronicle-v4.5.25-the-new-war-reborn';
+const CACHE_NAME = 'quest-and-chronicle-v4.5.26-the-new-war-clarity';
 const urlsToCache = [
   '/',
   '/index.html',

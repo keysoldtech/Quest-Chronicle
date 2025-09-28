@@ -12,7 +12,7 @@
     --color-bg-dark: #12181b;
     --color-surface: #1a2226;
     --color-surface-light: #243036;
-    --color-border: #4a4a4a; /* Darkened for better contrast on textures */
+    --color-border: #4a4a4a; 
     --color-text-primary: #e8eff3;
     --color-text-secondary: #a7b5be;
     
@@ -26,26 +26,25 @@
     --color-danger-hover: #e45f6d;
     --color-success: #198754;
     --color-success-hover: #21b06c;
-    --color-dm: #9333ea; /* Purple for DM */
+    --color-dm: #9333ea;
     --color-glow: rgba(255, 193, 7, 0.7);
 
     /* Stat Colors */
-    --stat-color-hp: #f44336;          /* Red */
-    --stat-color-ap: #2196f3;          /* Blue */
-    --stat-color-damage: #ff9800;      /* Orange */
-    --stat-color-shield: #9e9e9e;      /* Grey */
-    --stat-color-str: #e57373;          /* Light Red */
-    --stat-color-dex: #81c784;          /* Light Green */
-    --stat-color-con: #a1887f;          /* Brown */
-    --stat-color-int: #7986cb;          /* Indigo */
-    --stat-color-wis: #ba68c8;          /* Purple */
-    --stat-color-cha: #ffd54f;          /* Amber */
+    --stat-color-hp: #f44336;
+    --stat-color-ap: #2196f3;
+    --stat-color-damage: #ff9800;
+    --stat-color-shield: #9e9e9e;
+    --stat-color-str: #e57373;
+    --stat-color-dex: #81c784;
+    --stat-color-con: #a1887f;
+    --stat-color-int: #7986cb;
+    --stat-color-wis: #ba68c8;
+    --stat-color-cha: #ffd54f;
 
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
     --shadow-md: 0 4px 6px rgba(0,0,0,0.25);
     --shadow-lg: 0 10px 15px rgba(0,0,0,0.3);
 
-    /* Textures */
     --bg-texture: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100" height="100" filter="url(%23n)" opacity="0.2"/></svg>');
     --panel-texture: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><filter id="f"><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="3" stitchTiles="stitch" /></filter><rect width="80" height="80" filter="url(%23f)" opacity=".1" /></svg>');
 }
@@ -58,24 +57,37 @@
     -moz-osx-font-smoothing: grayscale;
 }
 
+html, body {
+    height: 100%;
+    overflow: hidden; /* Lock the viewport */
+}
+
 body {
     font-family: var(--font-body);
     background-color: var(--color-bg-dark);
-    background-image: var(--bg-texture);
-    background-blend-mode: overlay;
     color: var(--color-text-primary);
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100vh;
-    overflow: hidden;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5); /* Universal text shadow for readability */
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
 }
 
-body.in-game {
-    display: block;
-    height: 100vh;
-    overflow: hidden;
+.background-animation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background-image: var(--bg-texture);
+    background-blend-mode: overlay;
+    background-color: var(--color-bg-dark);
+    animation: background-pan 60s linear infinite;
+}
+
+@keyframes background-pan {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 200%; }
 }
 
 .hidden { display: none !important; }
@@ -149,11 +161,14 @@ body.in-game {
     align-items: center;
     gap: 1.5rem;
     padding: 2rem;
-    background-color: rgba(0,0,0,0.3);
+    background-color: rgba(10, 10, 10, 0.7);
+    backdrop-filter: blur(5px);
     border-radius: 8px;
+    border: 1px solid var(--color-border);
     box-shadow: var(--shadow-lg);
-    max-width: 500px;
-    width: 100%;
+    max-width: 550px;
+    width: 95%;
+    text-align: center;
 }
 
 .input-group {
@@ -161,11 +176,7 @@ body.in-game {
     flex-direction: column;
     width: 100%;
     gap: 0.5rem;
-}
-
-.input-group label {
-    font-weight: 700;
-    color: var(--color-text-secondary);
+    text-align: left;
 }
 
 .input-field {
@@ -224,6 +235,55 @@ body.in-game {
 .join-group .input-field { flex-grow: 1; }
 .join-group #roomIdInput { text-transform: uppercase; }
 
+/* --- CUSTOM SETTINGS --- */
+.custom-settings-panel {
+    width: 100%;
+    padding: 1rem;
+    margin-top: -0.5rem;
+    background: rgba(0,0,0,0.2);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.slider-group, .toggle-group { text-align: left; }
+.slider {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    background: var(--color-bg-dark);
+    outline: none;
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+}
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 20px; height: 20px;
+    background: var(--color-special);
+    cursor: pointer;
+    border-radius: 50%;
+    border: 2px solid var(--color-bg-dark);
+}
+.slider::-moz-range-thumb {
+    width: 20px; height: 20px;
+    background: var(--color-special);
+    cursor: pointer;
+    border-radius: 50%;
+    border: 2px solid var(--color-bg-dark);
+}
+.toggle-group { display: flex; justify-content: space-between; align-items: center; }
+
+.lobby-settings-display {
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+.lobby-settings-display h4 { font-family: var(--font-title); color: var(--color-special); }
+.lobby-settings-display ul { list-style: none; padding-left: 0; font-size: 0.9rem; }
+
+
 /* --- GENERAL BUTTON STYLES --- */
 .btn {
     font-family: var(--font-body);
@@ -259,8 +319,10 @@ body.in-game {
 
 /* --- GAME AREA LAYOUT --- */
 .game-area {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
     width: 100%;
-    height: 100vh;
+    height: 100%;
 }
 
 .game-area-desktop {
@@ -287,6 +349,8 @@ body.in-game {
     border-image: url("data:image/svg+xml,%3csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100' height='100' fill='none' stroke='%238c6f44' stroke-width='4'/%3e%3c/svg%3e") 10;
     border-image-outset: 2px;
     box-shadow: inset 0 0 15px rgba(0,0,0,0.5), 0 5px 15px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
 }
 
 .game-header { grid-area: header; display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background: rgba(0,0,0,0.2); border-bottom: 2px solid var(--color-border); }
@@ -297,11 +361,10 @@ body.in-game {
 
 .players-panel { grid-area: players; }
 .character-panel { grid-area: character; }
-.board-panel { grid-area: board; display: flex; flex-direction: column; }
-.info-tabs-panel { grid-area: info; display: flex; flex-direction: column; }
+.board-panel { grid-area: board; }
+.info-tabs-panel { grid-area: info; }
 .hand-panel { grid-area: hand; }
 
-/* Player List */
 .player-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
 .player-list-item {
     background: var(--color-surface-light);
@@ -321,40 +384,36 @@ body.in-game {
 .player-hp { font-size: 0.9rem; color: var(--color-text-secondary); }
 .npc-tag { color: var(--color-special); font-weight: normal; font-size: 0.8em; }
 
-/* Player Stats Panel */
 .player-stats {
     display: grid;
-    grid-template-columns: auto 1fr auto 1fr auto 1fr;
+    grid-template-columns: auto 1fr;
     gap: 0.5rem 1rem;
     align-items: center;
 }
 .player-stats span { font-size: 1.1rem; }
 .player-stats .stat-value { font-weight: 700; }
 .shield-hp-value { color: var(--color-success); }
-.stat-bonus { font-size: 0.9rem; color: var(--color-success); margin-left: 0.5rem; }
 
-/* Hand & Equipped Panel */
-.hand-and-equipped-container { display: flex; flex-direction: column; height: 100%; }
+.hand-and-equipped-container { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .equipped-items-container { margin-bottom: 1rem; }
-.player-hand-container { flex-grow: 1; }
+.player-hand-container { flex-grow: 1; overflow: hidden; }
 .card-container-row {
     display: flex;
     gap: 0.75rem;
     overflow-x: auto;
-    padding-bottom: 0.5rem; /* For scrollbar */
+    padding-bottom: 0.75rem;
 }
 
-/* Board Panel */
 #board-cards {
     flex-grow: 1;
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
     align-content: flex-start;
+    overflow-y: auto;
 }
 
-/* Info Tabs */
-.tab-buttons { display: flex; border-bottom: 2px solid var(--color-border); margin-bottom: 1rem; }
+.tab-buttons { display: flex; border-bottom: 2px solid var(--color-border); margin-bottom: 1rem; flex-shrink: 0;}
 .tab-btn {
     flex: 1;
     background: none;
@@ -379,7 +438,7 @@ body.in-game {
 }
 .tab-content { display: none; flex-grow: 1; overflow-y: auto; }
 .tab-content.active { display: flex; flex-direction: column; }
-.log-content-area { display: flex; flex-direction: column; gap: 0.5rem; flex-grow: 1; overflow-y: auto; }
+.log-content-area { display: flex; flex-direction: column; gap: 0.5rem; flex-grow: 1; overflow-y: auto; padding-right: 0.5rem; }
 
 /* --- CARD STYLES --- */
 .card {
@@ -396,11 +455,11 @@ body.in-game {
     box-shadow: var(--shadow-md);
     transition: all 0.2s ease-in-out;
     position: relative;
-    overflow: visible; /* Ensure holograms are not clipped */
+    overflow: visible; 
 }
 .card:hover { transform: translateY(-5px) scale(1.05); border-color: var(--color-primary); }
-.card-content { flex-grow: 1; }
-.card-title { font-size: 1rem; margin-bottom: 0.5rem; word-break: break-word; }
+.card-content { flex-grow: 1; overflow: hidden; }
+.card-title { font-size: 1rem; margin-bottom: 0.5rem; word-wrap: break-word; }
 .magical-item { color: var(--color-special); text-shadow: 0 0 5px var(--color-special); }
 .card-effect { font-size: 0.8rem; color: var(--color-text-secondary); }
 .card-footer { border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
@@ -427,14 +486,13 @@ body.in-game {
 
 .card.targetable { cursor: pointer; border-color: var(--color-danger); }
 .card.targetable:hover { border-color: var(--color-danger-hover); box-shadow: 0 0 10px var(--color-danger); }
-.card.selected-target { border-color: var(--color-special); box-shadow: 0 0 15px var(--color-glow); }
 .card.attackable-weapon { cursor: pointer; border-style: dashed; border-color: var(--color-success); }
 .card.selected-weapon { border-style: solid; border-color: var(--color-special); box-shadow: 0 0 15px var(--color-glow); }
 
 /* --- HOLOGRAM & HEALTH BAR --- */
 .hologram-container {
     position: absolute;
-    top: -90px; /* Position above the card */
+    top: -90px;
     left: 50%;
     transform: translateX(-50%);
     width: 120px;
@@ -443,9 +501,8 @@ body.in-game {
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    pointer-events: none; /* Allows clicks to pass through to the card */
+    pointer-events: none;
 }
-
 .monster-hologram {
     width: 60px;
     height: 60px;
@@ -453,7 +510,7 @@ body.in-game {
     filter: drop-shadow(0 0 5px #0ff) drop-shadow(0 0 10px #0ff);
     animation: hologram-flicker 3s infinite linear, hologram-bob 4s infinite ease-in-out;
 }
-.monster-hologram::after { /* Scan lines */
+.monster-hologram::after {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -461,8 +518,6 @@ body.in-game {
     background-size: 100% 5px;
     animation: scan-lines 2s infinite linear;
 }
-
-/* Hologram Shapes */
 .hologram-humanoid { background-color: #0ff; clip-path: polygon(50% 0%, 60% 35%, 100% 35%, 100% 55%, 60% 55%, 75% 100%, 25% 100%, 40% 55%, 0 55%, 0 35%, 40% 35%); }
 .hologram-beast { background-color: #0ff; clip-path: polygon(20% 40%, 0% 60%, 20% 80%, 30% 60%, 70% 60%, 80% 80%, 100% 60%, 80% 40%, 60% 40%, 50% 20%, 40% 40%); }
 .hologram-undead { background-color: #0ff; clip-path: polygon(50% 0, 100% 50%, 80% 100%, 20% 100%, 0 50%); }
@@ -535,9 +590,8 @@ body.in-game {
     100% { transform: translate(-50%, -70%) scale(1.5); opacity: 0; }
 }
 
-
-/* Class Selection */
-.class-cards-container { display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; }
+/* --- CLASS SELECTION --- */
+.class-cards-container { display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; flex-grow: 1;}
 .class-card {
     background-color: var(--color-surface-light);
     padding: 1rem;
@@ -550,7 +604,7 @@ body.in-game {
 .class-card.selected { border-color: var(--color-special); box-shadow: 0 0 8px var(--color-glow); }
 .class-card-title { font-family: var(--font-title); font-size: 1.25rem; }
 .class-card-desc { font-style: italic; color: var(--color-text-secondary); margin: 0.5rem 0; }
-.class-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem 1rem; font-size: 0.9rem; }
+.class-card-stats { display: grid; grid-template-columns: repeat(3, auto 1fr); gap: 0.25rem 1rem; font-size: 0.9rem; }
 .class-confirm-container { padding-top: 1rem; border-top: 1px solid var(--color-border); margin-top: 1rem; }
 #confirm-class-btn { width: 100%; }
 
@@ -642,6 +696,7 @@ body.in-game {
     justify-content: center;
     z-index: 1000;
     backdrop-filter: blur(5px);
+    padding: 1rem;
 }
 .modal-content {
     background-color: var(--color-surface);
@@ -658,7 +713,6 @@ body.in-game {
 .modal-content textarea { width: 100%; min-height: 80px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 1rem; }
 
-/* Fixed Action Bar */
 .fixed-action-bar {
     position: fixed;
     bottom: 1rem;
@@ -674,7 +728,6 @@ body.in-game {
     border: 2px solid var(--color-border);
 }
 
-/* "Your Turn" Popup */
 .your-turn-popup {
     position: fixed;
     top: -100px;
@@ -692,7 +745,6 @@ body.in-game {
 }
 .your-turn-popup:not(.hidden) { top: 0; }
 
-/* Dice Roll Overlay */
 #dice-roll-overlay.modal-overlay { background-color: rgba(0,0,0,0.5); }
 .dice-roll-content { text-align: center; }
 .dice-scene { perspective: 1000px; height: 120px; display: flex; align-items: center; justify-content: center; margin: 1rem 0; }
@@ -717,7 +769,6 @@ body.in-game {
     100% { transform: rotateX(1080deg) rotateY(720deg) rotateZ(1440deg); }
 }
 
-/* D6 Cube */
 .d6 { width: 100px; height: 100px; }
 .d6 .face { width: 100px; height: 100px; font-size: 40px; }
 .d6 .face-1 { transform: rotateY(0deg) translateZ(50px); }
@@ -733,15 +784,11 @@ body.in-game {
 .d6.stop-on-5 { transform: rotateX(-90deg); }
 .d6.stop-on-6 { transform: rotateX(90deg); }
 
-
-/* D8 Octahedron - REWRITTEN */
 .d8 { width: 100px; height: 100px; }
 .d8 .face {
-    width: 86.6px; /* for side length of 100 */
-    height: 75px;
+    width: 86.6px; height: 75px;
     clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-    font-size: 24px;
-    padding-top: 15px; /* Adjust number position */
+    font-size: 24px; padding-top: 15px;
 }
 .d8 .face-1 { transform: rotateY(0deg) rotateX(54.735deg) translateZ(40.82px); }
 .d8 .face-2 { transform: rotateY(90deg) rotateX(54.735deg) translateZ(40.82px); }
@@ -753,19 +800,13 @@ body.in-game {
 .d8 .face-8 { transform: rotateY(315deg) rotateX(-54.735deg) translateZ(40.82px) rotateZ(180deg); }
 .d8.stop-on-8 { transform: rotateX(35.26deg) rotateY(45deg); }
 .d8.stop-on-1 { transform: rotateX(-144.74deg) rotateY(135deg); }
-.d8.stop-on-3 { transform: rotateX(35.26deg) rotateY(-45deg); }
 
-
-/* D20 Icosahedron - REWRITTEN */
 .d20 { width: 100px; height: 100px; }
 .d20 .face {
-    width: 86.6px;
-    height: 75px;
+    width: 86.6px; height: 75px;
     clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-    font-size: 20px;
-    padding-top: 15px; /* Adjust number position */
+    font-size: 20px; padding-top: 15px;
 }
-/* These transforms build an icosahedron correctly */
 .d20 .face-1  { transform: rotateY(0deg)    rotateX(26.565deg) translateZ(68.8px); }
 .d20 .face-2  { transform: rotateY(72deg)   rotateX(26.565deg) translateZ(68.8px); }
 .d20 .face-3  { transform: rotateY(144deg)  rotateX(26.565deg) translateZ(68.8px); }
@@ -786,10 +827,8 @@ body.in-game {
 .d20 .face-18 { transform: rotateY(180deg)  rotateX(-153.435deg) translateZ(68.8px) rotateZ(180deg); }
 .d20 .face-19 { transform: rotateY(252deg)  rotateX(-153.435deg) translateZ(68.8px) rotateZ(180deg); }
 .d20 .face-20 { transform: rotateY(324deg)  rotateX(-153.435deg) translateZ(68.8px) rotateZ(180deg); }
-
 .d20.stop-on-20 { transform: rotateX(-153.435deg) rotateY(-324deg); }
 .d20.stop-on-1 { transform: rotateX(-26.565deg) rotateY(0deg); }
-
 
 .dice-roll-result-container {
     margin-top: 1.5rem;
@@ -814,39 +853,17 @@ body.in-game {
 .result-line.hit { color: var(--color-success); }
 .result-line.miss { color: var(--color-danger); }
 
-/* Event Overlay */
-.event-overlay { background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); }
-
-/* Equipment Choice Modal */
-.equipment-choice-container {
+.equipment-choice-container, .item-swap-container {
     display: flex;
     justify-content: space-around;
     gap: 1rem;
     margin: 1.5rem 0;
 }
-.equipment-choice-item {
-    text-align: center;
-}
+.equipment-choice-item, .item-swap-column { text-align: center; flex: 1; }
+#swap-hand-display .card { cursor: pointer; }
+#swap-hand-display .card:hover { border-color: var(--color-danger); box-shadow: 0 0 10px var(--color-danger); }
+.item-found-display { display: flex; justify-content: center; margin: 1rem 0; }
 
-/* Item Swap Modal */
-.item-swap-container {
-    display: flex;
-    gap: 1.5rem;
-    margin-top: 1rem;
-}
-.item-swap-column {
-    flex: 1;
-}
-#swap-hand-display .card {
-    cursor: pointer;
-}
-#swap-hand-display .card:hover {
-    border-color: var(--color-danger);
-    box-shadow: 0 0 10px var(--color-danger);
-}
-
-
-/* Toast Notification */
 .toast-notification {
     position: fixed;
     top: 20px;
@@ -864,6 +881,10 @@ body.in-game {
 }
 #toast-close-btn { background: none; border: none; color: var(--color-text-secondary); font-size: 1.5rem; cursor: pointer; }
 
+/* --- TUTORIAL & HELP --- */
+.tutorial-navigation { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
+#help-content h3 { font-family: var(--font-title); color: var(--color-special); margin-top: 1rem; }
+#help-content p { margin-bottom: 0.5rem; }
 
 /* --- MOBILE STYLES --- */
 .game-area-mobile { display: none; }
@@ -872,7 +893,7 @@ body.in-game {
     .game-area-mobile {
         display: flex;
         flex-direction: column;
-        height: 100vh;
+        height: 100%; /* Use 100% to fill the fixed game-area container */
         width: 100%;
     }
     .mobile-header {
