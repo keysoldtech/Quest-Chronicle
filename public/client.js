@@ -18,17 +18,8 @@
 //     - 3.2. renderPlayerList()
 //     - 3.3. renderClassAbilityCard()
 //     - 3.4. renderGameState() (Main render function)
-// 4.  UI EVENT LISTENERS
-//     - 4.1. Lobby & Game Setup
-//     - 4.2. Turn & Action Controls
-//     - 4.3. Navigation (Mobile & Desktop)
-//     - 4.4. Chat & Modals
-//     - 4.5. Menu & Custom Settings
-//     - 4.6. Help & Tutorial
+// 4.  UI EVENT LISTENERS (ATTACHED VIA DOMContentLoaded)
 // 5.  SOCKET.IO EVENT HANDLERS
-//     - 5.1. Connection & Room Events
-//     - 5.2. Game State & Info
-//     - 5.3. Action/Animation Events
 // 6.  VOICE CHAT (WebRTC) LOGIC
 // 7.  DICE SPINNER & ANIMATION LOGIC
 // 8.  INITIALIZATION & PWA SERVICE WORKER
@@ -1058,356 +1049,6 @@ function renderGameState(room) {
     });
 }
 
-// --- 4. UI EVENT LISTENERS ---
-
-// --- 4.1. Lobby & Game Setup ---
-createRoomBtn.addEventListener('click', () => {
-    const playerName = playerNameInput.value.trim();
-    if (!playerName) {
-        return showToast('Please enter a player name.');
-    }
-    
-    const checkedRadio = document.querySelector('input[name="gameMode"]:checked');
-    if (!checkedRadio) {
-        return showToast('Please select a game mode.');
-    }
-    const gameMode = checkedRadio.value;
-    
-    let customSettings = {};
-    if (gameMode === 'Beginner') {
-        customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50 };
-    } else if (gameMode === 'Advanced') {
-        customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60 };
-    } else { // Custom
-        customSettings = {
-            dungeonPressure: parseInt(get('dungeon-pressure').value, 10),
-            lootDropRate: parseInt(get('loot-drop-rate').value, 10),
-            magicalItemChance: parseInt(get('magical-item-chance').value, 10),
-            maxHandSize: parseInt(get('max-hand-size').value, 10),
-            enemyScaling: get('enemy-scaling').checked,
-            scalingRate: parseInt(get('scaling-rate').value, 10),
-        };
-    }
-
-    socket.emit('createRoom', { playerName, gameMode, customSettings });
-});
-joinRoomBtn.addEventListener('click', () => {
-    const playerName = playerNameInput.value.trim();
-    const roomId = roomIdInput.value.trim().toUpperCase();
-    if (playerName && roomId) {
-        socket.emit('joinRoom', { roomId, playerName });
-    } else {
-        showToast('Please enter a player name and a room code.');
-    }
-});
-
-[startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => {
-    const selectedMode = document.querySelector('input[name="gameMode"]:checked').value;
-     let customSettings = {};
-    if (selectedMode === 'Beginner') {
-        customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50 };
-    } else if (selectedMode === 'Advanced') {
-        customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60 };
-    } else { // Custom
-        customSettings = {
-            dungeonPressure: parseInt(get('dungeon-pressure').value, 10),
-            lootDropRate: parseInt(get('loot-drop-rate').value, 10),
-            magicalItemChance: parseInt(get('magical-item-chance').value, 10),
-            maxHandSize: parseInt(get('max-hand-size').value, 10),
-            enemyScaling: get('enemy-scaling').checked,
-            scalingRate: parseInt(get('scaling-rate').value, 10),
-        };
-    }
-    socket.emit('startGame', { gameMode: selectedMode, customSettings });
-}));
-[confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
-     if (tempSelectedClassId) {
-        socket.emit('chooseClass', { classId: tempSelectedClassId });
-        btn.disabled = true;
-        btn.textContent = 'Confirmed!';
-    }
-}));
-
-// --- 4.2. Turn & Action Controls ---
-[actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => {
-    socket.emit('endTurn');
-}));
-
-[actionGuardBtn, mobileActionGuardBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
-actionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
-actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
-mobileActionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
-mobileActionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
-
-dmPlayMonsterBtn.addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
-
-// --- 4.3. Navigation (Mobile & Desktop) ---
-mobileBottomNav.addEventListener('click', (e) => {
-    const navBtn = e.target.closest('.nav-btn');
-    if (!navBtn || !navBtn.dataset.screen) return;
-
-    mobileBottomNav.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-    navBtn.classList.add('active');
-    navBtn.classList.remove('highlight');
-
-    const screenId = `mobile-screen-${navBtn.dataset.screen}`;
-    document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active'));
-    get(screenId).classList.add('active');
-});
-
-desktopTabButtons.forEach(button => {
-    button.addEventListener('click', () => {
-        desktopTabButtons.forEach(btn => btn.classList.remove('active'));
-        button.classList.add('active');
-        button.classList.remove('highlight');
-
-        document.querySelectorAll('.game-area-desktop .tab-content').forEach(content => {
-            content.classList.remove('active');
-        });
-        get(button.dataset.tab).classList.add('active');
-    });
-});
-
-// --- 4.4. Chat & Modals ---
-chatToggleBtn.addEventListener('click', () => {
-    chatOverlay.classList.toggle('hidden');
-    menuDropdown.classList.add('hidden');
-    menuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
-});
-chatCloseBtn.addEventListener('click', () => chatOverlay.classList.add('hidden'));
-chatForm.addEventListener('submit', (e) => { 
-    e.preventDefault();
-    const message = chatInput.value.trim();
-    const channel = chatChannel.value;
-    if (message) {
-        socket.emit('sendMessage', { channel, message });
-        chatInput.value = '';
-    }
-});
-mobileChatForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const message = mobileChatInput.value.trim();
-    const channel = mobileChatChannel.value;
-    if (message) {
-        socket.emit('sendMessage', { channel, message });
-        mobileChatInput.value = '';
-    }
-});
-[leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.addEventListener('click', () => {
-     if (confirm("Are you sure you want to leave? Your character will be controlled by an NPC.")) {
-        window.location.reload();
-    }
-}));
-endTurnConfirmBtn.addEventListener('click', () => {
-    socket.emit('endTurn');
-    endTurnConfirmModal.classList.add('hidden');
-    finishModal();
-});
-endTurnCancelBtn.addEventListener('click', () => {
-    endTurnConfirmModal.classList.add('hidden');
-    finishModal();
-});
-
-narrativeConfirmBtn.addEventListener('click', () => {
-    let narrativeText = narrativeInput.value.trim();
-    
-    if (narrativeText === "") {
-        narrativeText = generate_random_attack_description();
-    }
-
-    if (pendingActionData) {
-        socket.emit('playerAction', { ...pendingActionData, narrative: narrativeText });
-        closeNarrativeModal();
-    }
-});
-
-narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
-
-eventRollBtn.onclick = () => {
-    socket.emit('rollForEvent');
-    eventRollBtn.classList.add('hidden');
-    eventOverlay.classList.add('hidden');
-    finishModal();
-};
-noApCloseBtn.addEventListener('click', () => {
-    noApModal.classList.add('hidden');
-    finishModal();
-});
-worldEventSaveRollBtn.addEventListener('click', () => {
-    socket.emit('rollForWorldEventSave');
-    worldEventSaveRollBtn.classList.add('hidden');
-});
-
-document.body.addEventListener('click', (e) => {
-    if (currentSkipHandler && !e.target.closest('#skip-popup-btn')) {
-        skipPopupBtn.classList.remove('hidden');
-    }
-});
-skipPopupBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (currentSkipHandler) {
-        currentSkipHandler();
-    }
-});
-toastCloseBtn.addEventListener('click', () => {
-    clearTimeout(toastTimeout);
-    toastNotification.classList.add('hidden');
-});
-
-// SKILL CHALLENGE LISTENERS
-skillChallengeCloseBtn.addEventListener('click', () => {
-    skillChallengeOverlay.classList.add('hidden');
-});
-
-function openItemSelectModal() {
-    selectedItemIdForChallenge = null;
-    itemSelectContainer.innerHTML = '';
-    const allItems = [...myPlayerInfo.hand, ...Object.values(myPlayerInfo.equipment).filter(i => i)];
-    if (allItems.length === 0) {
-        itemSelectContainer.innerHTML = `<p class="empty-pool-text">You have no items to use.</p>`;
-    } else {
-        allItems.forEach(item => {
-            const cardEl = createCardElement(item);
-            cardEl.onclick = () => {
-                selectedItemIdForChallenge = (selectedItemIdForChallenge === item.id) ? null : item.id;
-                itemSelectContainer.querySelectorAll('.card').forEach(c => c.classList.remove('selected-item'));
-                if (selectedItemIdForChallenge === item.id) {
-                    cardEl.classList.add('selected-item');
-                }
-            };
-            itemSelectContainer.appendChild(cardEl);
-        });
-    }
-    itemSelectModal.classList.remove('hidden');
-}
-
-[actionSkillChallengeBtn, mobileActionSkillChallengeBtn].forEach(btn => {
-    btn.addEventListener('click', openItemSelectModal);
-});
-
-itemSelectCancelBtn.addEventListener('click', () => {
-    itemSelectModal.classList.add('hidden');
-    selectedItemIdForChallenge = null;
-});
-
-itemSelectConfirmBtn.addEventListener('click', () => {
-    socket.emit('playerAction', {
-        action: 'contributeToSkillChallenge',
-        itemId: selectedItemIdForChallenge
-    });
-    itemSelectModal.classList.add('hidden');
-    selectedItemIdForChallenge = null;
-});
-
-// Equipment & Item Modals
-keepCurrentBtn.addEventListener('click', () => {
-    if (myPlayerInfo.pendingEquipmentChoice) {
-        socket.emit('resolveEquipmentChoice', { choice: 'keep', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id });
-        equipmentChoiceModal.classList.add('hidden');
-        finishModal();
-    }
-});
-equipNewBtn.addEventListener('click', () => {
-     if (myPlayerInfo.pendingEquipmentChoice) {
-        socket.emit('resolveEquipmentChoice', { choice: 'swap', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id });
-        equipmentChoiceModal.classList.add('hidden');
-        finishModal();
-    }
-});
-discardNewItemBtn.addEventListener('click', () => {
-    socket.emit('resolveItemSwap', { cardToDiscardId: null });
-    itemSwapModal.classList.add('hidden');
-    finishModal();
-});
-itemFoundCloseBtn.addEventListener('click', () => {
-    itemFoundModal.classList.add('hidden');
-    finishModal();
-});
-
-// --- 4.5. Menu & Custom Settings ---
-document.querySelectorAll('.slider').forEach(slider => {
-    const valueSpan = get(`${slider.id}-value`);
-    if (valueSpan) {
-        slider.addEventListener('input', () => {
-            valueSpan.textContent = slider.value;
-        });
-    }
-});
-
-get('enemy-scaling').addEventListener('change', (e) => {
-    get('scaling-rate-group').classList.toggle('hidden', !e.target.checked);
-});
-
-// --- 4.6. Help & Tutorial ---
-const tutorialContent = [
-    { title: "Welcome to Quest & Chronicle!", content: "<p>This is a quick guide to get you started. On your turn, you'll gain <strong>Action Points (AP)</strong> based on your class and gear. Use them wisely!</p><p>Your primary goal is to work with your party to defeat monsters and overcome challenges thrown at you by the Dungeon Master.</p>" },
-    { title: "Your Turn", content: "<p>At the start of your turn, you'll get to roll a <strong>d20</strong> for a random event. This could lead to finding new items, special player events, or nothing at all.</p><p>After that, you can spend your AP on actions. The main actions are attacking, guarding, or resting to heal.</p>" },
-    { title: "Combat & Abilities", content: "<p>To attack, first click your <strong>equipped weapon</strong>, then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Your <strong>Class Ability</strong> is a powerful, unique skill. Check the Character tab to see its description and cost, and use it to turn the tide of battle!</p>" },
-    { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, and items. Click an equippable item in your hand to equip it.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
-];
-let currentTutorialPage = 0;
-
-function showTutorial() {
-    tutorialModal.classList.remove('hidden');
-    renderTutorialPage();
-}
-function renderTutorialPage() {
-    const page = tutorialContent[currentTutorialPage];
-    get('tutorial-content').innerHTML = `<h2>${page.title}</h2>${page.content}`;
-    get('tutorial-page-indicator').textContent = `${currentTutorialPage + 1} / ${tutorialContent.length}`;
-    get('tutorial-prev-btn').disabled = currentTutorialPage === 0;
-    get('tutorial-next-btn').textContent = currentTutorialPage === tutorialContent.length - 1 ? "Finish" : "Next";
-}
-function closeTutorial() {
-    tutorialModal.classList.add('hidden');
-    localStorage.setItem('tutorialCompleted', 'true');
-}
-get('tutorial-next-btn').addEventListener('click', () => {
-    if (currentTutorialPage < tutorialContent.length - 1) {
-        currentTutorialPage++;
-        renderTutorialPage();
-    } else {
-        closeTutorial();
-    }
-});
-get('tutorial-prev-btn').addEventListener('click', () => {
-    if (currentTutorialPage > 0) {
-        currentTutorialPage--;
-        renderTutorialPage();
-    }
-});
-get('tutorial-skip-btn').addEventListener('click', closeTutorial);
-
-const helpContentHTML = `
-    <h3>Core Mechanics</h3>
-    <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or using abilities, cost AP. Your total AP is determined by your class and equipment.</p>
-    <p><strong>Health (HP):</strong> Your life force. If it reaches 0, you fall but can get back up by spending a Life. If you're out of Lives, you're out of the game!</p>
-    <p><strong>Dice Rolls:</strong> Most actions are resolved with a d20 roll. To succeed, you usually need to roll a number that meets or exceeds a target's Defense Class (DC) or Armor Class (AC).</p>
-
-    <h3>Player Stats</h3>
-    <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit.</p>
-    <p><strong>Shield Bonus:</strong> Your Armor Class (AC). Monsters must roll higher than this number to hit you.</p>
-    <p><strong>Health Dice:</strong> A resource used for the Respite and Rest actions to heal outside of combat.</p>
-    <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes, used for Skill Challenges and certain card effects.</p>
-    
-    <h3>Turn Events & Challenges</h3>
-    <p><strong>Turn Event:</strong> At the start of your turn, you roll a d20. On a 11+, something happens! This can be finding an item, a personal story event, or a party-wide event.</p>
-    <p><strong>World Events:</strong> The DM can trigger these powerful, ongoing events that affect the whole party. You may need to make a "saving throw" (a d20 roll) to resist their negative effects.</p>
-    <p><strong>Skill Challenges:</strong> A party-wide objective, like climbing a cliff or disarming a trap. On your turn, you can spend 1 AP to contribute by making a skill check.</p>
-
-    <h3>UI Navigation</h3>
-    <p><strong>Game Tab:</strong> Your main view, showing the monster board, your equipment, and your hand.</p>
-    <p><strong>Character Tab:</strong> Shows your detailed stats and your unique Class Ability.</p>
-    <p><strong>Party Tab:</strong> A list of all players in the game, their current health, and status.</p>
-    <p><strong>Info Tab:</strong> Displays active World Events and any treasure the party has discovered but not yet distributed.</p>
-    <p><strong>Log Tab:</strong> A running log of all game events and player chat.</p>
-`;
-
-get('help-content').innerHTML = helpContentHTML;
-[helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => helpModal.classList.remove('hidden')));
-get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden');
-
-
 // --- 5. SOCKET.IO EVENT HANDLERS ---
 
 // --- 5.1. Connection & Room Events ---
@@ -1670,17 +1311,6 @@ function disconnectVoice() {
     updateVoiceButtons();
 }
 
-[joinVoiceBtn, mobileJoinVoiceBtn].forEach(btn => btn.addEventListener('click', joinVoice));
-[disconnectVoiceBtn, mobileDisconnectVoiceBtn].forEach(btn => btn.addEventListener('click', disconnectVoice));
-[muteVoiceBtn, mobileMuteVoiceBtn].forEach(btn => btn.addEventListener('click', () => {
-    if (localStream) {
-        const audioTrack = localStream.getAudioTracks()[0];
-        audioTrack.enabled = !audioTrack.enabled;
-        updateVoiceButtons();
-    }
-}));
-
-
 const createPeerConnection = (peerId) => {
     const pc = new RTCPeerConnection(iceServers);
     peerConnections[peerId] = pc;
@@ -1759,26 +1389,6 @@ function toggleMenu(menu, button) {
         : `<span class="material-symbols-outlined">close</span>`;
 }
 
-menuToggleBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleMenu(menuDropdown, menuToggleBtn);
-});
-mobileMenuToggleBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleMenu(mobileMenuDropdown, mobileMenuToggleBtn);
-});
-
-document.addEventListener('click', (e) => {
-    if (!menuDropdown.classList.contains('hidden') && !e.target.closest('.header-menu')) {
-        menuDropdown.classList.add('hidden');
-        menuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
-    }
-    if (!mobileMenuDropdown.classList.contains('hidden') && !e.target.closest('.header-menu')) {
-        mobileMenuDropdown.classList.add('hidden');
-        mobileMenuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
-    }
-});
-
 function initializeLobby() {
     // Programmatically set the default radio button to ensure state consistency
     const beginnerRadio = document.querySelector('input[name="gameMode"][value="Beginner"]');
@@ -1788,14 +1398,6 @@ function initializeLobby() {
         beginnerRadio.dispatchEvent(new Event('change', { bubbles: true }));
     }
 }
-
-document.querySelector('.radio-group').addEventListener('change', (e) => {
-    if (e.target.name === 'gameMode') {
-        document.querySelectorAll('.radio-label').forEach(label => label.classList.remove('active'));
-        e.target.closest('.radio-label').classList.add('active');
-        customSettingsPanel.classList.toggle('hidden', e.target.value !== 'Custom');
-    }
-});
 
 function showNonBlockingRollToast(data) {
     const toast = document.createElement('div');
@@ -1877,6 +1479,394 @@ function playEffectAnimation(targetElement, effectType) {
 
 // --- 8. INITIALIZATION & PWA SERVICE WORKER ---
 document.addEventListener('DOMContentLoaded', () => {
+    // --- 4. UI EVENT LISTENERS ---
+
+    // --- 4.1. Lobby & Game Setup ---
+    createRoomBtn.addEventListener('click', () => {
+        const playerName = playerNameInput.value.trim();
+        if (!playerName) {
+            return showToast('Please enter a player name.');
+        }
+        
+        const checkedRadio = document.querySelector('input[name="gameMode"]:checked');
+        if (!checkedRadio) {
+            return showToast('Please select a game mode.');
+        }
+        const gameMode = checkedRadio.value;
+        
+        let customSettings = {};
+        if (gameMode === 'Beginner') {
+            customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50 };
+        } else if (gameMode === 'Advanced') {
+            customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60 };
+        } else { // Custom
+            customSettings = {
+                dungeonPressure: parseInt(get('dungeon-pressure').value, 10),
+                lootDropRate: parseInt(get('loot-drop-rate').value, 10),
+                magicalItemChance: parseInt(get('magical-item-chance').value, 10),
+                maxHandSize: parseInt(get('max-hand-size').value, 10),
+                enemyScaling: get('enemy-scaling').checked,
+                scalingRate: parseInt(get('scaling-rate').value, 10),
+            };
+        }
+
+        socket.emit('createRoom', { playerName, gameMode, customSettings });
+    });
+    joinRoomBtn.addEventListener('click', () => {
+        const playerName = playerNameInput.value.trim();
+        const roomId = roomIdInput.value.trim().toUpperCase();
+        if (playerName && roomId) {
+            socket.emit('joinRoom', { roomId, playerName });
+        } else {
+            showToast('Please enter a player name and a room code.');
+        }
+    });
+
+    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => {
+        const selectedMode = document.querySelector('input[name="gameMode"]:checked').value;
+        let customSettings = {};
+        if (selectedMode === 'Beginner') {
+            customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50 };
+        } else if (selectedMode === 'Advanced') {
+            customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60 };
+        } else { // Custom
+            customSettings = {
+                dungeonPressure: parseInt(get('dungeon-pressure').value, 10),
+                lootDropRate: parseInt(get('loot-drop-rate').value, 10),
+                magicalItemChance: parseInt(get('magical-item-chance').value, 10),
+                maxHandSize: parseInt(get('max-hand-size').value, 10),
+                enemyScaling: get('enemy-scaling').checked,
+                scalingRate: parseInt(get('scaling-rate').value, 10),
+            };
+        }
+        socket.emit('startGame', { gameMode: selectedMode, customSettings });
+    }));
+    [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
+        if (tempSelectedClassId) {
+            socket.emit('chooseClass', { classId: tempSelectedClassId });
+            btn.disabled = true;
+            btn.textContent = 'Confirmed!';
+        }
+    }));
+
+    // --- 4.2. Turn & Action Controls ---
+    [actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => {
+        socket.emit('endTurn');
+    }));
+
+    [actionGuardBtn, mobileActionGuardBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
+    actionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
+    actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
+    mobileActionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
+    mobileActionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
+
+    dmPlayMonsterBtn.addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
+
+    // --- 4.3. Navigation (Mobile & Desktop) ---
+    mobileBottomNav.addEventListener('click', (e) => {
+        const navBtn = e.target.closest('.nav-btn');
+        if (!navBtn || !navBtn.dataset.screen) return;
+
+        mobileBottomNav.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+        navBtn.classList.add('active');
+        navBtn.classList.remove('highlight');
+
+        const screenId = `mobile-screen-${navBtn.dataset.screen}`;
+        document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active'));
+        get(screenId).classList.add('active');
+    });
+
+    desktopTabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            desktopTabButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            button.classList.remove('highlight');
+
+            document.querySelectorAll('.game-area-desktop .tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            get(button.dataset.tab).classList.add('active');
+        });
+    });
+
+    // --- 4.4. Chat & Modals ---
+    chatToggleBtn.addEventListener('click', () => {
+        chatOverlay.classList.toggle('hidden');
+        menuDropdown.classList.add('hidden');
+        menuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
+    });
+    chatCloseBtn.addEventListener('click', () => chatOverlay.classList.add('hidden'));
+    chatForm.addEventListener('submit', (e) => { 
+        e.preventDefault();
+        const message = chatInput.value.trim();
+        const channel = chatChannel.value;
+        if (message) {
+            socket.emit('sendMessage', { channel, message });
+            chatInput.value = '';
+        }
+    });
+    mobileChatForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const message = mobileChatInput.value.trim();
+        const channel = mobileChatChannel.value;
+        if (message) {
+            socket.emit('sendMessage', { channel, message });
+            mobileChatInput.value = '';
+        }
+    });
+    [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.addEventListener('click', () => {
+        if (confirm("Are you sure you want to leave? Your character will be controlled by an NPC.")) {
+            window.location.reload();
+        }
+    }));
+    endTurnConfirmBtn.addEventListener('click', () => {
+        socket.emit('endTurn');
+        endTurnConfirmModal.classList.add('hidden');
+        finishModal();
+    });
+    endTurnCancelBtn.addEventListener('click', () => {
+        endTurnConfirmModal.classList.add('hidden');
+        finishModal();
+    });
+
+    narrativeConfirmBtn.addEventListener('click', () => {
+        let narrativeText = narrativeInput.value.trim();
+        
+        if (narrativeText === "") {
+            narrativeText = generate_random_attack_description();
+        }
+
+        if (pendingActionData) {
+            socket.emit('playerAction', { ...pendingActionData, narrative: narrativeText });
+            closeNarrativeModal();
+        }
+    });
+
+    narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
+
+    eventRollBtn.onclick = () => {
+        socket.emit('rollForEvent');
+        eventRollBtn.classList.add('hidden');
+        eventOverlay.classList.add('hidden');
+        finishModal();
+    };
+    noApCloseBtn.addEventListener('click', () => {
+        noApModal.classList.add('hidden');
+        finishModal();
+    });
+    worldEventSaveRollBtn.addEventListener('click', () => {
+        socket.emit('rollForWorldEventSave');
+        worldEventSaveRollBtn.classList.add('hidden');
+    });
+
+    document.body.addEventListener('click', (e) => {
+        if (currentSkipHandler && !e.target.closest('#skip-popup-btn')) {
+            skipPopupBtn.classList.remove('hidden');
+        }
+    });
+    skipPopupBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (currentSkipHandler) {
+            currentSkipHandler();
+        }
+    });
+    toastCloseBtn.addEventListener('click', () => {
+        clearTimeout(toastTimeout);
+        toastNotification.classList.add('hidden');
+    });
+
+    // SKILL CHALLENGE LISTENERS
+    skillChallengeCloseBtn.addEventListener('click', () => {
+        skillChallengeOverlay.classList.add('hidden');
+    });
+
+    function openItemSelectModal() {
+        selectedItemIdForChallenge = null;
+        itemSelectContainer.innerHTML = '';
+        const allItems = [...myPlayerInfo.hand, ...Object.values(myPlayerInfo.equipment).filter(i => i)];
+        if (allItems.length === 0) {
+            itemSelectContainer.innerHTML = `<p class="empty-pool-text">You have no items to use.</p>`;
+        } else {
+            allItems.forEach(item => {
+                const cardEl = createCardElement(item);
+                cardEl.onclick = () => {
+                    selectedItemIdForChallenge = (selectedItemIdForChallenge === item.id) ? null : item.id;
+                    itemSelectContainer.querySelectorAll('.card').forEach(c => c.classList.remove('selected-item'));
+                    if (selectedItemIdForChallenge === item.id) {
+                        cardEl.classList.add('selected-item');
+                    }
+                };
+                itemSelectContainer.appendChild(cardEl);
+            });
+        }
+        itemSelectModal.classList.remove('hidden');
+    }
+
+    [actionSkillChallengeBtn, mobileActionSkillChallengeBtn].forEach(btn => {
+        btn.addEventListener('click', openItemSelectModal);
+    });
+
+    itemSelectCancelBtn.addEventListener('click', () => {
+        itemSelectModal.classList.add('hidden');
+        selectedItemIdForChallenge = null;
+    });
+
+    itemSelectConfirmBtn.addEventListener('click', () => {
+        socket.emit('playerAction', {
+            action: 'contributeToSkillChallenge',
+            itemId: selectedItemIdForChallenge
+        });
+        itemSelectModal.classList.add('hidden');
+        selectedItemIdForChallenge = null;
+    });
+
+    // Equipment & Item Modals
+    keepCurrentBtn.addEventListener('click', () => {
+        if (myPlayerInfo.pendingEquipmentChoice) {
+            socket.emit('resolveEquipmentChoice', { choice: 'keep', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id });
+            equipmentChoiceModal.classList.add('hidden');
+            finishModal();
+        }
+    });
+    equipNewBtn.addEventListener('click', () => {
+        if (myPlayerInfo.pendingEquipmentChoice) {
+            socket.emit('resolveEquipmentChoice', { choice: 'swap', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id });
+            equipmentChoiceModal.classList.add('hidden');
+            finishModal();
+        }
+    });
+    discardNewItemBtn.addEventListener('click', () => {
+        socket.emit('resolveItemSwap', { cardToDiscardId: null });
+        itemSwapModal.classList.add('hidden');
+        finishModal();
+    });
+    itemFoundCloseBtn.addEventListener('click', () => {
+        itemFoundModal.classList.add('hidden');
+        finishModal();
+    });
+
+    // --- 4.5. Menu & Custom Settings ---
+    document.querySelectorAll('.slider').forEach(slider => {
+        const valueSpan = get(`${slider.id}-value`);
+        if (valueSpan) {
+            slider.addEventListener('input', () => {
+                valueSpan.textContent = slider.value;
+            });
+        }
+    });
+
+    get('enemy-scaling').addEventListener('change', (e) => {
+        get('scaling-rate-group').classList.toggle('hidden', !e.target.checked);
+    });
+
+    // --- 4.6. Help & Tutorial ---
+    const tutorialContent = [
+        { title: "Welcome to Quest & Chronicle!", content: "<p>This is a quick guide to get you started. On your turn, you'll gain <strong>Action Points (AP)</strong> based on your class and gear. Use them wisely!</p><p>Your primary goal is to work with your party to defeat monsters and overcome challenges thrown at you by the Dungeon Master.</p>" },
+        { title: "Your Turn", content: "<p>At the start of your turn, you'll get to roll a <strong>d20</strong> for a random event. This could lead to finding new items, special player events, or nothing at all.</p><p>After that, you can spend your AP on actions. The main actions are attacking, guarding, or resting to heal.</p>" },
+        { title: "Combat & Abilities", content: "<p>To attack, first click your <strong>equipped weapon</strong>, then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Your <strong>Class Ability</strong> is a powerful, unique skill. Check the Character tab to see its description and cost, and use it to turn the tide of battle!</p>" },
+        { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, and items. Click an equippable item in your hand to equip it.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
+    ];
+    let currentTutorialPage = 0;
+
+    function showTutorial() {
+        tutorialModal.classList.remove('hidden');
+        renderTutorialPage();
+    }
+    function renderTutorialPage() {
+        const page = tutorialContent[currentTutorialPage];
+        get('tutorial-content').innerHTML = `<h2>${page.title}</h2>${page.content}`;
+        get('tutorial-page-indicator').textContent = `${currentTutorialPage + 1} / ${tutorialContent.length}`;
+        get('tutorial-prev-btn').disabled = currentTutorialPage === 0;
+        get('tutorial-next-btn').textContent = currentTutorialPage === tutorialContent.length - 1 ? "Finish" : "Next";
+    }
+    function closeTutorial() {
+        tutorialModal.classList.add('hidden');
+        localStorage.setItem('tutorialCompleted', 'true');
+    }
+    get('tutorial-next-btn').addEventListener('click', () => {
+        if (currentTutorialPage < tutorialContent.length - 1) {
+            currentTutorialPage++;
+            renderTutorialPage();
+        } else {
+            closeTutorial();
+        }
+    });
+    get('tutorial-prev-btn').addEventListener('click', () => {
+        if (currentTutorialPage > 0) {
+            currentTutorialPage--;
+            renderTutorialPage();
+        }
+    });
+    get('tutorial-skip-btn').addEventListener('click', closeTutorial);
+
+    const helpContentHTML = `
+        <h3>Core Mechanics</h3>
+        <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or using abilities, cost AP. Your total AP is determined by your class and equipment.</p>
+        <p><strong>Health (HP):</strong> Your life force. If it reaches 0, you fall but can get back up by spending a Life. If you're out of Lives, you're out of the game!</p>
+        <p><strong>Dice Rolls:</strong> Most actions are resolved with a d20 roll. To succeed, you usually need to roll a number that meets or exceeds a target's Defense Class (DC) or Armor Class (AC).</p>
+
+        <h3>Player Stats</h3>
+        <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit.</p>
+        <p><strong>Shield Bonus:</strong> Your Armor Class (AC). Monsters must roll higher than this number to hit you.</p>
+        <p><strong>Health Dice:</strong> A resource used for the Respite and Rest actions to heal outside of combat.</p>
+        <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes, used for Skill Challenges and certain card effects.</p>
+        
+        <h3>Turn Events & Challenges</h3>
+        <p><strong>Turn Event:</strong> At the start of your turn, you roll a d20. On a 11+, something happens! This can be finding an item, a personal story event, or a party-wide event.</p>
+        <p><strong>World Events:</strong> The DM can trigger these powerful, ongoing events that affect the whole party. You may need to make a "saving throw" (a d20 roll) to resist their negative effects.</p>
+        <p><strong>Skill Challenges:</strong> A party-wide objective, like climbing a cliff or disarming a trap. On your turn, you can spend 1 AP to contribute by making a skill check.</p>
+
+        <h3>UI Navigation</h3>
+        <p><strong>Game Tab:</strong> Your main view, showing the monster board, your equipment, and your hand.</p>
+        <p><strong>Character Tab:</strong> Shows your detailed stats and your unique Class Ability.</p>
+        <p><strong>Party Tab:</strong> A list of all players in the game, their current health, and status.</p>
+        <p><strong>Info Tab:</strong> Displays active World Events and any treasure the party has discovered but not yet distributed.</p>
+        <p><strong>Log Tab:</strong> A running log of all game events and player chat.</p>
+    `;
+
+    get('help-content').innerHTML = helpContentHTML;
+    [helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => helpModal.classList.remove('hidden')));
+    get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden');
+
+    [joinVoiceBtn, mobileJoinVoiceBtn].forEach(btn => btn.addEventListener('click', joinVoice));
+    [disconnectVoiceBtn, mobileDisconnectVoiceBtn].forEach(btn => btn.addEventListener('click', disconnectVoice));
+    [muteVoiceBtn, mobileMuteVoiceBtn].forEach(btn => btn.addEventListener('click', () => {
+        if (localStream) {
+            const audioTrack = localStream.getAudioTracks()[0];
+            audioTrack.enabled = !audioTrack.enabled;
+            updateVoiceButtons();
+        }
+    }));
+    
+    menuToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMenu(menuDropdown, menuToggleBtn);
+    });
+    mobileMenuToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMenu(mobileMenuDropdown, mobileMenuToggleBtn);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!menuDropdown.classList.contains('hidden') && !e.target.closest('.header-menu')) {
+            menuDropdown.classList.add('hidden');
+            menuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
+        }
+        if (!mobileMenuDropdown.classList.contains('hidden') && !e.target.closest('.header-menu')) {
+            mobileMenuDropdown.classList.add('hidden');
+            mobileMenuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
+        }
+    });
+
+    document.querySelector('.radio-group').addEventListener('change', (e) => {
+        if (e.target.name === 'gameMode') {
+            document.querySelectorAll('.radio-label').forEach(label => label.classList.remove('active'));
+            const parentLabel = e.target.closest('.radio-label');
+            if(parentLabel) parentLabel.classList.add('active');
+            customSettingsPanel.classList.toggle('hidden', e.target.value !== 'Custom');
+        }
+    });
+
     initializeLobby();
     if (!localStorage.getItem('tutorialCompleted')) {
         showTutorial();
