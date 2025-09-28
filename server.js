@@ -783,6 +783,7 @@ class GameManager {
             totalRollToHit,
             requiredRoll: requiredRollToHit,
             hit,
+            damageDice: monster.effect.dice,
             rawDamageRoll,
             attackBonus: monster.attackBonus,
             totalDamage,
@@ -1122,6 +1123,7 @@ class GameManager {
             totalRollToHit,
             requiredRoll: target.requiredRollToHit,
             hit,
+            damageDice: weapon.effect.dice,
             rawDamageRoll,
             damageBonus: player.stats.damageBonus,
             totalDamage,
@@ -1239,6 +1241,12 @@ class GameManager {
                 room.gameState.decks.partyEvent.unshift(eventCard); // Return to bottom
             }
         }
+        
+        let logMessage = `<b>${player.name}</b> rolled a <b>${roll}</b> for their turn event. `;
+        if(outcome === 'none') logMessage += "Nothing happened."
+        else logMessage += `A ${outcome} occurred!`;
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessage });
+
 
         socket.emit('eventRollResult', { roll, outcome, cardOptions });
         this.emitGameState(room.id);
@@ -1330,16 +1338,22 @@ class GameManager {
     
         const { dc, save, eventName } = player.pendingWorldEventSave;
         const d20Roll = Math.floor(Math.random() * 20) + 1;
-        const bonus = 2; // Placeholder bonus
+        const bonus = player.class ? (gameData.classes[player.class].stats[save.toLowerCase()] || 0) : 0;
         const totalRoll = d20Roll + bonus;
         const success = totalRoll >= dc;
     
-        if (!success) {
+        let logMessage = `<b>${player.name}</b> makes a ${save} save for ${eventName}. Roll: ${d20Roll} + ${bonus} = <b>${totalRoll}</b> vs DC ${dc}. `;
+
+        if (success) {
+            logMessage += `<span style='color: var(--color-success)'>Success!</span>`;
+        } else {
+            logMessage += `<span style='color: var(--color-danger)'>Failure!</span>`;
             if (eventName === 'Echoes of the Past') {
                 player.statusEffects.push({ name: 'Stunned', type: 'stun', duration: 2 });
-                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} failed their save and is stunned!` });
+                logMessage += ` ${player.name} is stunned!`;
             }
         }
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessage });
     
         player.pendingWorldEventSave = null;
         socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc, success });
@@ -1439,6 +1453,16 @@ class GameManager {
                 }
                 challenge.log.push(logText);
                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logText });
+
+                // Send detailed results back to the rolling player for animation
+                socket.emit('skillChallengeRollResult', { 
+                    d20Roll, 
+                    bonus: playerStat, 
+                    itemBonus: rollModifier, 
+                    totalRoll, 
+                    dc: challenge.dc, 
+                    success 
+                });
     
                 if (challenge.successes >= challenge.successThreshold) {
                     this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>Challenge Succeeded!</b> ${challengeData.success.message}` });

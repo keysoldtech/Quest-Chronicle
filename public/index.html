@@ -25,7 +25,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">Prototype 4.5.0 - A New Battle!</p>
+        <p class="subtitle-font">Prototype 4.5.1 - A New Battle</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -64,7 +64,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.5.0 - A New Battle!</p>
+                     <p class="build-number-font">v4.5.1 - A New Battle</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -316,30 +316,40 @@
 
     <div id="dice-roll-overlay" class="modal-overlay hidden">
         <div class="dice-roll-content">
-            <h2 id="dice-roll-title" class="panel-header">Attacking...</h2>
+            <h2 id="dice-roll-title" class="panel-header">Rolling...</h2>
             <div class="dice-scene">
-                <div id="attack-dice" class="dice">
-                    <div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div>
+                <!-- D20 -->
+                <div class="dice d20 hidden" id="dice-d20">
+                    <div class="face face-1">1</div><div class="face face-2">2</div><div class="face face-3">3</div><div class="face face-4">4</div>
+                    <div class="face face-5">5</div><div class="face face-6">6</div><div class="face face-7">7</div><div class="face face-8">8</div>
+                    <div class="face face-9">9</div><div class="face face-10">10</div><div class="face face-11">11</div><div class="face face-12">12</div>
+                    <div class="face face-13">13</div><div class="face face-14">14</div><div class="face face-15">15</div><div class="face face-16">16</div>
+                    <div class="face face-17">17</div><div class="face face-18">18</div><div class="face face-19">19</div><div class="face face-20">20</div>
                 </div>
+                <!-- D8 -->
+                <div class="dice d8 hidden" id="dice-d8">
+                    <div class="face face-1">1</div><div class="face face-2">2</div><div class="face face-3">3</div><div class="face face-4">4</div>
+                    <div class="face face-5">5</div><div class="face face-6">6</div><div class="face face-7">7</div><div class="face face-8">8</div>
+                </div>
+                <!-- D6 -->
+                <div class="dice d6 hidden" id="dice-d6">
+                    <div class="face face-1">1</div><div class="face face-2">2</div><div class="face face-3">3</div><div class="face face-4">4</div>
+                    <div class="face face-5">5</div><div class="face face-6">6</div>
+                </div>
+                 <!-- D4 and D10/12 would need more complex geometry -->
             </div>
+            <button id="dice-roll-action-btn" class="btn btn-special hidden">Roll</button>
             <div id="dice-roll-result" class="dice-roll-result-container hidden"></div>
+            <button id="dice-roll-continue-btn" class="btn btn-primary hidden">Continue</button>
         </div>
     </div>
 
-    <div id="event-overlay" class="event-overlay hidden">
-        <div id="event-roll-container" class="event-step-container">
-            <h2 class="panel-header">An Event is Triggered!</h2>
-            <p>Roll the dice to see what happens.</p>
-            <button id="roll-dice-btn" class="btn btn-special">Roll Dice</button>
-        </div>
-        <div id="event-dice-animation-container" class="event-step-container hidden">
-            <div class="dice-scene"><div id="dice" class="dice"><div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div></div></div>
-        </div>
-        <div id="event-result-container" class="event-step-container hidden">
-            <h2 class="panel-header" id="event-result-title"></h2>
-            <p id="event-result-subtitle"></p>
-            <div id="event-card-selection" class="card-container-row hidden"></div>
-            <button id="event-result-okay-btn" class="btn btn-primary hidden">Okay</button>
+    <div id="event-overlay" class="modal-overlay hidden">
+        <div class="modal-content" style="text-align: center;">
+             <h2 id="event-title" class="panel-header">An Event is Triggered!</h2>
+             <p id="event-prompt">Roll the dice to see what happens.</p>
+             <button id="event-roll-btn" class="btn btn-special">Roll d20</button>
+             <div id="event-card-selection" class="card-container-row hidden" style="justify-content: center;"></div>
         </div>
     </div>
     
@@ -347,12 +357,7 @@
         <div class="modal-content" style="text-align: center;">
             <h2 id="world-event-save-title" class="panel-header">World Event!</h2>
             <p id="world-event-save-prompt">You must make a save!</p>
-            <div class="dice-scene" style="margin: 1.5rem auto;">
-                <div id="world-event-dice" class="dice"><div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div></div>
-            </div>
-            <div id="world-event-roll-result" class="dice-roll-result-container hidden" style="padding: 1rem; margin-top: 1rem;"></div>
             <button id="world-event-save-roll-btn" class="btn btn-special">Roll d20</button>
-            <button id="world-event-save-continue-btn" class="btn btn-primary hidden">Continue</button>
         </div>
     </div>
 

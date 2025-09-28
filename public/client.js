@@ -23,7 +23,6 @@ let apModalShownThisTurn = false; // For AP management pop-up
 const modalQueue = [];
 let isModalActive = false;
 let currentSkipHandler = null; // Holds the function to skip the current skippable modal
-let isResolvingWorldEvent = false;
 let modalWatchdog = null;
 let selectedItemIdForChallenge = null;
 const iceServers = {
@@ -39,7 +38,7 @@ const classData = {
     Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, description: "A conduit for divine power.", abilities: ["Channel Divinity", "Turn Undead"] },
     Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, description: "Wielder of arcane energies.", abilities: ["Arcane Recovery", "Spell Mastery"] },
     Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, description: "A peerless hunter and scout.", abilities: ["Favored Enemy", "Hunter's Mark"] },
-    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
+    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
     Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
 };
 
@@ -148,25 +147,21 @@ const endTurnCancelBtn = get('end-turn-cancel-btn');
 const endTurnConfirmBtn = get('end-turn-confirm-btn');
 const diceRollOverlay = get('dice-roll-overlay');
 const diceRollTitle = get('dice-roll-title');
-const attackDice = get('attack-dice');
+const diceD20 = get('dice-d20');
+const diceD8 = get('dice-d8');
+const diceD6 = get('dice-d6');
+const diceRollActionBtn = get('dice-roll-action-btn');
 const diceRollResult = get('dice-roll-result');
+const diceRollContinueBtn = get('dice-roll-continue-btn');
 const eventOverlay = get('event-overlay');
-const eventRollContainer = get('event-roll-container');
-const rollDiceBtn = get('roll-dice-btn');
-const eventDiceAnimationContainer = get('event-dice-animation-container');
-const dice = get('dice');
-const eventResultContainer = get('event-result-container');
-const eventResultTitle = get('event-result-title');
-const eventResultSubtitle = get('event-result-subtitle');
+const eventTitle = get('event-title');
+const eventPrompt = get('event-prompt');
+const eventRollBtn = get('event-roll-btn');
 const eventCardSelection = get('event-card-selection');
-const eventResultOkayBtn = get('event-result-okay-btn');
 const worldEventSaveModal = get('world-event-save-modal');
 const worldEventSaveTitle = get('world-event-save-title');
 const worldEventSavePrompt = get('world-event-save-prompt');
-const worldEventDice = get('world-event-dice');
-const worldEventRollResult = get('world-event-roll-result');
 const worldEventSaveRollBtn = get('world-event-save-roll-btn');
-const worldEventSaveContinueBtn = get('world-event-save-continue-btn');
 const voiceChatContainer = get('voice-chat-container');
 const skipPopupBtn = get('skip-popup-btn');
 const skillChallengeOverlay = get('skill-challenge-overlay');
@@ -233,7 +228,7 @@ function closeAllModals() {
 
 function startModalWatchdog() {
     clearModalWatchdog();
-    modalWatchdog = setTimeout(closeAllModals, 10000); // 10 second failsafe
+    modalWatchdog = setTimeout(closeAllModals, 15000); // 15 second failsafe
 }
 
 function clearModalWatchdog() {
@@ -540,7 +535,7 @@ function renderGameState(room) {
             const timeoutId = setTimeout(() => {
                 yourTurnPopup.classList.add('hidden');
                 finishModal();
-            }, 1500);
+            }, 2500);
 
             currentSkipHandler = () => {
                 clearTimeout(timeoutId);
@@ -554,11 +549,12 @@ function renderGameState(room) {
     if (isMyTurn && myPlayerInfo.pendingEventRoll) {
         addToModalQueue(() => {
             eventOverlay.classList.remove('hidden');
-            eventRollContainer.classList.remove('hidden');
-            eventDiceAnimationContainer.classList.add('hidden');
-            eventResultContainer.classList.add('hidden');
+            eventTitle.textContent = "An Event is Triggered!";
+            eventPrompt.textContent = "Roll the dice to see what happens.";
+            eventRollBtn.classList.remove('hidden');
+            eventCardSelection.classList.add('hidden');
         }, 'event-roll');
-    } else if (!myPlayerInfo.pendingEventChoice) {
+    } else {
         eventOverlay.classList.add('hidden');
     }
     
@@ -587,17 +583,10 @@ function renderGameState(room) {
             const { dc, save, eventName } = myPlayerInfo.pendingWorldEventSave;
             worldEventSaveTitle.textContent = eventName;
             worldEventSavePrompt.textContent = `You must make a DC ${dc} ${save} save!`;
-
-            // Reset modal state
-            worldEventSaveRollBtn.disabled = false;
             worldEventSaveRollBtn.classList.remove('hidden');
-            worldEventRollResult.classList.add('hidden');
-            worldEventSaveContinueBtn.classList.add('hidden');
         }, 'world-event-save');
     } else {
-        if (!isResolvingWorldEvent) {
-            worldEventSaveModal.classList.add('hidden');
-        }
+        worldEventSaveModal.classList.add('hidden');
     }
 
     if (challenge && challenge.isActive) {
@@ -970,11 +959,9 @@ narrativeConfirmBtn.addEventListener('click', () => {
 
 narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
 
-rollDiceBtn.onclick = () => {
+eventRollBtn.onclick = () => {
     socket.emit('rollForEvent');
-    eventRollContainer.classList.add('hidden');
-    eventDiceAnimationContainer.classList.remove('hidden');
-    dice.className = 'dice is-rolling';
+    eventRollBtn.classList.add('hidden');
 };
 apModalConfirmBtn.addEventListener('click', () => {
     socket.emit('endTurn');
@@ -986,10 +973,8 @@ apModalCancelBtn.addEventListener('click', () => {
     finishModal();
 });
 worldEventSaveRollBtn.addEventListener('click', () => {
-    isResolvingWorldEvent = true;
     socket.emit('rollForWorldEventSave');
-    worldEventSaveRollBtn.disabled = true;
-    worldEventDice.className = 'dice is-rolling';
+    worldEventSaveRollBtn.classList.add('hidden');
 });
 // Skip functionality
 document.body.addEventListener('click', (e) => {
@@ -997,7 +982,8 @@ document.body.addEventListener('click', (e) => {
         skipPopupBtn.classList.remove('hidden');
     }
 });
-skipPopupBtn.addEventListener('click', () => {
+skipPopupBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     if (currentSkipHandler) {
         currentSkipHandler();
     }
@@ -1104,286 +1090,205 @@ socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...d
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 socket.on('actionError', (errorMessage) => showToast(errorMessage));
 
-socket.on('attackAnimation', (data) => {
+
+function showDiceRoll(options) {
+    const { dieType, roll, title, resultHTML, continueCallback, continueDelay = 3000 } = options;
+
     addToModalQueue(() => {
-        let fastForwarded = false;
-        let timeouts = [];
+        let isComplete = false;
+        let timeout;
 
-        const renderResult = () => {
-            attackDice.classList.remove('is-rolling');
-            let resultHTML = '';
-            if (data.isCrit) {
-                resultHTML += `<p class="result-line hit">CRITICAL HIT!</p>`;
-            } else if (data.isFumble) {
-                resultHTML += `<p class="result-line miss">CRITICAL FUMBLE!</p>`;
-            } else {
-                resultHTML += data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
-            }
+        const showResultAndContinue = () => {
+            if (isComplete) return;
+            isComplete = true;
+
+            const dieElement = get(`dice-${dieType}`);
+            dieElement.className = `dice ${dieType} stop-on-${roll}`;
             
-            resultHTML += `<p class="roll-details">Roll: ${data.d20Roll} + ${data.damageBonus} (Bonus) = <strong>${data.totalRollToHit}</strong> vs DC ${data.requiredRoll}</p>`;
-
-            if (data.hit) {
-                resultHTML += `<p class="roll-details">Damage: ${data.rawDamageRoll}(dice) + ${data.damageBonus}(bonus) = <strong>${data.totalDamage}</strong></p>`;
-            }
             diceRollResult.innerHTML = resultHTML;
             diceRollResult.classList.remove('hidden');
-        };
+            
+            diceRollContinueBtn.classList.remove('hidden');
+            diceRollContinueBtn.onclick = () => {
+                clearTimeout(timeout);
+                closeAndCallback();
+            };
 
-        const close = () => {
+            timeout = setTimeout(closeAndCallback, continueDelay);
+
+            currentSkipHandler = () => {
+                clearTimeout(timeout);
+                closeAndCallback();
+            };
+        };
+        
+        const closeAndCallback = () => {
             diceRollOverlay.classList.add('hidden');
+            if(continueCallback) continueCallback();
             finishModal();
         };
 
-        currentSkipHandler = () => {
-            timeouts.forEach(clearTimeout);
-            if (!fastForwarded) {
-                renderResult();
-                fastForwarded = true;
-                const closeTimeout = setTimeout(close, 4000);
-                timeouts = [closeTimeout];
-                // Update handler for the second skip
-                currentSkipHandler = () => {
-                    clearTimeout(closeTimeout);
-                    close();
-                };
-            } else {
-                close();
-            }
-        };
-
-        diceRollTitle.textContent = `${data.attackerName} attacks!`;
-        diceRollResult.innerHTML = '';
+        // --- Initial setup ---
+        document.querySelectorAll('.dice').forEach(d => d.classList.add('hidden'));
+        const dieElement = get(`dice-${dieType}`);
+        if(!dieElement) {
+             console.error(`Die type ${dieType} not found!`);
+             finishModal(); // Abort
+             return;
+        }
+        dieElement.classList.remove('hidden');
+        
+        diceRollTitle.textContent = title;
         diceRollResult.classList.add('hidden');
+        diceRollContinueBtn.classList.add('hidden');
+        diceRollActionBtn.classList.remove('hidden');
         diceRollOverlay.classList.remove('hidden');
+        
+        diceRollActionBtn.onclick = () => {
+            diceRollActionBtn.classList.add('hidden');
+            dieElement.className = `dice ${dieType} is-rolling`;
+            setTimeout(showResultAndContinue, 1500); // Wait for animation to play out
+        };
+    }, `dice-roll-${Math.random()}`);
+}
 
-        attackDice.classList.remove('is-rolling');
-        void attackDice.offsetWidth; 
-        attackDice.classList.add('is-rolling');
+socket.on('attackAnimation', (data) => {
+    const { attackerName, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, damageBonus, totalDamage } = data;
 
-        const timeout1 = setTimeout(() => {
-            renderResult();
-            fastForwarded = true;
-            const timeout2 = setTimeout(close, 4000);
-            timeouts = [timeout2];
-        }, 1500);
-        timeouts.push(timeout1);
+    // --- Stage 1: To-Hit Roll ---
+    const toHitResultHTML = `
+        ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
+        <p class="roll-details">Roll: ${d20Roll} + ${damageBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
+    `;
 
-    }, 'attack-animation');
+    showDiceRoll({
+        dieType: 'd20',
+        roll: d20Roll,
+        title: `${attackerName} Attacks!`,
+        resultHTML: toHitResultHTML,
+        continueDelay: hit ? 1500 : 3000, // Shorter delay if there's a damage roll coming
+        continueCallback: () => {
+            if (hit) {
+                // --- Stage 2: Damage Roll ---
+                const damageResultHTML = `
+                    <p class="result-line">DAMAGE!</p>
+                    <p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>
+                `;
+                
+                const damageDieType = `d${damageDice.split('d')[1]}`;
+
+                showDiceRoll({
+                    dieType: damageDieType,
+                    roll: rawDamageRoll, // Note: This won't work for multiple dice, shows first die result
+                    title: `Damage Roll`,
+                    resultHTML: damageResultHTML,
+                    continueDelay: 3000,
+                });
+            }
+        }
+    });
 });
 
 socket.on('monsterAttackAnimation', (data) => {
-    addToModalQueue(() => {
-        let fastForwarded = false;
-        let timeouts = [];
+    const { attackerName, targetName, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, attackBonus, totalDamage } = data;
 
-        const renderResult = () => {
-            attackDice.classList.remove('is-rolling');
-            let resultHTML = '';
-            if (data.isCrit) {
-                resultHTML += `<p class="result-line hit">CRITICAL HIT!</p>`;
-            } else if (data.isFumble) {
-                resultHTML += `<p class="result-line miss">CRITICAL FUMBLE!</p>`;
-            } else {
-                resultHTML += data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
+    const toHitResultHTML = `
+        ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
+        <p class="roll-details">Roll: ${d20Roll} + ${attackBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
+    `;
+
+    showDiceRoll({
+        dieType: 'd20',
+        roll: d20Roll,
+        title: `${attackerName} attacks ${targetName}!`,
+        resultHTML: toHitResultHTML,
+        continueDelay: hit ? 1500 : 3000,
+        continueCallback: () => {
+            if (hit) {
+                const damageResultHTML = `
+                    <p class="result-line">DAMAGE!</p>
+                    <p class="roll-details">Roll: ${rawDamageRoll} (Dice) = <strong>${totalDamage}</strong></p>
+                `;
+                 const damageDieType = `d${damageDice.split('d')[1]}`;
+                 showDiceRoll({
+                    dieType: damageDieType,
+                    roll: rawDamageRoll,
+                    title: `Damage Roll`,
+                    resultHTML: damageResultHTML,
+                    continueDelay: 3000,
+                });
             }
-
-            resultHTML += `<p class="roll-details">Roll: ${data.d20Roll} + ${data.attackBonus} (Bonus) = <strong>${data.totalRollToHit}</strong> vs DC ${data.requiredRoll}</p>`;
-            
-            if (data.hit) {
-                resultHTML += `<p class="roll-details">Damage: ${data.rawDamageRoll}(dice) = <strong>${data.totalDamage}</strong></p>`;
-            }
-            diceRollResult.innerHTML = resultHTML;
-            diceRollResult.classList.remove('hidden');
-        };
-
-        const close = () => {
-            diceRollOverlay.classList.add('hidden');
-            finishModal();
-        };
-
-        currentSkipHandler = () => {
-            timeouts.forEach(clearTimeout);
-            if (!fastForwarded) {
-                renderResult();
-                fastForwarded = true;
-                const closeTimeout = setTimeout(close, 4000);
-                timeouts = [closeTimeout];
-                currentSkipHandler = () => {
-                    clearTimeout(closeTimeout);
-                    close();
-                };
-            } else {
-                close();
-            }
-        };
-
-        diceRollTitle.textContent = `${data.attackerName} attacks ${data.targetName}!`;
-        diceRollResult.innerHTML = '';
-        diceRollResult.classList.add('hidden');
-        diceRollOverlay.classList.remove('hidden');
-
-        attackDice.classList.remove('is-rolling');
-        void attackDice.offsetWidth; 
-        attackDice.classList.add('is-rolling');
-
-        const timeout1 = setTimeout(() => {
-            renderResult();
-            fastForwarded = true;
-            const timeout2 = setTimeout(close, 4000);
-            timeouts = [timeout2];
-        }, 1500);
-        timeouts.push(timeout1);
-
-    }, 'monster-attack-animation');
+        }
+    });
 });
 
 socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
-    // This is part of an active modal, so we don't queue it.
-    let timeoutId;
-
-    const renderResult = () => {
-        currentSkipHandler = null; // Result view is interactive, not skippable
-        skipPopupBtn.classList.add('hidden');
-        dice.classList.remove('is-rolling');
-        eventDiceAnimationContainer.classList.add('hidden');
-
-        if (outcome === 'none' || outcome === 'equipmentDraw' || outcome === 'partyEvent') {
-            eventResultContainer.classList.remove('hidden');
-            eventResultTitle.textContent = `You rolled a ${roll}!`;
-            eventResultSubtitle.textContent = (outcome === 'none') ? 'Nothing happens this time.' : 'The event resolves...';
-            eventCardSelection.classList.add('hidden');
-            eventResultOkayBtn.classList.remove('hidden');
-            eventResultOkayBtn.onclick = () => {
-                eventOverlay.classList.add('hidden');
-                finishModal();
-            };
-        } else if (outcome === 'playerEvent') {
-            eventResultContainer.classList.remove('hidden');
-            eventResultTitle.textContent = `You rolled a ${roll}!`;
-            eventResultSubtitle.textContent = 'A player event occurs! Choose one:';
-            eventCardSelection.classList.remove('hidden');
-            eventResultOkayBtn.classList.add('hidden');
-            eventCardSelection.innerHTML = '';
-            cardOptions.forEach(card => {
-                const cardEl = createCardElement(card);
-                cardEl.onclick = () => {
-                    socket.emit('selectEventCard', { cardId: card.id });
-                    eventOverlay.classList.add('hidden');
-                    finishModal();
-                };
-                eventCardSelection.appendChild(cardEl);
-            });
+    const resultHTML = `<p class="result-line">You rolled a ${roll}!</p>`;
+    showDiceRoll({
+        dieType: 'd20',
+        roll: roll,
+        title: "Event Roll",
+        resultHTML,
+        continueCallback: () => {
+            addToModalQueue(() => {
+                eventOverlay.classList.remove('hidden');
+                eventTitle.textContent = `You rolled a ${roll}!`;
+                
+                if (outcome === 'none' || outcome === 'equipmentDraw' || outcome === 'partyEvent') {
+                    eventPrompt.textContent = (outcome === 'none') ? 'Nothing happens this time.' : 'The event resolves...';
+                    eventCardSelection.classList.add('hidden');
+                    eventRollBtn.classList.remove('hidden');
+                    eventRollBtn.textContent = "Okay";
+                    eventRollBtn.onclick = () => {
+                        eventOverlay.classList.add('hidden');
+                        finishModal();
+                    };
+                } else if (outcome === 'playerEvent') {
+                    eventPrompt.textContent = 'A player event occurs! Choose one:';
+                    eventCardSelection.classList.remove('hidden');
+                    eventRollBtn.classList.add('hidden');
+                    eventCardSelection.innerHTML = '';
+                    cardOptions.forEach(card => {
+                        const cardEl = createCardElement(card);
+                        cardEl.onclick = () => {
+                            socket.emit('selectEventCard', { cardId: card.id });
+                            eventOverlay.classList.add('hidden');
+                            finishModal();
+                        };
+                        eventCardSelection.appendChild(cardEl);
+                    });
+                }
+            }, `event-result-${roll}`);
         }
-    };
-
-    currentSkipHandler = () => {
-        clearTimeout(timeoutId);
-        renderResult();
-    };
-
-    // The roll button click already started the dice animation
-    timeoutId = setTimeout(renderResult, 1500);
+    });
 });
 
 socket.on('skillChallengeRollResult', ({ d20Roll, bonus, itemBonus, totalRoll, dc, success }) => {
-     addToModalQueue(() => {
-        let fastForwarded = false;
-        let timeouts = [];
-
-        const renderResult = () => {
-            attackDice.classList.remove('is-rolling');
-            let resultHTML = success ? `<p class="result-line hit">SUCCESS!</p>` : `<p class="result-line miss">FAILURE!</p>`;
-            resultHTML += `<p class="roll-details">Roll: ${d20Roll} + ${bonus}(stat) ${itemBonus > 0 ? `+ ${itemBonus}(item)` : ''} = <strong>${totalRoll}</strong> vs DC ${dc}</p>`;
-            
-            diceRollResult.innerHTML = resultHTML;
-            diceRollResult.classList.remove('hidden');
-        };
-
-        const close = () => {
-            diceRollOverlay.classList.add('hidden');
-            finishModal();
-        };
-
-        currentSkipHandler = () => {
-            timeouts.forEach(clearTimeout);
-            if (!fastForwarded) {
-                renderResult();
-                fastForwarded = true;
-                const closeTimeout = setTimeout(close, 3000);
-                timeouts = [closeTimeout];
-                currentSkipHandler = () => {
-                    clearTimeout(closeTimeout);
-                    close();
-                };
-            } else {
-                close();
-            }
-        };
-
-        diceRollTitle.textContent = `Contributing to Challenge...`;
-        diceRollResult.innerHTML = '';
-        diceRollResult.classList.add('hidden');
-        diceRollOverlay.classList.remove('hidden');
-
-        attackDice.classList.remove('is-rolling');
-        void attackDice.offsetWidth;
-        attackDice.classList.add('is-rolling');
-
-        const timeout1 = setTimeout(() => {
-            renderResult();
-            fastForwarded = true;
-            const timeout2 = setTimeout(close, 3000);
-            timeouts = [timeout2];
-        }, 1500);
-        timeouts.push(timeout1);
-
-    }, 'skill-challenge-roll-result');
-});
-
-
-socket.on('eventCardReveal', ({ chosenCard }) => {
-    eventCardSelection.innerHTML = '';
-    eventCardSelection.appendChild(createCardElement(chosenCard));
+     const resultHTML = `
+        ${success ? `<p class="result-line hit">SUCCESS!</p>` : `<p class="result-line miss">FAILURE!</p>`}
+        <p class="roll-details">Roll: ${d20Roll} + ${bonus}(stat) ${itemBonus > 0 ? `+ ${itemBonus}(item)` : ''} = <strong>${totalRoll}</strong> vs DC ${dc}</p>
+    `;
+    showDiceRoll({
+        dieType: 'd20',
+        roll: d20Roll,
+        title: 'Skill Challenge',
+        resultHTML,
+    });
 });
 
 socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
-    // This is part of an active modal.
-    setTimeout(() => {
-        // Stop the dice animation
-        worldEventDice.classList.remove('is-rolling');
-        
-        // Hide the roll button, show the result.
-        worldEventSaveRollBtn.classList.add('hidden');
-        
-        let resultHTML = `<p class="roll-details">Roll: ${d20Roll} + ${bonus} = <strong>${totalRoll}</strong> vs DC ${dc}</p>`;
-        resultHTML += success ? `<p class="result-line hit">Success!</p>` : `<p class="result-line miss">Failure!</p>`;
-        
-        worldEventRollResult.innerHTML = resultHTML;
-        worldEventRollResult.classList.remove('hidden');
-        
-        // Show the continue button to allow faster closing, but also set a timeout as a failsafe.
-        worldEventSaveContinueBtn.classList.remove('hidden');
-        
-        const closeTimeout = setTimeout(() => {
-            if (!worldEventSaveModal.classList.contains('hidden')) {
-                 isResolvingWorldEvent = false;
-                 worldEventSaveModal.classList.add('hidden');
-                 finishModal();
-            }
-        }, 3500);
-
-        // Overwrite onclick to ensure we have a clean handler that also manages the timeout
-        worldEventSaveContinueBtn.onclick = () => {
-            clearTimeout(closeTimeout);
-            isResolvingWorldEvent = false;
-            worldEventSaveModal.classList.add('hidden');
-            finishModal();
-        };
-
-        // Clear any skip handlers, this modal is now interactive and not on a timer
-        currentSkipHandler = null;
-        skipPopupBtn.classList.add('hidden');
-    }, 1500); // Wait for dice animation to roughly finish
+    const resultHTML = `
+        ${success ? `<p class="result-line hit">Success!</p>` : `<p class="result-line miss">Failure!</p>`}
+        <p class="roll-details">Roll: ${d20Roll} + ${bonus} = <strong>${totalRoll}</strong> vs DC ${dc}</p>
+    `;
+    showDiceRoll({
+        dieType: 'd20',
+        roll: d20Roll,
+        title: 'World Event Save',
+        resultHTML,
+    });
+    worldEventSaveModal.classList.add('hidden');
+    finishModal();
 });
 
 
