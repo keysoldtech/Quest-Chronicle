@@ -111,6 +111,7 @@ class GameManager {
                     duration: 0,
                     sourcePlayerId: null,
                 },
+                currentPartyEvent: null,
                 skillChallenge: { isActive: false },
             },
             chatLog: []
@@ -731,6 +732,7 @@ class GameManager {
                         const message = `<b>${player.name}</b> used ${bestAction.apCost} AP for a Brief Respite, healing for ${healAmount} HP.`;
                         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message });
                         io.to(room.id).emit('simpleRollAnimation', {
+                            playerId: player.id,
                             dieType: 'd8', roll: healAmount, title: `${player.name}'s Respite`,
                             resultHTML: `<p class="result-line hit">+${healAmount} HP</p>`
                         });
@@ -744,6 +746,7 @@ class GameManager {
                         const message = `<b>${player.name}</b> used ${bestAction.apCost} AP for a Full Rest, healing for ${totalHeal} HP.`;
                         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message });
                         io.to(room.id).emit('simpleRollAnimation', {
+                            playerId: player.id,
                             dieType: 'd8', roll: totalHeal, title: `${player.name}'s Rest`,
                             resultHTML: `<p class="result-line hit">+${totalHeal} HP</p>`
                         });
@@ -766,6 +769,7 @@ class GameManager {
                                     
                                     const dieType = `d${effect.dice.split('d')[1]}`;
                                     io.to(room.id).emit('simpleRollAnimation', {
+                                        playerId: player.id,
                                         dieType: dieType, roll: healAmountCard, title: `${card.name}`,
                                         resultHTML: `<p class="result-line hit">+${healAmountCard} HP to ${healTarget.name}</p>`
                                     });
@@ -842,6 +846,7 @@ class GameManager {
         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logText });
         
         io.to(room.id).emit('simpleRollAnimation', {
+            playerId: player.id,
             dieType: 'd20', roll: d20Roll, title: `${player.name}'s Challenge`,
             resultHTML: resultHTML
         });
@@ -1040,6 +1045,8 @@ class GameManager {
         }
         
         if (player.isNpc && player.role === 'DM') {
+            room.gameState.currentPartyEvent = null; // Clear party event at start of DM turn
+            
             if (room.gameState.board.monsters && room.gameState.board.monsters.length > 0) {
                 room.gameState.board.monsters.forEach(monster => {
                     if (monster.statusEffects && monster.statusEffects.length > 0) {
@@ -1482,8 +1489,7 @@ class GameManager {
                 outcome.type = 'partyEvent';
                 const eventCard = room.gameState.decks.partyEvent.pop();
                 outcome.card = eventCard;
-                this.resolvePartyEvent(room, eventCard);
-                room.gameState.decks.partyEvent.unshift(eventCard); 
+                this.resolvePartyEvent(room, eventCard, player.id);
             }
         }
         
@@ -1502,10 +1508,12 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
-    resolvePartyEvent(room, card) {
+    resolvePartyEvent(room, card, playerId) {
         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `A party event occurs: <b>${card.name}</b>! ${card.outcome}`});
         const effect = card.effect;
         if (!effect) return;
+
+        room.gameState.currentPartyEvent = card;
 
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
         
@@ -1693,7 +1701,7 @@ class GameManager {
             case 'useClassAbility': {
                 const ability = gameData.classes[player.class]?.ability;
                 if (!ability) return socket.emit('actionError', 'No ability found for your class.');
-                if (player.currentAp < ability.apCost) return socket.emit('actionError', 'Not enough AP.');
+                if (player.currentAp < ability.apCost) return socket.emit('actionError', 'Not enough Action Points.');
                 
                 player.currentAp -= ability.apCost;
                 this._resolveUseClassAbility(room, player, data);
@@ -1724,7 +1732,7 @@ class GameManager {
                     this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} takes a guard stance, gaining ${guardBonus} Shield HP.` });
                     this.emitGameState(room.id);
                 } else {
-                    socket.emit('actionError', 'Not enough AP to Guard.');
+                    socket.emit('actionError', 'Not enough Action Points to Guard.');
                 }
                 break;
             case 'briefRespite':
@@ -1740,7 +1748,7 @@ class GameManager {
                         socket.emit('actionError', 'No Health Dice remaining.');
                     }
                 } else {
-                    socket.emit('actionError', 'Not enough AP for a Brief Respite.');
+                    socket.emit('actionError', 'Not enough Action Points for a Brief Respite.');
                 }
                 break;
             case 'fullRest':
@@ -1756,7 +1764,7 @@ class GameManager {
                         socket.emit('actionError', 'Not enough Health Dice for a Full Rest.');
                     }
                 } else {
-                    socket.emit('actionError', 'Not enough AP for a Full Rest.');
+                    socket.emit('actionError', 'Not enough Action Points for a Full Rest.');
                 }
                 break;
             case 'contributeToSkillChallenge':
@@ -1765,7 +1773,7 @@ class GameManager {
                     return socket.emit('actionError', 'There is no active skill challenge.');
                 }
                 if (player.currentAp < 1) { 
-                    return socket.emit('actionError', 'Not enough AP to contribute.');
+                    return socket.emit('actionError', 'Not enough Action Points to contribute.');
                 }
                 player.currentAp -= 1;
     

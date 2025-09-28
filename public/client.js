@@ -2,7 +2,7 @@
 // It establishes the Socket.IO connection to the server, manages local game state,
 // handles all user interactions (button clicks, form submissions), and dynamically renders
 // the game state received from the server into the HTML DOM. It also contains WebRTC logic for voice chat
-// and the WebGL (Three.js) logic for the 3D dice roll animations.
+// and the spinner animation logic for dice rolls.
 
 const socket = io();
 
@@ -18,7 +18,6 @@ let pendingActionData = null; // For narrative modal
 let isMyTurnPreviously = false; // For "Your Turn" popup
 let tempSelectedClassId = null; // For temporary class selection in lobby
 let pendingAbilityConfirmation = null; // For non-attack ability confirmation
-let apModalShownThisTurn = false; // For AP management pop-up
 const modalQueue = [];
 let isModalActive = false;
 let currentSkipHandler = null; // Holds the function to skip the current skippable modal
@@ -31,10 +30,6 @@ const iceServers = {
         { urls: 'stun:stun1.l.google.com:19302' }
     ]
 };
-
-// --- 3D Dice Globals ---
-let diceRenderer, diceScene, diceCamera, diceMesh;
-let diceAnimationId;
 
 // Static data for rendering class cards without needing a server round-trip
 const classData = {
@@ -51,6 +46,9 @@ const statVisuals = {
     ap:          { icon: 'bolt', color: 'var(--stat-color-ap)' },
     damageBonus: { icon: 'swords', color: 'var(--stat-color-damage)' },
     shieldBonus: { icon: 'shield', color: 'var(--stat-color-shield)' },
+    healthDice:  { icon: 'healing', color: 'var(--stat-color-hp)' },
+    lifeCount:   { icon: 'ecg_heart', color: 'var(--stat-color-hp)' },
+    shieldHp:    { icon: 'shield_with_heart', color: 'var(--stat-color-shield)' },
     str:         { icon: 'fitness_center', color: 'var(--stat-color-str)' },
     dex:         { icon: 'sprint', color: 'var(--stat-color-dex)' },
     con:         { icon: 'health_and_safety', color: 'var(--stat-color-con)' },
@@ -103,6 +101,7 @@ const mobileHelpBtn = get('mobile-help-btn');
 // Desktop
 const turnIndicator = get('turn-indicator');
 const turnCounter = get('turn-counter');
+const apCounterDesktop = get('ap-counter-desktop');
 const startGameBtn = get('startGameBtn');
 const dmControls = get('dm-controls');
 const dmPlayMonsterBtn = get('dm-play-monster-btn');
@@ -122,6 +121,7 @@ const advancedChoiceButtonsDiv = get('advanced-choice-buttons');
 const playerHandDiv = get('player-hand');
 const gameBoardDiv = get('board-cards');
 const worldEventsContainer = get('world-events-container');
+const partyEventContainer = get('party-event-container');
 const partyLootContainer = get('party-loot-container');
 const gameLogContent = get('game-log-content');
 const desktopTabButtons = document.querySelectorAll('.game-area-desktop .tab-btn');
@@ -137,6 +137,7 @@ const actionEndTurnBtn = get('action-end-turn-btn');
 // Mobile
 const mobileTurnIndicator = get('mobile-turn-indicator');
 const mobileTurnCounter = get('mobile-turn-counter');
+const apCounterMobile = get('ap-counter-mobile');
 const mobileRoomCode = get('mobile-room-code');
 const mobileStartGameBtn = get('mobile-startGameBtn');
 const mobileBoardCards = get('mobile-board-cards');
@@ -155,6 +156,7 @@ const mobileEquippedItems = get('mobile-equipped-items');
 const mobilePlayerList = get('mobile-player-list');
 const mobileLobbySettingsDisplay = get('mobile-lobby-settings-display');
 const mobileWorldEventsContainer = get('mobile-world-events-container');
+const mobilePartyEventContainer = get('mobile-party-event-container');
 const mobilePartyLootContainer = get('mobile-party-loot-container');
 const mobileBottomNav = document.querySelector('.mobile-bottom-nav');
 const mobileChatLog = get('mobile-chat-log');
@@ -190,15 +192,15 @@ const narrativeInput = get('narrative-input');
 const narrativeCancelBtn = get('narrative-cancel-btn');
 const narrativeConfirmBtn = get('narrative-confirm-btn');
 const yourTurnPopup = get('your-turn-popup');
-const apModal = get('ap-modal');
-const apModalCancelBtn = get('ap-modal-cancel-btn');
-const apModalConfirmBtn = get('ap-modal-confirm-btn');
+const noApModal = get('no-ap-modal');
+const noApMessage = get('no-ap-message');
+const noApCloseBtn = get('no-ap-close-btn');
 const endTurnConfirmModal = get('end-turn-confirm-modal');
 const endTurnCancelBtn = get('end-turn-cancel-btn');
 const endTurnConfirmBtn = get('end-turn-confirm-btn');
 const diceRollOverlay = get('dice-roll-overlay');
 const diceRollTitle = get('dice-roll-title');
-const diceSceneContainer = get('dice-scene-container');
+const diceAnimationContainer = get('dice-animation-container');
 const diceSpinner = get('dice-spinner');
 const diceRollActionBtn = get('dice-roll-action-btn');
 const diceRollResult = get('dice-roll-result');
@@ -244,6 +246,7 @@ const itemFoundDisplay = get('item-found-display');
 const itemFoundCloseBtn = get('item-found-close-btn');
 const tutorialModal = get('tutorial-modal');
 const helpModal = get('help-modal');
+const toastContainer = get('toast-container');
 
 
 // --- Helper Functions ---
@@ -547,12 +550,16 @@ function renderGameState(room) {
     if (myPlayerInfo.pendingWorldEventSave) {
         worldEventTab.classList.add('highlight');
     }
+    const partyEventTab = document.querySelector('[data-tab="party-events-tab"]');
+    if(gameState.currentPartyEvent) {
+        partyEventTab.classList.add('highlight');
+    }
     const partyLootTab = document.querySelector('[data-tab="party-loot-tab"]');
     if (newLootCount > oldLootCount) {
         partyLootTab.classList.add('highlight');
     }
     const mobileInfoTab = document.querySelector('.nav-btn[data-screen="info"]');
-     if (myPlayerInfo.pendingWorldEventSave || newLootCount > oldLootCount) {
+     if (myPlayerInfo.pendingWorldEventSave || newLootCount > oldLootCount || gameState.currentPartyEvent) {
         mobileInfoTab.classList.add('highlight');
     }
 
@@ -608,11 +615,16 @@ function renderGameState(room) {
         });
     }
 
-
     const showActionBar = isMyTurn && isExplorer && !isStunned;
     const challenge = gameState.skillChallenge;
     fixedActionBar.classList.toggle('hidden', !showActionBar);
     mobileActionBar.classList.toggle('hidden', !showActionBar);
+    [apCounterDesktop, apCounterMobile].forEach(el => {
+        el.classList.toggle('hidden', !isMyTurn);
+        if (isMyTurn && myPlayerInfo.stats.ap) {
+            el.innerHTML = `<span class="material-symbols-outlined">bolt</span> AP: ${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}`;
+        }
+    });
 
     if (showActionBar) {
         const canGuard = myPlayerInfo.currentAp >= 1;
@@ -633,7 +645,6 @@ function renderGameState(room) {
 
 
     if (isMyTurn && !isMyTurnPreviously) {
-        apModalShownThisTurn = false;
         pendingAbilityConfirmation = null;
         selectedWeaponId = null;
         selectedTargetId = null;
@@ -821,26 +832,46 @@ function renderGameState(room) {
         mobileClassAbilityCard.classList.add('hidden');
     }
 
-    let statsHTML = '';
     if (myPlayerInfo.stats && myPlayerInfo.class) {
         const pStats = myPlayerInfo.stats;
-    
-        statsHTML = `
-            <span>HP:</span><span class="stat-value">${pStats.currentHp} / ${pStats.maxHp}</span>
-            <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${pStats.ap}</span>
-            <span>DMG Bonus:</span><span class="stat-value">${pStats.damageBonus}</span>
-            <span>SHIELD Bonus:</span><span class="stat-value">${pStats.shieldBonus}</span>
-            <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d${myPlayerInfo.healthDice.max}</span>
-            <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
+        const statsOrder = ['hp', 'ap', 'damageBonus', 'shieldBonus', 'healthDice', 'lifeCount', 'shieldHp', 'str', 'dex', 'con', 'int', 'wis', 'cha'];
+        const statsToDisplay = [];
+
+        statsOrder.forEach(key => {
+            const visual = statVisuals[key];
+            if (!visual) return;
             
-            <span>STR:</span><span class="stat-value">${pStats.str}</span>
-            <span>DEX:</span><span class="stat-value">${pStats.dex}</span>
-            <span>CON:</span><span class="stat-value">${pStats.con}</span>
-            <span>INT:</span><span class="stat-value">${pStats.int}</span>
-            <span>WIS:</span><span class="stat-value">${pStats.wis}</span>
-            <span>CHA:</span><span class="stat-value">${pStats.cha}</span>
-            ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : '<span class="placeholder"></span><span class="placeholder"></span>'}
-        `;
+            let label, value;
+            switch(key) {
+                case 'hp':
+                    label = "HP"; value = `${pStats.currentHp} / ${pStats.maxHp}`;
+                    break;
+                case 'ap':
+                    label = "AP"; value = `${myPlayerInfo.currentAp} / ${pStats.ap}`;
+                    break;
+                case 'damageBonus':
+                    label = "DMG Bonus"; value = pStats.damageBonus;
+                    break;
+                case 'shieldBonus':
+                    label = "SHIELD Bonus"; value = pStats.shieldBonus;
+                    break;
+                case 'healthDice':
+                    label = "Health Dice"; value = `${myPlayerInfo.healthDice.current}d${myPlayerInfo.healthDice.max}`;
+                    break;
+                case 'lifeCount':
+                    label = "Lives"; value = myPlayerInfo.lifeCount;
+                    break;
+                case 'shieldHp':
+                    if (pStats.shieldHp <= 0) return;
+                    label = "Shield HP"; value = pStats.shieldHp;
+                    break;
+                default:
+                    label = key.toUpperCase(); value = pStats[key];
+            }
+            statsToDisplay.push(`<div class="stat-line"><span class="material-symbols-outlined" style="color: ${visual.color};">${visual.icon}</span> <span class="stat-label">${label}:</span> <span class="stat-value">${value}</span></div>`);
+        });
+
+        const statsHTML = statsToDisplay.join('');
         playerStatsDiv.innerHTML = statsHTML;
         mobileStatsDisplay.innerHTML = statsHTML;
     }
@@ -910,10 +941,15 @@ function renderGameState(room) {
         });
     });
 
-    [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, gameBoardDiv, mobileBoardCards].forEach(c => c.innerHTML = '');
+    [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, gameBoardDiv, mobileBoardCards, partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '');
 
     if (gameState.worldEvents.currentEvent) {
         [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.appendChild(createCardElement(gameState.worldEvents.currentEvent)));
+    }
+     if (gameState.currentPartyEvent) {
+        [partyEventContainer, mobilePartyEventContainer].forEach(c => c.appendChild(createCardElement(gameState.currentPartyEvent)));
+    } else {
+        [partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No active party event.</p>');
     }
     if (gameState.lootPool && gameState.lootPool.length > 0) {
         gameState.lootPool.forEach(card => {
@@ -942,7 +978,7 @@ function renderGameState(room) {
                 const isUnarmed = selectedWeaponId === 'unarmed';
                 const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
                 if (myPlayerInfo.currentAp < apCost) {
-                    showToast(`Not enough Action Points. Needs ${apCost} AP.`);
+                    socket.emit('actionError', `Not enough Action Points. Needs ${apCost} AP.`);
                     return;
                 }
                 const cardName = isUnarmed ? 'Fists' : weapon.name;
@@ -958,13 +994,6 @@ function renderGameState(room) {
         mobileCardEl.addEventListener('click', clickHandler);
         mobileBoardCards.appendChild(mobileCardEl);
     });
-    
-    if (isMyTurn && myPlayerInfo.currentAp === 0 && !apModalShownThisTurn && !isPerformingAction) {
-        addToModalQueue(() => {
-            apModal.classList.remove('hidden');
-        }, 'ap-modal');
-        apModalShownThisTurn = true;
-    }
 }
 
 // --- UI EVENT LISTENERS ---
@@ -1139,17 +1168,11 @@ narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
 eventRollBtn.onclick = () => {
     socket.emit('rollForEvent');
     eventRollBtn.classList.add('hidden');
-    // Hide the modal and advance the queue so the next modal (dice roll) can appear.
     eventOverlay.classList.add('hidden');
     finishModal();
 };
-apModalConfirmBtn.addEventListener('click', () => {
-    socket.emit('endTurn');
-    apModal.classList.add('hidden');
-    finishModal();
-});
-apModalCancelBtn.addEventListener('click', () => {
-    apModal.classList.add('hidden');
+noApCloseBtn.addEventListener('click', () => {
+    noApModal.classList.add('hidden');
     finishModal();
 });
 worldEventSaveRollBtn.addEventListener('click', () => {
@@ -1274,15 +1297,29 @@ socket.on('gameStarted', (room) => {
 socket.on('gameStateUpdate', (room) => renderGameState(room));
 socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
-socket.on('actionError', (errorMessage) => showToast(errorMessage));
+socket.on('actionError', (errorMessage) => {
+    if(typeof errorMessage === 'string' && errorMessage.toLowerCase().includes('action points')) {
+        noApMessage.textContent = errorMessage;
+        addToModalQueue(() => {
+            noApModal.classList.remove('hidden');
+        }, 'no-ap-modal');
+    } else {
+        showToast(errorMessage);
+    }
+});
 
 socket.on('simpleRollAnimation', (data) => {
-    showDiceRoll(data);
+    if (data.playerId !== myId) {
+        showNonBlockingRollToast(data);
+    } else {
+        showDiceRoll(data);
+    }
 });
 
 socket.on('attackAnimation', (data) => {
     const { attackerId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, damageBonus, totalDamage } = data;
-
+    const isMyAttack = attackerId === myId;
+    
     const finalCallback = () => {
         isPerformingAction = false;
         if (currentRoomState.id) {
@@ -1297,38 +1334,42 @@ socket.on('attackAnimation', (data) => {
     
     const targetEl = document.querySelector(`.card[data-monster-id="${targetId}"]`);
     playEffectAnimation(targetEl, hit ? 'hit' : 'miss');
+    const attacker = currentRoomState.players[attackerId];
+    const title = isMyAttack ? 'You Attack!' : `${attacker?.name || 'Ally'} Attacks!`;
+    
+    const toHitData = {
+        title: title,
+        resultHTML: toHitResultHTML
+    };
 
-    showDiceRoll({
-        dieType: 'd20',
-        roll: d20Roll,
-        title: `${myId === attackerId ? 'You Attack!' : 'Ally Attacks!'}`,
-        resultHTML: toHitResultHTML,
-        continueCallback: () => {
-            if (hit && damageDice !== 'unarmed') {
-                const damageResultHTML = `
-                    <p class="result-line">DAMAGE!</p>
-                    <p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>
-                `;
-                const damageDieType = `d${damageDice.split('d')[1]}`;
-                showDiceRoll({
-                    dieType: damageDieType,
-                    roll: rawDamageRoll,
-                    title: `Damage Roll`,
-                    resultHTML: damageResultHTML,
-                    continueCallback: finalCallback,
-                });
-            } else if (hit && damageDice === 'unarmed') {
-                 const damageResultHTML = `<p class="result-line">DAMAGE!</p><p class="roll-details">Dealt <strong>${totalDamage}</strong> damage.</p>`;
-                 showDiceRoll({ dieType: 'd6', roll: 1, title: 'Unarmed Damage', resultHTML: damageResultHTML, continueCallback: finalCallback });
-            } else {
-                finalCallback();
+    const damageData = {
+        title: 'Damage Roll',
+        resultHTML: damageDice === 'unarmed'
+            ? `<p class="result-line">DAMAGE!</p><p class="roll-details">Dealt <strong>${totalDamage}</strong> damage.</p>`
+            : `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>`
+    };
+
+    if (isMyAttack) {
+        showDiceRoll({
+            dieType: 'd20', roll: d20Roll, ...toHitData,
+            continueCallback: () => {
+                if (hit) {
+                    showDiceRoll({ dieType: `d${damageDice.split('d')[1] || 6}`, roll: rawDamageRoll, ...damageData, continueCallback: finalCallback });
+                } else {
+                    finalCallback();
+                }
             }
+        });
+    } else {
+        showNonBlockingRollToast(toHitData);
+        if(hit) {
+            setTimeout(() => showNonBlockingRollToast(damageData), 1000); // Show damage toast after a delay
         }
-    });
+    }
 });
 
 socket.on('monsterAttackAnimation', (data) => {
-    const { attackerId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, attackBonus, totalDamage } = data;
+    const { targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, attackBonus, totalDamage } = data;
 
     const targetPlayerEl = get(`player-${targetId}`);
     playEffectAnimation(targetPlayerEl, hit ? 'hit' : 'miss');
@@ -1337,28 +1378,14 @@ socket.on('monsterAttackAnimation', (data) => {
         ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
         <p class="roll-details">Roll: ${d20Roll} + ${attackBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
     `;
-
-    showDiceRoll({
-        dieType: 'd20',
-        roll: d20Roll,
-        title: `Monster Attacks!`,
-        resultHTML: toHitResultHTML,
-        continueCallback: () => {
-            if (hit) {
-                const damageResultHTML = `
-                    <p class="result-line">DAMAGE!</p>
-                    <p class="roll-details">Roll: ${rawDamageRoll} (Dice) = <strong>${totalDamage}</strong></p>
-                `;
-                 const damageDieType = `d${damageDice.split('d')[1]}`;
-                 showDiceRoll({
-                    dieType: damageDieType,
-                    roll: rawDamageRoll,
-                    title: `Damage Roll`,
-                    resultHTML: damageResultHTML,
-                });
-            }
-        }
-    });
+    const toHitData = { title: 'Monster Attacks!', resultHTML: toHitResultHTML };
+    showNonBlockingRollToast(toHitData);
+    
+    if (hit) {
+        const damageResultHTML = `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) = <strong>${totalDamage}</strong></p>`;
+        const damageData = { title: 'Damage Roll', resultHTML: damageResultHTML };
+        setTimeout(() => showNonBlockingRollToast(damageData), 1000);
+    }
 });
 
 socket.on('eventRollResult', ({ roll, outcome }) => {
@@ -1702,18 +1729,15 @@ const helpContentHTML = `
 
 get('help-content').innerHTML = helpContentHTML;
 [helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => helpModal.classList.remove('hidden')));
-get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
-
+get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden');
 
 // --- INITIAL LOAD ---
 document.addEventListener('DOMContentLoaded', () => {
     initializeLobby();
-
     if (!localStorage.getItem('tutorialCompleted')) {
         showTutorial();
     }
 });
-
 
 // PWA Service Worker Registration
 if ('serviceWorker' in navigator) {
@@ -1726,218 +1750,65 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// --- 3D DICE LOGIC & FALLBACK SPINNER ---
-function initDiceScene() {
-    const container = diceSceneContainer;
-    if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
-        console.warn("Dice container not ready (zero dimensions).");
-        return false;
-    }
+// --- DICE SPINNER LOGIC ---
+function showNonBlockingRollToast(data) {
+    const toast = document.createElement('div');
+    toast.className = 'toast-roll-overlay';
 
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.className = 'toast-roll-close';
+    closeBtn.onclick = () => toast.remove();
 
-    if (diceRenderer) { 
-        const currentSize = diceRenderer.getSize(new THREE.Vector2());
-        if(currentSize.x !== width || currentSize.y !== height) {
-            diceRenderer.setSize(width, height);
-            diceCamera.aspect = width / height;
-            diceCamera.updateProjectionMatrix();
-        }
-        return true;
-    }
-
-    try {
-        diceScene = new THREE.Scene();
-        diceScene.background = null;
-
-        diceCamera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-        diceCamera.position.z = 2.5;
-
-        diceRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-        diceRenderer.setSize(width, height);
-        container.innerHTML = ''; 
-        container.appendChild(diceRenderer.domElement);
-
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-        diceScene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight.position.set(1, 1, 1);
-        diceScene.add(directionalLight);
-
-        return true;
-    } catch (e) {
-        console.error("Error initializing 3D dice scene:", e);
-        diceRenderer = null; 
-        return false;
-    }
-}
-
-function createTextTexture(text) {
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.width = 128;
-    canvas.height = 128;
+    toast.innerHTML = `
+        <div class="toast-roll-content">
+            <h2 class="panel-header">${data.title}</h2>
+            <div class="dice-roll-result-container">${data.resultHTML}</div>
+        </div>
+    `;
+    toast.querySelector('.toast-roll-content').prepend(closeBtn);
     
-    context.fillStyle = '#1a2226';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    context.font = "bold 60px 'Inter', sans-serif";
-    context.fillStyle = '#e8eff3';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(text, canvas.width / 2, canvas.height / 2);
-    
-    return new THREE.CanvasTexture(canvas);
-}
-
-function getDiceMaterials(faces) {
-    return faces.map(face => new THREE.MeshLambertMaterial({ map: createTextTexture(face) }));
-}
-
-function getDiceTargetRotation(diceType, result) {
-    const quarter = Math.PI / 2;
-    const rotations = {
-        d6: {
-            1: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0)),
-            2: new THREE.Quaternion().setFromEuler(new THREE.Euler(-quarter, 0, 0)),
-            3: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, quarter, 0)),
-            4: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -quarter, 0)),
-            5: new THREE.Quaternion().setFromEuler(new THREE.Euler(quarter, 0, 0)),
-            6: new THREE.Quaternion().setFromEuler(new THREE.Euler(2 * quarter, 0, 0)),
-        },
-        d20: { default: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)) },
-        d8: { default: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)) }
-    };
-    return rotations[diceType][result] || rotations[diceType].default;
-}
-
-function showSpinnerAnimation(dieType, finalRoll, callback) {
-    diceSceneContainer.style.display = 'none';
-    diceSpinner.classList.remove('hidden');
-
-    const spinnerValue = diceSpinner.querySelector('.spinner-value');
-    const max = parseInt(dieType.slice(1), 10);
-    let counter = 0;
-    const interval = setInterval(() => {
-        spinnerValue.textContent = Math.floor(Math.random() * max) + 1;
-        counter += 50;
-        if (counter >= 1500) {
-            clearInterval(interval);
-            spinnerValue.textContent = finalRoll;
-            setTimeout(() => {
-                diceSpinner.classList.add('hidden');
-                callback();
-            }, 500);
-        }
-    }, 50);
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+        toast.remove();
+    }, 7000); // Automatically remove after 7 seconds
 }
 
 function showDiceRoll(options) {
     const { dieType, roll, title, resultHTML, continueCallback } = options;
 
     addToModalQueue(() => {
-        if (diceAnimationId) cancelAnimationFrame(diceAnimationId);
-        diceAnimationId = null;
-
         diceRollTitle.textContent = title;
         diceRollResult.classList.add('hidden');
         diceRollContinueBtn.classList.add('hidden');
-        diceSceneContainer.style.display = 'block';
-        diceSpinner.classList.add('hidden');
+        diceAnimationContainer.style.height = '200px';
+        diceSpinner.classList.remove('hidden');
         diceRollOverlay.classList.remove('hidden');
         
-        let hasContinued = false;
-        let safetyTimeout = null;
+        const spinnerValue = diceSpinner.querySelector('.spinner-value');
+        const max = parseInt(dieType.slice(1), 10);
+        let counter = 0;
+        const interval = setInterval(() => {
+            spinnerValue.textContent = Math.floor(Math.random() * max) + 1;
+            counter += 50;
+            if (counter >= 1500) {
+                clearInterval(interval);
+                spinnerValue.textContent = roll;
+                setTimeout(() => {
+                    diceSpinner.classList.add('hidden');
+                    diceAnimationContainer.style.height = '0px';
 
-        const showResultsAndContinue = () => {
-            if (hasContinued) return;
-            hasContinued = true;
-            
-            if (safetyTimeout) clearTimeout(safetyTimeout);
-            if (diceAnimationId) cancelAnimationFrame(diceAnimationId);
-            diceAnimationId = null;
-
-            diceSceneContainer.style.display = 'none';
-            diceSpinner.classList.add('hidden');
-            diceRollResult.innerHTML = resultHTML;
-            diceRollResult.classList.remove('hidden');
-            diceRollContinueBtn.classList.remove('hidden');
-            diceRollContinueBtn.onclick = () => {
-                diceRollOverlay.classList.add('hidden');
-                if (continueCallback) continueCallback();
-                finishModal();
-            };
-        };
-        
-        const runFallback = () => {
-            if (hasContinued) return;
-            console.warn("Dice animation failed. Running spinner fallback.");
-            showSpinnerAnimation(dieType, roll, showResultsAndContinue);
-        };
-
-        safetyTimeout = setTimeout(runFallback, 3000);
-
-        try {
-            const sceneReady = initDiceScene();
-            if (!sceneReady) {
-                runFallback();
-                return;
+                    diceRollResult.innerHTML = resultHTML;
+                    diceRollResult.classList.remove('hidden');
+                    diceRollContinueBtn.classList.remove('hidden');
+                    diceRollContinueBtn.onclick = () => {
+                        diceRollOverlay.classList.add('hidden');
+                        if (continueCallback) continueCallback();
+                        finishModal();
+                    };
+                }, 500);
             }
-
-            if (diceMesh) diceScene.remove(diceMesh);
-            
-            let geometry, materials;
-            switch (dieType) {
-                case 'd8':
-                    geometry = new THREE.OctahedronGeometry(1);
-                    materials = getDiceMaterials(['1','2','3','4','5','6','7','8']);
-                    break;
-                case 'd20':
-                    geometry = new THREE.IcosahedronGeometry(1);
-                    materials = getDiceMaterials(Array.from({length: 20}, (_, i) => String(i + 1)));
-                    break;
-                case 'd6':
-                default:
-                    geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
-                    materials = getDiceMaterials(['1','2','3','4','5','6']);
-                    break;
-            }
-            diceMesh = new THREE.Mesh(geometry, materials);
-            diceScene.add(diceMesh);
-
-            const duration = 2000;
-            const settleDuration = 500;
-            const startTime = Date.now();
-            diceMesh.quaternion.random();
-            const targetRotation = getDiceTargetRotation(dieType, roll);
-
-            function animate() {
-                if (hasContinued) return;
-                const elapsed = Date.now() - startTime;
-                
-                if (elapsed < duration) {
-                    diceMesh.rotation.x += (Math.random() - 0.5) * 0.2;
-                    diceMesh.rotation.y += (Math.random() - 0.5) * 0.2;
-                    diceAnimationId = requestAnimationFrame(animate);
-                } else if (elapsed < duration + settleDuration) {
-                    THREE.Quaternion.slerp(diceMesh.quaternion, targetRotation, diceMesh.quaternion, 0.1);
-                    diceAnimationId = requestAnimationFrame(animate);
-                } else {
-                    diceMesh.quaternion.copy(targetRotation);
-                    showResultsAndContinue();
-                    return; 
-                }
-                
-                if (diceRenderer) {
-                    diceRenderer.render(diceScene, diceCamera);
-                }
-            }
-            animate();
-        } catch(e) {
-            console.error("An error occurred during the dice animation. Triggering fallback.", e);
-            runFallback();
-        }
+        }, 50);
     }, `dice-roll-${Math.random()}`);
 }
 

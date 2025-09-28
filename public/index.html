@@ -97,6 +97,7 @@
             <header class="game-header">
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
+                     <p id="ap-counter-desktop" class="ap-counter hidden"></p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                      <p class="build-number-font">v4.5.30 - The New War (ClarityV2)</p>
                 </div>
@@ -160,11 +161,15 @@
             <aside class="info-tabs-panel">
                 <div class="tab-buttons">
                     <button class="tab-btn" data-tab="world-events-tab">World Events</button>
+                    <button class="tab-btn" data-tab="party-events-tab">Party Event</button>
                     <button class="tab-btn" data-tab="party-loot-tab">Party Discoveries</button>
                     <button class="tab-btn active" data-tab="game-log-tab">Game Log</button>
                 </div>
                 <div id="world-events-tab" class="tab-content">
                     <div id="world-events-container" class="card-container-row"></div>
+                </div>
+                <div id="party-events-tab" class="tab-content">
+                    <div id="party-event-container" class="card-container-row"></div>
                 </div>
                 <div id="party-loot-tab" class="tab-content">
                     <div id="party-loot-container" class="card-container-row"></div>
@@ -201,6 +206,7 @@
             <header class="mobile-header">
                 <div class="mobile-header-info">
                      <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
+                     <p id="ap-counter-mobile" class="ap-counter hidden"></p>
                      <p class="turn-counter">Turn: <span id="mobile-turn-counter">0</span></p>
                      <p class="room-code-mobile">Code: <span id="mobile-room-code">----</span></p>
                 </div>
@@ -277,6 +283,10 @@
                          <div id="mobile-world-events-container" class="card-container-row"></div>
                     </div>
                      <div class="panel mobile-panel">
+                        <h2 class="panel-header">Current Party Event</h2>
+                        <div id="mobile-party-event-container" class="card-container-row"></div>
+                    </div>
+                     <div class="panel mobile-panel">
                         <h2 class="panel-header">Party Discoveries</h2>
                         <div id="mobile-party-loot-container" class="card-container-row"></div>
                     </div>
@@ -349,13 +359,12 @@
         </div>
     </div>
 
-    <div id="ap-modal" class="modal-overlay hidden">
-        <div class="modal-content ap-modal-content">
-            <h2 class="panel-header">Out of Actions</h2>
-            <p>You have used all your Action Points for this turn. Do you want to end your turn now?</p>
+    <div id="no-ap-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="panel-header">Action Points Needed</h2>
+            <p id="no-ap-message">You do not have enough Action Points to perform that action.</p>
             <div class="modal-actions">
-                <button id="ap-modal-cancel-btn" class="btn btn-secondary">Not Yet</button>
-                <button id="ap-modal-confirm-btn" class="btn btn-primary">End Turn</button>
+                <button id="no-ap-close-btn" class="btn btn-primary">OK</button>
             </div>
         </div>
     </div>
@@ -376,10 +385,7 @@
     <div id="dice-roll-overlay" class="modal-overlay hidden">
         <div class="modal-content dice-roll-content">
             <h2 id="dice-roll-title" class="panel-header">Rolling...</h2>
-            <div class="dice-animation-container">
-                <div class="dice-scene" id="dice-scene-container">
-                    <!-- 3D Canvas will be inserted here by JavaScript -->
-                </div>
+            <div id="dice-animation-container" class="dice-animation-container">
                 <div id="dice-spinner" class="dice-spinner hidden">
                     <div class="spinner-wheel"></div>
                     <div class="spinner-value">?</div>
@@ -511,6 +517,7 @@
 
     <div id="voice-chat-container"></div>
     <div id="animation-overlay"></div>
+    <div id="toast-container" class="toast-container"></div>
     
     <button id="skip-popup-btn" class="btn btn-secondary btn-sm skip-popup-btn hidden">Skip</button>
     
@@ -520,7 +527,6 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="/client.js"></script>
 </body>
 </html>
