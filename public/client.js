@@ -369,16 +369,9 @@ function createCardElement(card, actions = {}) {
     let monsterHologramHTML = '';
     let monsterStatsHTML = '';
     if(card.type === 'Monster') {
-        const monsterType = card.primaryType ? card.primaryType.toLowerCase() : 'beast';
-        const healthPercentage = (card.currentHp / card.maxHp) * 100;
-        monsterHologramHTML = `
-            <div class="hologram-container">
-                <div class="monster-hologram hologram-${monsterType}"></div>
-                <div class="health-bar-container">
-                    <div class="health-bar-fill" style="width: ${healthPercentage}%;"></div>
-                </div>
-            </div>
-        `;
+        // Per user request, hiding hologram and health bar as hologram isn't displaying correctly.
+        monsterHologramHTML = '';
+        
         monsterStatsHTML = `
             <div class="monster-stats-grid">
                 <div class="card-bonus" title="Attack Bonus" style="color: ${statVisuals.attackBonus.color};"><span class="material-symbols-outlined">${statVisuals.attackBonus.icon}</span>+${card.attackBonus || 0}</div>

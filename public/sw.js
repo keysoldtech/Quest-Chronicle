@@ -2,7 +2,7 @@
 // It handles caching of assets for offline functionality and manages the update process
 // to ensure users seamlessly receive new versions of the app.
 
-const CACHE_NAME = 'quest-and-chronicle-v4.5.28-the-new-war-clarity';
+const CACHE_NAME = 'quest-and-chronicle-v4.5.29-ui-fix';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -12,8 +12,7 @@ const urlsToCache = [
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=MedievalSharp&display=swap',
-  'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=MedievalSharp&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap',
 ];
 
 // Install event: triggered when the service worker is first registered.
