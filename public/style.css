@@ -139,7 +139,7 @@ body {
     gap: 0.75rem;
     width: 100%;
 }
-.button-group, .join-group {
+.join-group {
     flex-direction: row;
 }
 
