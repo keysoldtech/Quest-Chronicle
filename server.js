@@ -810,15 +810,10 @@ class GameManager {
 
                 switch (bestAction.action) {
                     case 'useClassAbility':
-                        currentPlayerState.currentAp -= bestAction.apCost;
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> uses their ${player.class} ability!` });
                         this._resolveUseClassAbility(room, currentPlayerState, null);
                         break;
                     case 'attack':
-                        this.sendMessageToRoom(room.id, {
-                            channel: 'game',
-                            type: 'system',
-                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack.`
-                        });
                         this._resolveAttack(room, {
                             attackerId: player.id,
                             targetId: bestAction.targetId,
@@ -827,11 +822,6 @@ class GameManager {
                         });
                         break;
                      case 'unarmedAttack':
-                        this.sendMessageToRoom(room.id, {
-                            channel: 'game',
-                            type: 'system',
-                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP for an Unarmed Strike.`
-                        });
                         this._resolveUnarmedAttack(room, {
                             attackerId: player.id,
                             targetId: bestAction.targetId,
@@ -849,15 +839,18 @@ class GameManager {
                         });
                         break;
                     case 'briefRespite':
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> takes a brief respite to tend their wounds.` });
                         this._resolveBriefRespite(room, currentPlayerState);
                         break;
                     case 'fullRest':
+                         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> takes a moment to rest and recover fully.` });
                         this._resolveFullRest(room, currentPlayerState);
                         break;
                     case 'useCard':
                          this._resolveUseCard(room, currentPlayerState, { cardId: bestAction.cardId, targetId: bestAction.targetId }, "An NPC used a card.");
                          break;
                     case 'contributeToSkillChallenge':
+                         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> contributes to the skill challenge.` });
                         this._resolveContributeToSkillChallenge(room, currentPlayerState);
                         break;
                 }
@@ -1147,7 +1140,100 @@ class GameManager {
         }
     }
 
-    // ... more functions to come
+    rollForEvent(socket) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingEventRoll) return;
+
+        player.pendingEventRoll = false;
+
+        const roll = this.rollDice('1d20');
+        let outcome = { type: 'none', message: 'The path ahead is quiet.' };
+
+        if (roll <= 10) {
+            // Nothing happens
+        } else if (roll <= 17) {
+            // Find an item
+            if (room.gameState.decks.treasure.length > 0) {
+                const card = room.gameState.decks.treasure.pop();
+                outcome = { type: 'item', message: `You found an item: ${card.name}!`, card };
+                this._addCardToPlayerHand(room, player, card);
+                socket.emit('eventItemFound', card);
+            }
+        } else {
+            // Player event
+            if (room.gameState.decks.playerEvent.length >= 2) {
+                const options = [room.gameState.decks.playerEvent.pop(), room.gameState.decks.playerEvent.pop()];
+                player.pendingEventChoice = { options };
+                outcome = { type: 'playerEvent', message: 'A personal event occurs! You must make a choice.', options };
+            }
+        }
+        
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', type: 'system',
+            message: `<b>${player.name}</b> rolled a <b>${roll}</b> for their turn event. ${outcome.message}`
+        });
+        
+        socket.emit('eventRollResult', { roll, outcome });
+        
+        io.to(room.id).emit('simpleRollAnimation', {
+            playerId: player.id,
+            title: `${player.name}'s Event Roll`,
+            roll: roll,
+            resultHTML: `<p class="result-line">${roll}</p><p class="roll-details">${outcome.message}</p>`
+        });
+        
+        this.emitGameState(room.id);
+    }
+    
+    selectEventCard(socket, { cardId }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingEventChoice) return;
+
+        const choice = player.pendingEventChoice.options.find(c => c.id === cardId);
+        if (choice) {
+            // TODO: Resolve the event card's effect. For now, just log it.
+            this.sendMessageToRoom(room.id, {
+                channel: 'game', type: 'system',
+                message: `<b>${player.name}</b> chose: ${choice.name}. ${choice.outcome}`
+            });
+        }
+        
+        player.pendingEventChoice = null;
+        this.emitGameState(room.id);
+    }
+    
+    resolveItemSwap(socket, { cardToDiscardId }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingItemSwap) return;
+    
+        const newCard = player.pendingItemSwap.newCard;
+    
+        if (cardToDiscardId === null) {
+            // Player chose to discard the new item.
+            this.sendMessageToRoom(room.id, {
+                channel: 'game', type: 'system',
+                message: `<b>${player.name}</b> discarded the newly found ${newCard.name}.`
+            });
+        } else {
+            // Player chose to discard an item from their hand.
+            const cardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
+            if (cardIndex > -1) {
+                const discardedCard = player.hand[cardIndex];
+                player.hand.splice(cardIndex, 1); // Remove old card
+                player.hand.push(newCard); // Add new card
+                this.sendMessageToRoom(room.id, {
+                    channel: 'game', type: 'system',
+                    message: `<b>${player.name}</b> swapped their ${discardedCard.name} for the new ${newCard.name}.`
+                });
+            }
+        }
+    
+        player.pendingItemSwap = null; // CRITICAL: Clear the pending state
+        this.emitGameState(room.id);
+    }
 }
 
 // --- 4. SOCKET.IO CONNECTION HANDLING ---
@@ -1165,6 +1251,9 @@ io.on('connection', (socket) => {
     socket.on('endTurn', () => gameManager.endTurn(socket));
     socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));
     socket.on('dmAction', (data) => gameManager.handleDmAction(socket, data));
+    socket.on('rollForEvent', () => gameManager.rollForEvent(socket));
+    socket.on('selectEventCard', (data) => gameManager.selectEventCard(socket, data));
+    socket.on('resolveItemSwap', (data) => gameManager.resolveItemSwap(socket, data));
 
     socket.on('sendMessage', (data) => {
         const room = gameManager.findRoomBySocket(socket);

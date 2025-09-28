@@ -1095,8 +1095,6 @@ socket.on('actionError', (errorMessage) => {
 socket.on('simpleRollAnimation', (data) => {
     if (data.playerId !== myId) {
         showNonBlockingRollToast(data);
-    } else {
-        showDiceRoll(data);
     }
 });
 
@@ -1128,34 +1126,37 @@ socket.on('attackAnimation', (data) => {
     };
     
     const showRoll = (rollOptions) => {
-        const { dieType, roll, title, resultHTML, onContinue } = rollOptions;
+        addToModalQueue(() => {
+            const { dieType, roll, title, resultHTML, onContinue } = rollOptions;
 
-        diceRollTitle.textContent = title;
-        diceRollResult.classList.add('hidden');
-        diceRollContinueBtn.classList.add('hidden');
-        diceAnimationContainer.style.height = '200px';
-        diceSpinner.classList.remove('hidden');
-        
-        const spinnerValue = diceSpinner.querySelector('.spinner-value');
-        const max = parseInt(dieType.slice(1), 10);
-        let counter = 0;
-        const interval = setInterval(() => {
-            spinnerValue.textContent = Math.floor(Math.random() * max) + 1;
-            counter += 50;
-            if (counter >= 1500) {
-                clearInterval(interval);
-                spinnerValue.textContent = roll;
-                setTimeout(() => {
-                    diceSpinner.classList.add('hidden');
-                    diceAnimationContainer.style.height = '0px';
+            diceRollOverlay.classList.remove('hidden');
+            diceRollTitle.textContent = title;
+            diceRollResult.classList.add('hidden');
+            diceRollContinueBtn.classList.add('hidden');
+            diceAnimationContainer.style.height = '200px';
+            diceSpinner.classList.remove('hidden');
+            
+            const spinnerValue = diceSpinner.querySelector('.spinner-value');
+            const max = parseInt(dieType.slice(1), 10);
+            let counter = 0;
+            const interval = setInterval(() => {
+                spinnerValue.textContent = Math.floor(Math.random() * max) + 1;
+                counter += 50;
+                if (counter >= 1500) {
+                    clearInterval(interval);
+                    spinnerValue.textContent = roll;
+                    setTimeout(() => {
+                        diceSpinner.classList.add('hidden');
+                        diceAnimationContainer.style.height = '0px';
 
-                    diceRollResult.innerHTML = resultHTML;
-                    diceRollResult.classList.remove('hidden');
-                    diceRollContinueBtn.classList.remove('hidden');
-                    diceRollContinueBtn.onclick = onContinue;
-                }, 500);
-            }
-        }, 50);
+                        diceRollResult.innerHTML = resultHTML;
+                        diceRollResult.classList.remove('hidden');
+                        diceRollContinueBtn.classList.remove('hidden');
+                        diceRollContinueBtn.onclick = onContinue;
+                    }, 500);
+                }
+            }, 50);
+        });
     };
 
     const damageStep = () => showRoll({
@@ -1177,14 +1178,12 @@ socket.on('attackAnimation', (data) => {
     // --- Execute sequence ---
     if (isMyAttack) {
         isPerformingAction = true;
-        isModalActive = true; // Manually claim the modal state
-        diceRollOverlay.classList.remove('hidden');
         toHitStep();
     } else {
         // Non-attacker just sees toasts. This is non-blocking.
         showNonBlockingRollToast({ title: toHitTitle, resultHTML: toHitResultHTML });
         if (hit) {
-            setTimeout(() => showNonBlockingRollToast({ title: damageTitle, resultHTML: damageResultHTML }), 1000);
+            setTimeout(() => showNonBlockingRollToast({ title: damageTitle, resultHTML: damageResultHTML }), 2000);
         }
     }
 });
@@ -1208,13 +1207,12 @@ socket.on('monsterAttackAnimation', (data) => {
         const damageResultHTML = `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) = <strong>${totalDamage}</strong></p>`;
         setTimeout(() => {
             showNonBlockingRollToast({ title: 'Damage Roll', resultHTML: damageResultHTML });
-        }, 1000);
+        }, 2000);
     }
 });
 
-
 socket.on('eventRollResult', ({ roll, outcome }) => {
-    const resultHTML = `<p class="result-line">You rolled a ${roll}!</p><p>${outcome.type === 'none' ? 'Nothing happened.' : 'An event occurred!'}</p>`;
+    const resultHTML = `<p class="result-line">${roll}</p><p>${outcome.message}</p>`;
     showDiceRoll({
         dieType: 'd20',
         roll: roll,

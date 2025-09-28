@@ -107,9 +107,9 @@
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p id="ap-counter-desktop" class="ap-counter hidden"></p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.5.2 (Playtest-v1.2)</p>
                 </div>
                  <div class="header-controls">
+                    <p class="build-number-font">v4.5.2 (Playtest-v1.2)</p>
                     <div id="dm-controls" class="dm-controls hidden">
                          <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                     </div>
@@ -117,7 +117,7 @@
                         <button id="startGameBtn" class="btn btn-primary hidden">Start Game</button>
                     </div>
                     <div class="room-code-display">
-                        <p>Room Code:</p>
+                        <span>Room Code</span>
                         <p id="room-code">----</p>
                     </div>
                     <button id="help-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">help</span></button>
@@ -215,12 +215,14 @@
                 <div class="mobile-header-info">
                      <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
                      <p id="ap-counter-mobile" class="ap-counter hidden"></p>
-                     <p class="turn-counter">Turn: <span id="mobile-turn-counter">0</span></p>
-                     <p class="room-code-mobile">Code: <span id="mobile-room-code">----</span></p>
                 </div>
                  <div class="mobile-header-controls">
                     <div id="mobile-header-action-buttons">
                         <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
+                    </div>
+                    <div class="room-code-display mobile">
+                        <span>Code</span>
+                        <p id="mobile-room-code">----</p>
                     </div>
                     <button id="mobile-help-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">help</span></button>
                     <div class="header-menu">
