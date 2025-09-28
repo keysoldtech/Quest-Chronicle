@@ -549,14 +549,20 @@ class GameManager {
         }
 
         // --- PRIORITY 2: COMBAT (ATTACKING) ---
-        const weapon = equipment.weapon;
-        if (weapon && board.monsters.length > 0) {
-            const apCost = weapon.apCost; 
-            if (apCost && currentAp >= apCost) {
-                // Target the monster with the lowest current HP
+        if (board.monsters.length > 0) {
+            const weapon = equipment.weapon;
+            if (weapon) {
+                const apCost = weapon.apCost || 2; 
+                if (currentAp >= apCost) {
+                    let bestTarget = board.monsters.reduce((prev, curr) => (prev.currentHp < curr.currentHp) ? prev : curr);
+                    if (bestTarget) {
+                        return { action: 'attack', targetId: bestTarget.id, weaponId: weapon.id, apCost: apCost };
+                    }
+                }
+            } else if (currentAp >= 1) { // Unarmed Strike as a fallback
                 let bestTarget = board.monsters.reduce((prev, curr) => (prev.currentHp < curr.currentHp) ? prev : curr);
-                if (bestTarget) {
-                    return { action: 'attack', targetId: bestTarget.id, weaponId: weapon.id, apCost: apCost };
+                 if (bestTarget) {
+                    return { action: 'unarmedAttack', targetId: bestTarget.id, apCost: 1 };
                 }
             }
         }
@@ -661,6 +667,19 @@ class GameManager {
                             weaponId: bestAction.weaponId,
                             narrative: narrative
                         }, d20Roll);
+                        break;
+                     case 'unarmedAttack':
+                        this.sendMessageToRoom(room.id, {
+                            channel: 'game',
+                            type: 'system',
+                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP for an Unarmed Strike.`
+                        });
+                        const unarmedD20Roll = Math.floor(Math.random() * 20) + 1;
+                        this._resolveUnarmedAttack(room, {
+                            attackerId: player.id,
+                            targetId: bestAction.targetId,
+                            narrative: `${player.name} lashes out with their bare fists!`
+                        }, unarmedD20Roll);
                         break;
                     case 'guard':
                         const guardBonus = currentPlayerState.equipment.armor?.guardBonus || 2;
@@ -1145,6 +1164,63 @@ class GameManager {
         }, d20Roll);
     }
 
+    _resolveUnarmedAttack(room, attackData, d20Roll) {
+        const player = room.players[attackData.attackerId];
+        const target = room.gameState.board.monsters.find(m => m.id === attackData.targetId);
+        if (!player || !target) {
+             console.error("Could not resolve unarmed attack, missing data.");
+             this.emitGameState(room.id);
+             return;
+        }
+
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', senderName: player.name,
+            message: attackData.narrative, isNarrative: true
+        });
+
+        const isCrit = d20Roll === 20;
+        const isFumble = d20Roll === 1;
+        const totalRollToHit = d20Roll + player.stats.damageBonus;
+        const hit = isCrit || (!isFumble && totalRollToHit >= target.requiredRollToHit);
+
+        let totalDamage = 0;
+        if (hit) {
+            // Damage formula: Ceiling(STR/2)
+            totalDamage = Math.ceil(player.stats.str / 2);
+            if (isCrit) totalDamage *= 2;
+            target.currentHp -= totalDamage;
+        }
+
+        let logMessageText = `<b>${player.name}</b> strikes ${target.name}! Roll: ${d20Roll} + ${player.stats.damageBonus} = <b>${totalRollToHit}</b> vs DC ${target.requiredRollToHit}. `;
+        if (isCrit) logMessageText = `<b>CRITICAL HIT!</b> ` + logMessageText;
+        else if (isFumble) logMessageText = `<b>FUMBLE!</b> ` + logMessageText;
+
+        if (hit) {
+            logMessageText += `<span style='color: var(--color-success)'>HIT!</span> Dealing <b>${totalDamage}</b> damage.`;
+        } else {
+            logMessageText += `<span style='color: var(--color-danger)'>MISS!</span>`;
+        }
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessageText });
+
+        io.to(room.id).emit('attackAnimation', {
+            attackerId: player.id,
+            targetId: target.id,
+            d20Roll, isCrit, isFumble, totalRollToHit,
+            requiredRoll: target.requiredRollToHit,
+            hit,
+            damageDice: 'unarmed',
+            rawDamageRoll: totalDamage,
+            damageBonus: 0,
+            totalDamage,
+        });
+
+        if (target.currentHp <= 0) {
+            this._handleMonsterDefeated(room, player, target);
+        }
+
+        this.emitGameState(room.id);
+    }
+
     _resolveAttack(room, attackData, d20Roll) {
         const player = room.players[attackData.attackerId];
         const target = room.gameState.board.monsters.find(m => m.id === attackData.targetId);
@@ -1230,50 +1306,54 @@ class GameManager {
         });
     
         if (target.currentHp <= 0) {
-            room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== target.id);
-            const dialogue = gameData.npcDialogue.dm.monsterDefeated;
-            this.sendMessageToRoom(room.id, {
-                channel: 'game', type: 'system',
-                message: `${player.name} defeated the ${target.name}!`,
-            });
-            this.sendMessageToRoom(room.id, {
-                channel: 'game', senderName: 'Dungeon Master',
-                message: dialogue[Math.floor(Math.random() * dialogue.length)], isNarrative: true
-            });
-    
-            const { customSettings } = room.gameState;
-            const lootChance = customSettings.lootDropRate / 100;
-    
-            if (Math.random() < lootChance) {
-                const suitableTreasure = room.gameState.decks.treasure.filter(card =>
-                    !card.class || card.class.includes("Any") || card.class.includes(player.class)
-                );
-    
-                if (suitableTreasure.length > 0) {
-                    const cardIndex = Math.floor(Math.random() * suitableTreasure.length);
-                    let card = suitableTreasure[cardIndex];
-    
-                    const mainDeckIndex = room.gameState.decks.treasure.findIndex(c => c.id === card.id);
-                    if (mainDeckIndex > -1) {
-                        room.gameState.decks.treasure.splice(mainDeckIndex, 1);
-                    }
-    
-                    if (card.type === 'Weapon' || card.type === 'Armor') {
-                        card = this.generateMagicalEquipment(card, room);
-                    }
-    
-                    this._addCardToPlayerHand(room, player, card);
-                    this.sendMessageToRoom(room.id, {
-                        channel: 'game', type: 'system',
-                        message: `The ${target.name} dropped a <b>${card.name}</b>!`
-                    });
-                }
-            }
+            this._handleMonsterDefeated(room, player, target);
         }
     
         this.emitGameState(room.id);
     }
     
+    _handleMonsterDefeated(room, player, target) {
+        room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== target.id);
+        const dialogue = gameData.npcDialogue.dm.monsterDefeated;
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', type: 'system',
+            message: `${player.name} defeated the ${target.name}!`,
+        });
+        this.sendMessageToRoom(room.id, {
+            channel: 'game', senderName: 'Dungeon Master',
+            message: dialogue[Math.floor(Math.random() * dialogue.length)], isNarrative: true
+        });
+
+        const { customSettings } = room.gameState;
+        const lootChance = customSettings.lootDropRate / 100;
+
+        if (Math.random() < lootChance) {
+            const suitableTreasure = room.gameState.decks.treasure.filter(card =>
+                !card.class || card.class.includes("Any") || card.class.includes(player.class)
+            );
+
+            if (suitableTreasure.length > 0) {
+                const cardIndex = Math.floor(Math.random() * suitableTreasure.length);
+                let card = suitableTreasure[cardIndex];
+
+                const mainDeckIndex = room.gameState.decks.treasure.findIndex(c => c.id === card.id);
+                if (mainDeckIndex > -1) {
+                    room.gameState.decks.treasure.splice(mainDeckIndex, 1);
+                }
+
+                if (card.type === 'Weapon' || card.type === 'Armor') {
+                    card = this.generateMagicalEquipment(card, room);
+                }
+
+                this._addCardToPlayerHand(room, player, card);
+                this.sendMessageToRoom(room.id, {
+                    channel: 'game', type: 'system',
+                    message: `The ${target.name} dropped a <b>${card.name}</b>!`
+                });
+            }
+        }
+    }
+
     generateMagicalEquipment(card, room) {
         const { customSettings, turnCount } = room.gameState;
         const newCard = JSON.parse(JSON.stringify(card)); // Deep copy

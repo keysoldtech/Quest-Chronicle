@@ -2,7 +2,7 @@
 // It handles caching of assets for offline functionality and manages the update process
 // to ensure users seamlessly receive new versions of the app.
 
-const CACHE_NAME = 'quest-and-chronicle-v4.5.29-ui-fix';
+const CACHE_NAME = 'quest-and-chronicle-v4.5.29-clarityv2';
 const urlsToCache = [
   '/',
   '/index.html',

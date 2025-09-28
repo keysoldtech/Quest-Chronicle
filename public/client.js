@@ -1,9 +1,8 @@
 // This file contains all client-side JavaScript logic for the Quest & Chronicle game.
 // It establishes the Socket.IO connection to the server, manages local game state,
 // handles all user interactions (button clicks, form submissions), and dynamically renders
-// the game state received from the server into the HTML DOM. It also contains WebRTC logic for voice chat.
-
-// This script handles the client-side logic for interacting with the server.
+// the game state received from the server into the HTML DOM. It also contains WebRTC logic for voice chat
+// and the WebGL (Three.js) logic for the 3D dice roll animations.
 
 const socket = io();
 
@@ -32,6 +31,10 @@ const iceServers = {
         { urls: 'stun:stun1.l.google.com:19302' }
     ]
 };
+
+// --- 3D Dice Globals ---
+let diceRenderer, diceScene, diceCamera, diceMesh;
+let diceAnimationId;
 
 // Static data for rendering class cards without needing a server round-trip
 const classData = {
@@ -180,9 +183,7 @@ const endTurnCancelBtn = get('end-turn-cancel-btn');
 const endTurnConfirmBtn = get('end-turn-confirm-btn');
 const diceRollOverlay = get('dice-roll-overlay');
 const diceRollTitle = get('dice-roll-title');
-const diceD20 = get('dice-d20');
-const diceD8 = get('dice-d8');
-const diceD6 = get('dice-d6');
+const diceSceneContainer = get('dice-scene-container');
 const diceRollActionBtn = get('dice-roll-action-btn');
 const diceRollResult = get('dice-roll-result');
 const diceRollContinueBtn = get('dice-roll-continue-btn');
@@ -1153,6 +1154,7 @@ socket.on('roomCreated', (room) => {
     mobileRoomCode.textContent = room.id;
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.remove('hidden'));
     gameModeSelector.classList.remove('hidden');
+    initDiceScene();
     renderGameState(room);
 });
 socket.on('joinSuccess', (room) => {
@@ -1162,6 +1164,7 @@ socket.on('joinSuccess', (room) => {
     roomCodeDisplay.textContent = room.id;
     mobileRoomCode.textContent = room.id;
     gameModeSelector.classList.add('hidden');
+    initDiceScene();
     renderGameState(room);
 });
 socket.on('playerListUpdate', (room) => renderGameState(room));
@@ -1175,63 +1178,6 @@ socket.on('gameStateUpdate', (room) => renderGameState(room));
 socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 socket.on('actionError', (errorMessage) => showToast(errorMessage));
-
-
-function showDiceRoll(options) {
-    const { dieType, roll, title, resultHTML, continueCallback } = options;
-
-    addToModalQueue(() => {
-        const dieElement = get(`dice-${dieType}`);
-        if(!dieElement) {
-             console.error(`Die type ${dieType} not found!`);
-             finishModal();
-             return;
-        }
-
-        const closeAndCallback = () => {
-            diceRollOverlay.classList.add('hidden');
-            if(continueCallback) continueCallback();
-            finishModal();
-        };
-        
-        const showResult = () => {
-            dieElement.className = `dice ${dieType} stop-on-${roll}`;
-            diceRollResult.innerHTML = resultHTML;
-            diceRollResult.classList.remove('hidden');
-            diceRollContinueBtn.classList.remove('hidden');
-            diceRollContinueBtn.onclick = closeAndCallback;
-        };
-
-        document.querySelectorAll('.dice').forEach(d => d.classList.add('hidden'));
-        dieElement.classList.remove('hidden');
-        
-        diceRollTitle.textContent = title;
-        diceRollResult.classList.add('hidden');
-        diceRollContinueBtn.classList.add('hidden');
-        diceRollActionBtn.classList.add('hidden'); // Start with it hidden, show only if action needed
-        diceRollOverlay.classList.remove('hidden');
-        
-        dieElement.className = `dice ${dieType} is-rolling`;
-        setTimeout(showResult, 1500); 
-    }, `dice-roll-${Math.random()}`);
-}
-
-function playEffectAnimation(targetElement, effectType) {
-    if (!targetElement) return;
-
-    const effectEl = document.createElement('div');
-    effectEl.className = `effect-animation ${effectType}-effect`;
-    
-    const rect = targetElement.getBoundingClientRect();
-    effectEl.style.top = `${rect.top + rect.height / 2}px`;
-    effectEl.style.left = `${rect.left + rect.width / 2}px`;
-
-    animationOverlay.appendChild(effectEl);
-
-    setTimeout(() => {
-        effectEl.remove();
-    }, 1000); 
-}
 
 socket.on('simpleRollAnimation', (data) => {
     showDiceRoll(data);
@@ -1261,7 +1207,7 @@ socket.on('attackAnimation', (data) => {
         title: `${myId === attackerId ? 'You Attack!' : 'Ally Attacks!'}`,
         resultHTML: toHitResultHTML,
         continueCallback: () => {
-            if (hit) {
+            if (hit && damageDice !== 'unarmed') {
                 const damageResultHTML = `
                     <p class="result-line">DAMAGE!</p>
                     <p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>
@@ -1274,6 +1220,9 @@ socket.on('attackAnimation', (data) => {
                     resultHTML: damageResultHTML,
                     continueCallback: finalCallback,
                 });
+            } else if (hit && damageDice === 'unarmed') {
+                 const damageResultHTML = `<p class="result-line">DAMAGE!</p><p class="roll-details">Dealt <strong>${totalDamage}</strong> damage.</p>`;
+                 showDiceRoll({ dieType: 'd6', roll: 1, title: 'Unarmed Damage', resultHTML: damageResultHTML, continueCallback: finalCallback });
             } else {
                 finalCallback();
             }
@@ -1664,4 +1613,173 @@ if ('serviceWorker' in navigator) {
             console.log('SW registration failed: ', registrationError);
         });
     });
+}
+
+// --- 3D DICE LOGIC ---
+function initDiceScene() {
+    if (diceRenderer) return; // Already initialized
+
+    const container = diceSceneContainer;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    // Scene
+    diceScene = new THREE.Scene();
+    diceScene.background = null;
+
+    // Camera
+    diceCamera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+    diceCamera.position.z = 2.5;
+
+    // Renderer
+    diceRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    diceRenderer.setSize(width, height);
+    container.appendChild(diceRenderer.domElement);
+
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    diceScene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(1, 1, 1);
+    diceScene.add(directionalLight);
+}
+
+function createTextTexture(text) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 128;
+    canvas.height = 128;
+    
+    context.fillStyle = '#1a2226'; // var(--color-surface)
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.font = "bold 60px 'Inter', sans-serif";
+    context.fillStyle = '#e8eff3'; // var(--color-text-primary)
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(text, canvas.width / 2, canvas.height / 2);
+    
+    return new THREE.CanvasTexture(canvas);
+}
+
+function getDiceMaterials(faces) {
+    return faces.map(face => new THREE.MeshLambertMaterial({ map: createTextTexture(face) }));
+}
+
+function getDiceTargetRotation(diceType, result) {
+    // These rotations orient the die so the result face is pointing up (along the Y axis)
+    // Values are approximate and found through experimentation.
+    const quarter = Math.PI / 2;
+    const rotations = {
+        d6: {
+            1: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0)),
+            2: new THREE.Quaternion().setFromEuler(new THREE.Euler(-quarter, 0, 0)),
+            3: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, quarter, 0)),
+            4: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -quarter, 0)),
+            5: new THREE.Quaternion().setFromEuler(new THREE.Euler(quarter, 0, 0)),
+            6: new THREE.Quaternion().setFromEuler(new THREE.Euler(2 * quarter, 0, 0)),
+        },
+        // Approximations for other dice
+        d20: { default: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)) },
+        d8: { default: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)) }
+    };
+    return rotations[diceType][result] || rotations[diceType].default;
+}
+
+function showDiceRoll(options) {
+    const { dieType, roll, title, resultHTML, continueCallback } = options;
+
+    addToModalQueue(() => {
+        if (!diceRenderer) initDiceScene();
+        if (diceAnimationId) cancelAnimationFrame(diceAnimationId);
+
+        // Clear previous die
+        if (diceMesh) diceScene.remove(diceMesh);
+        
+        // Create new die
+        let geometry, materials;
+        switch (dieType) {
+            case 'd8':
+                geometry = new THREE.OctahedronGeometry(1);
+                materials = getDiceMaterials(['1','2','3','4','5','6','7','8']);
+                break;
+            case 'd20':
+                geometry = new THREE.IcosahedronGeometry(1);
+                materials = getDiceMaterials(['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20']);
+                break;
+            case 'd6':
+            default:
+                geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+                materials = getDiceMaterials(['1','2','3','4','5','6']);
+                break;
+        }
+        diceMesh = new THREE.Mesh(geometry, materials);
+        diceScene.add(diceMesh);
+
+        // Setup modal
+        diceRollTitle.textContent = title;
+        diceRollResult.classList.add('hidden');
+        diceRollContinueBtn.classList.add('hidden');
+        diceRollOverlay.classList.remove('hidden');
+
+        // Animation variables
+        const duration = 2000; // 2s roll
+        const settleDuration = 500; // 0.5s settle
+        const startTime = Date.now();
+        const startRotation = new THREE.Quaternion().random();
+        const targetRotation = getDiceTargetRotation(dieType, roll);
+        diceMesh.quaternion.copy(startRotation);
+
+        const angularVelocity = {
+            x: (Math.random() - 0.5) * 10,
+            y: (Math.random() - 0.5) * 10,
+            z: (Math.random() - 0.5) * 10
+        };
+
+        function animate() {
+            const now = Date.now();
+            const elapsed = now - startTime;
+            
+            if (elapsed < duration) {
+                diceMesh.rotation.x += angularVelocity.x * 0.01;
+                diceMesh.rotation.y += angularVelocity.y * 0.01;
+                diceMesh.rotation.z += angularVelocity.z * 0.01;
+                diceAnimationId = requestAnimationFrame(animate);
+            } else if (elapsed < duration + settleDuration) {
+                const settleProgress = (elapsed - duration) / settleDuration;
+                THREE.Quaternion.slerp(diceMesh.quaternion, targetRotation, diceMesh.quaternion, 0.1);
+                diceAnimationId = requestAnimationFrame(animate);
+            } else {
+                diceMesh.quaternion.copy(targetRotation);
+                // Animation finished
+                diceRollResult.innerHTML = resultHTML;
+                diceRollResult.classList.remove('hidden');
+                diceRollContinueBtn.classList.remove('hidden');
+                diceRollContinueBtn.onclick = () => {
+                    diceRollOverlay.classList.add('hidden');
+                    if (continueCallback) continueCallback();
+                    finishModal();
+                };
+            }
+            diceRenderer.render(diceScene, diceCamera);
+        }
+        animate();
+    }, `dice-roll-${Math.random()}`);
+}
+
+function playEffectAnimation(targetElement, effectType) {
+    if (!targetElement) return;
+
+    const effectEl = document.createElement('div');
+    effectEl.className = `effect-animation ${effectType}-effect`;
+    
+    const rect = targetElement.getBoundingClientRect();
+    effectEl.style.top = `${rect.top + rect.height / 2}px`;
+    effectEl.style.left = `${rect.left + rect.width / 2}px`;
+
+    animationOverlay.appendChild(effectEl);
+
+    setTimeout(() => {
+        effectEl.remove();
+    }, 1000); 
 }

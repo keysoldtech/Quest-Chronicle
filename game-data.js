@@ -2,8 +2,6 @@
 // NPC dialogue, skill challenges, and other game constants. It is used exclusively by the server (`server.js`) to populate
 // the game world and manage game mechanics. It is not sent to the client.
 
-// This file contains the game data, structured for the server.
-
 const classes = {
     Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Unchecked Assault', apCost: 1, cost: { type: 'discard', cardType: 'Spell' }, description: 'Discard a Spell card to add +6 damage to your next successful weapon attack this turn.' } },
     Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Aid', apCost: 1, cost: null, description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
