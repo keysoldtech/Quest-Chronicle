@@ -25,7 +25,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">Prototype 4.5.23 - The New War (REBORN)</p>
+        <p class="subtitle-font">Prototype 4.5.24 - The New War (REBORN)</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -64,7 +64,7 @@
                 <div class="header-info">
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.5.23 - The New War (REBORN)</p>
+                     <p class="build-number-font">v4.5.24 - The New War (REBORN)</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">
@@ -403,6 +403,26 @@
             <div class="modal-actions">
                 <button id="keep-current-btn" class="btn btn-secondary">Keep Current</button>
                 <button id="equip-new-btn" class="btn btn-primary">Equip New</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="item-swap-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 800px;">
+            <h2 class="panel-header">Inventory Full!</h2>
+            <p>Your hand is full (5 cards max). To keep the new item, you must choose one from your hand to discard.</p>
+            <div class="item-swap-container">
+                <div class="item-swap-column">
+                    <h3 class="sub-header-font">New Item</h3>
+                    <div id="swap-new-item-display"></div>
+                </div>
+                <div class="item-swap-column">
+                    <h3 class="sub-header-font">Your Hand (Choose one to discard)</h3>
+                    <div id="swap-hand-display" class="card-container-row"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="discard-new-item-btn" class="btn btn-danger">Discard New Item</button>
             </div>
         </div>
     </div>

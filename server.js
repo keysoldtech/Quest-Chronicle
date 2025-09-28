@@ -14,6 +14,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
+const MAX_HAND_SIZE = 5;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -191,7 +192,8 @@ class GameManager {
             statusEffects: [],
             pendingEventRoll: false,
             pendingEventChoice: null,
-            pendingEquipmentChoice: null, // New state for equipment decisions
+            pendingEquipmentChoice: null, 
+            pendingItemSwap: null, // New state for full inventory
             madeAdvancedChoice: false,
             pendingWorldEventSave: null,
             healthDice: { current: 0, max: 0 }
@@ -435,7 +437,21 @@ class GameManager {
         }
     
         if (cardsToDeal.length > 0) {
-            player.hand.push(...cardsToDeal);
+            for(const card of cardsToDeal) {
+                this._addCardToPlayerHand(room, player, card);
+            }
+        }
+    }
+
+    _addCardToPlayerHand(room, player, card) {
+        if (player.hand.length >= MAX_HAND_SIZE) {
+            player.pendingItemSwap = { newCard: card };
+            this.sendMessageToRoom(room.id, {
+                channel: 'game', type: 'system',
+                message: `<b>${player.name}</b>'s hand is full! They must swap an item to receive the new ${card.name}.`
+            });
+        } else {
+            player.hand.push(card);
         }
     }
 
@@ -460,7 +476,7 @@ class GameManager {
         const itemType = cardToEquip.type.toLowerCase();
     
         if (player.equipment[itemType]) {
-            player.hand.push(player.equipment[itemType]);
+            this._addCardToPlayerHand(room, player, player.equipment[itemType]);
         }
         
         player.equipment[itemType] = cardToEquip;
@@ -492,9 +508,19 @@ class GameManager {
     }
 
     determine_ai_action(player, gameState, allPlayers) {
-        const { board } = gameState;
+        const { board, skillChallenge } = gameState;
         const { currentAp, stats, hand, healthDice, equipment } = player;
         const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
+        
+        // Priority 0: Contribute to Skill Challenge
+        if (skillChallenge.isActive && currentAp >= 1) {
+            const challengeData = gameData.skillChallenges.find(c => c.id === skillChallenge.challengeId);
+            const myStat = stats[challengeData.skill] || 0;
+            // Simple logic: contribute if not a guaranteed failure and stat isn't terrible.
+            if (myStat >= 0) {
+                return { action: 'contributeToSkillChallenge', apCost: 1 };
+            }
+        }
 
         // Priority 1: Healing (Cards)
         let bestHealTarget = { utility: -1, target: null, card: null };
@@ -709,6 +735,10 @@ class GameManager {
                         }
                         break;
                     }
+                    case 'contributeToSkillChallenge': {
+                        this._resolveNpcSkillChallenge(room, currentPlayerState);
+                        break;
+                    }
                 }
                 
                 currentPlayerState.stats = this.calculatePlayerStats(currentPlayerState);
@@ -731,6 +761,30 @@ class GameManager {
             }
             this.startTurn(room.id);
         }
+    }
+
+    _resolveNpcSkillChallenge(room, player) {
+        const challenge = room.gameState.skillChallenge;
+        if (!challenge || !challenge.isActive) return;
+
+        const d20Roll = Math.floor(Math.random() * 20) + 1;
+        const playerStat = player.class ? (gameData.classes[player.class].stats[challenge.skill] || 0) : 0;
+        const totalRoll = d20Roll + playerStat;
+
+        const success = totalRoll >= challenge.dc;
+        let logText = `<b>${player.name}</b> attempts to help... They roll a ${d20Roll} + ${playerStat}(stat) = <b>${totalRoll}</b> vs DC ${challenge.dc}. `;
+        
+        if (success) {
+            challenge.successes++;
+            logText += "<span style='color: var(--color-success)'>Success!</span>";
+        } else {
+            challenge.failures++;
+            logText += "<span style='color: var(--color-danger)'>Failure!</span>";
+        }
+        challenge.log.push(logText);
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logText });
+        
+        this._checkSkillChallengeCompletion(room, player);
     }
 
     async handleMonsterTurns(room) {
@@ -1202,10 +1256,10 @@ class GameManager {
                         card = this.generateMagicalEquipment(card, room.gameState.turnCount, monsterTier);
                     }
     
-                    player.hand.push(card);
+                    this._addCardToPlayerHand(room, player, card);
                     this.sendMessageToRoom(room.id, {
                         channel: 'game', type: 'system',
-                        message: `The ${target.name} dropped a <b>${card.name}</b>! It has been added to ${player.name}'s hand.`
+                        message: `The ${target.name} dropped a <b>${card.name}</b>!`
                     });
                 }
             }
@@ -1305,7 +1359,7 @@ class GameManager {
                     player.stats = this.calculatePlayerStats(player);
                     this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `It has been automatically equipped.` });
                 } else {
-                    player.hand.push(card);
+                    this._addCardToPlayerHand(room, player, card);
                 }
             } else if (eventTypeRoll < 0.60 && room.gameState.decks.playerEvent.length >= 2) { // 40% Player Event
                 outcome = 'playerEvent';
@@ -1367,12 +1421,12 @@ class GameManager {
         const currentItem = player.equipment[type];
 
         if (choice === 'swap') {
-            player.hand.push(currentItem);
+            this._addCardToPlayerHand(room, player, currentItem);
             player.equipment[type] = newCard;
             player.stats = this.calculatePlayerStats(player);
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} equipped the new ${newCard.name} and moved ${currentItem.name} to their hand.` });
         } else { // 'keep'
-            player.hand.push(newCard); // Add to hand instead of returning to deck
+            this._addCardToPlayerHand(room, player, newCard); // Add to hand instead of returning to deck
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} kept their ${currentItem.name} and stored the ${newCard.name}.` });
         }
 
@@ -1435,6 +1489,36 @@ class GameManager {
         player.pendingWorldEventSave = null;
         socket.emit('worldEventSaveResult', { d20Roll, bonus, totalRoll, dc, success });
         this.emitGameState(room.id);
+    }
+
+    _checkSkillChallengeCompletion(room, player) {
+        const challenge = room.gameState.skillChallenge;
+        const challengeData = gameData.skillChallenges.find(c => c.id === challenge.challengeId);
+
+        if (challenge.successes >= challenge.successThreshold) {
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>Challenge Succeeded!</b> ${challengeData.success.message}` });
+            if (challengeData.success.reward && challengeData.success.reward.type === 'loot') {
+                for (let i = 0; i < challengeData.success.reward.count; i++) {
+                    const card = room.gameState.decks.treasure.pop();
+                    if (card) room.gameState.lootPool.push(card);
+                }
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party found ${challengeData.success.reward.count} new treasure cards!` });
+            }
+            room.gameState.skillChallenge = { isActive: false };
+        } else if (challenge.failures >= challenge.failureThreshold) {
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>Challenge Failed!</b> ${challengeData.failure.message}` });
+            if (challengeData.failure.consequence && challengeData.failure.consequence.type === 'damage') {
+                const damage = this.rollDice(challengeData.failure.consequence.dice);
+                const targetParty = challengeData.failure.consequence.target === 'party';
+                Object.values(room.players).forEach(p => {
+                    if (p.role === 'Explorer' && (targetParty || p.id === player.id)) {
+                        p.stats.currentHp = Math.max(0, p.stats.currentHp - damage);
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${p.name} takes ${damage} damage!` });
+                    }
+                });
+            }
+            room.gameState.skillChallenge = { isActive: false };
+        }
     }
 
     handlePlayerAction(socket, data) {
@@ -1541,30 +1625,7 @@ class GameManager {
                     success 
                 });
     
-                if (challenge.successes >= challenge.successThreshold) {
-                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>Challenge Succeeded!</b> ${challengeData.success.message}` });
-                    if (challengeData.success.reward && challengeData.success.reward.type === 'loot') {
-                        for (let i = 0; i < challengeData.success.reward.count; i++) {
-                            const card = room.gameState.decks.treasure.pop();
-                            if (card) room.gameState.lootPool.push(card);
-                        }
-                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party found ${challengeData.success.reward.count} new treasure cards!` });
-                    }
-                    room.gameState.skillChallenge = { isActive: false };
-                } else if (challenge.failures >= challenge.failureThreshold) {
-                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>Challenge Failed!</b> ${challengeData.failure.message}` });
-                    if (challengeData.failure.consequence && challengeData.failure.consequence.type === 'damage') {
-                        const damage = this.rollDice(challengeData.failure.consequence.dice);
-                        const targetParty = challengeData.failure.consequence.target === 'party';
-                        Object.values(room.players).forEach(p => {
-                            if (p.role === 'Explorer' && (targetParty || p.id === player.id)) {
-                                p.stats.currentHp = Math.max(0, p.stats.currentHp - damage);
-                                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${p.name} takes ${damage} damage!` });
-                            }
-                        });
-                    }
-                    room.gameState.skillChallenge = { isActive: false };
-                }
+                this._checkSkillChallengeCompletion(room, player);
     
                 this.emitGameState(room.id);
                 break;
@@ -1584,6 +1645,28 @@ class GameManager {
             this.playMonster(room);
             this.emitGameState(room.id);
         }
+    }
+    
+    resolveItemSwap(socket, { cardToDiscardId }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingItemSwap) return;
+    
+        const { newCard } = player.pendingItemSwap;
+    
+        if (cardToDiscardId) { // Player chose a card from hand to discard
+            const cardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
+            if (cardIndex > -1) {
+                const discardedCard = player.hand[cardIndex];
+                player.hand.splice(cardIndex, 1, newCard); // Swap
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> discarded ${discardedCard.name} to make room for ${newCard.name}.` });
+            }
+        } else { // Player chose to discard the new item (cardToDiscardId is null)
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> chose to discard the new ${newCard.name}.` });
+        }
+    
+        player.pendingItemSwap = null;
+        this.emitGameState(room.id);
     }
 
     handleJoinVoice(socket) {
@@ -1647,6 +1730,7 @@ class GameManager {
             pendingEventRoll: false,
             pendingEventChoice: null,
             pendingEquipmentChoice: null,
+            pendingItemSwap: null,
             madeAdvancedChoice: player.madeAdvancedChoice,
             pendingWorldEventSave: null,
             healthDice: { ...player.healthDice }
@@ -1680,6 +1764,7 @@ io.on('connection', (socket) => {
     socket.on('rollForEvent', () => gameManager.rollForEvent(socket));
     socket.on('selectEventCard', (data) => gameManager.selectEventCard(socket, data));
     socket.on('resolveEquipmentChoice', (data) => gameManager.resolveEquipmentChoice(socket, data));
+    socket.on('resolveItemSwap', (data) => gameManager.resolveItemSwap(socket, data));
     socket.on('rollForWorldEventSave', () => gameManager.rollForWorldEventSave(socket));
     socket.on('dmAction', (data) => gameManager.handleDmAction(socket, data));
     socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));

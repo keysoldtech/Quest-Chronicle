@@ -395,11 +395,11 @@ body.in-game {
     box-shadow: var(--shadow-md);
     transition: all 0.2s ease-in-out;
     position: relative;
-    /* overflow: hidden; -- This was preventing the hologram from showing */
+    overflow: visible; /* Ensure holograms are not clipped */
 }
 .card:hover { transform: translateY(-5px) scale(1.05); border-color: var(--color-primary); }
 .card-content { flex-grow: 1; }
-.card-title { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.card-title { font-size: 1rem; margin-bottom: 0.5rem; word-break: break-word; }
 .magical-item { color: var(--color-special); text-shadow: 0 0 5px var(--color-special); }
 .card-effect { font-size: 0.8rem; color: var(--color-text-secondary); }
 .card-footer { border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
@@ -413,6 +413,13 @@ body.in-game {
     gap: 0.25rem;
 }
 .card-bonus .material-symbols-outlined { font-size: 1rem; }
+
+.monster-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+}
 
 .card-actions { position: absolute; bottom: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; }
 .card:hover .card-actions { opacity: 1; }
@@ -693,21 +700,20 @@ body.in-game {
 /* D8 Octahedron */
 .d8 { width: 100px; height: 100px; }
 .d8 .face {
-    width: 0; height: 0;
-    border-style: solid;
-    border-width: 0 43.3px 75px 43.3px;
-    border-color: transparent transparent var(--color-surface-light) transparent;
-    background: none; font-size: 24px;
-    padding-bottom: 25px; line-height: 1;
+    width: 86.6px; height: 75px; /* Equilateral triangle dimensions */
+    background-color: var(--color-surface-light);
+    border: 2px solid var(--color-text-primary);
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    font-size: 24px;
 }
-.d8 .face-1 { transform: rotateX(180deg) translateZ(35.35px) rotateY(0deg); }
-.d8 .face-2 { transform: rotateX(180deg) translateZ(35.35px) rotateY(90deg); }
-.d8 .face-3 { transform: rotateX(180deg) translateZ(35.35px) rotateY(180deg); }
-.d8 .face-4 { transform: rotateX(180deg) translateZ(35.35px) rotateY(270deg); }
-.d8 .face-5 { transform: translateZ(35.35px) rotateY(0deg); }
-.d8 .face-6 { transform: translateZ(35.35px) rotateY(90deg); }
-.d8 .face-7 { transform: translateZ(35.35px) rotateY(180deg); }
-.d8 .face-8 { transform: translateZ(35.35px) rotateY(270deg); }
+.d8 .face-1 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(0deg) rotateX(180deg) translateZ(35.35px) rotateZ(180deg) rotateY(0deg); }
+.d8 .face-2 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(90deg) rotateX(180deg) translateZ(35.35px) rotateZ(180deg) rotateY(0deg); }
+.d8 .face-3 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(180deg) rotateX(180deg) translateZ(35.35px) rotateZ(180deg) rotateY(0deg); }
+.d8 .face-4 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(270deg) rotateX(180deg) translateZ(35.35px) rotateZ(180deg) rotateY(0deg); }
+.d8 .face-5 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(0deg) translateZ(35.35px); }
+.d8 .face-6 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(90deg) translateZ(35.35px); }
+.d8 .face-7 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(180deg) translateZ(35.35px); }
+.d8 .face-8 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(270deg) translateZ(35.35px); }
 .d8.stop-on-8 { transform: rotateX(-35.26deg) rotateY(-45deg); }
 .d8.stop-on-1 { transform: rotateX(35.26deg) rotateY(45deg) rotateZ(180deg); }
 
@@ -715,33 +721,32 @@ body.in-game {
 /* D20 Icosahedron */
 .d20 { width: 100px; height: 100px; }
 .d20 .face {
-    width: 0; height: 0;
-    border-style: solid;
-    border-width: 0 43.3px 75px 43.3px;
-    border-color: transparent transparent var(--color-surface-light) transparent;
-    background: none; font-size: 20px;
-    padding-bottom: 25px; line-height: 1;
+    width: 86.6px; height: 75px; /* Equilateral triangle dimensions */
+    background-color: var(--color-surface-light);
+    border: 2px solid var(--color-text-primary);
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    font-size: 20px;
 }
-.d20 .face-1  { transform: rotateY(0deg)   rotateX(116.565deg) translateZ(44.72px); }
-.d20 .face-2  { transform: rotateY(72deg)  rotateX(79.188deg)  translateZ(44.72px); }
-.d20 .face-3  { transform: rotateY(216deg) rotateX(79.188deg)  translateZ(44.72px); }
-.d20 .face-4  { transform: rotateY(180deg) rotateX(41.81deg)   translateZ(44.72px); }
-.d20 .face-5  { transform: rotateY(324deg) rotateX(41.81deg)   translateZ(44.72px); }
-.d20 .face-6  { transform: rotateY(36deg)  rotateX(41.81deg)   translateZ(44.72px); }
-.d20 .face-7  { transform: rotateY(252deg) rotateX(41.81deg)   translateZ(44.72px); }
-.d20 .face-8  { transform: rotateY(108deg) rotateX(41.81deg)   translateZ(44.72px); }
-.d20 .face-9  { transform: rotateY(144deg) rotateX(41.81deg)   translateZ(44.72px); }
-.d20 .face-10 { transform: rotateY(288deg) rotateX(41.81deg)   translateZ(44.72px); }
-.d20 .face-11 { transform: rotateY(0deg)   rotateX(-41.81deg)  translateZ(44.72px); }
-.d20 .face-12 { transform: rotateY(216deg) rotateX(-41.81deg)  translateZ(44.72px); }
-.d20 .face-13 { transform: rotateY(72deg)  rotateX(-41.81deg)  translateZ(44.72px); }
-.d20 .face-14 { transform: rotateY(288deg) rotateX(-41.81deg)  translateZ(44.72px); }
-.d20 .face-15 { transform: rotateY(144deg) rotateX(-41.81deg)  translateZ(44.72px); }
-.d20 .face-16 { transform: rotateY(36deg)  rotateX(-79.188deg) translateZ(44.72px); }
-.d20 .face-17 { transform: rotateY(252deg) rotateX(-79.188deg) translateZ(44.72px); }
-.d20 .face-18 { transform: rotateY(108deg) rotateX(-79.188deg) translateZ(44.72px); }
-.d20 .face-19 { transform: rotateY(324deg) rotateX(-79.188deg) translateZ(44.72px); }
-.d20 .face-20 { transform: rotateY(180deg) rotateX(-116.565deg) translateZ(44.72px); }
+.d20 .face-1  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(0deg)   rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-2  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(72deg)  rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-3  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(144deg) rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-4  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(216deg) rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-5  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(288deg) rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-6  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(36deg) rotateZ(180deg) rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-7  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(108deg) rotateZ(180deg) rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-8  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(180deg) rotateZ(180deg) rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-9  { transform: translate3d(-43.3px, -37.5px, 0) rotateY(252deg) rotateZ(180deg) rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-10 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(324deg) rotateZ(180deg) rotateX(116.565deg) translateZ(44.72px); }
+.d20 .face-11 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(36deg) rotateX(63.435deg) translateZ(44.72px) rotateZ(180deg); }
+.d20 .face-12 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(108deg) rotateX(63.435deg) translateZ(44.72px) rotateZ(180deg); }
+.d20 .face-13 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(180deg) rotateX(63.435deg) translateZ(44.72px) rotateZ(180deg); }
+.d20 .face-14 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(252deg) rotateX(63.435deg) translateZ(44.72px) rotateZ(180deg); }
+.d20 .face-15 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(324deg) rotateX(63.435deg) translateZ(44.72px) rotateZ(180deg); }
+.d20 .face-16 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(0deg) rotateX(-63.435deg) translateZ(44.72px); }
+.d20 .face-17 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(72deg) rotateX(-63.435deg) translateZ(44.72px); }
+.d20 .face-18 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(144deg) rotateX(-63.435deg) translateZ(44.72px); }
+.d20 .face-19 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(216deg) rotateX(-63.435deg) translateZ(44.72px); }
+.d20 .face-20 { transform: translate3d(-43.3px, -37.5px, 0) rotateY(288deg) rotateX(-63.435deg) translateZ(44.72px); }
 .d20.stop-on-20 { transform: rotateX(63.435deg) rotateZ(0deg); }
 .d20.stop-on-1 { transform: rotateX(-63.435deg) rotateZ(180deg); }
 
@@ -782,6 +787,24 @@ body.in-game {
 .equipment-choice-item {
     text-align: center;
 }
+
+/* Item Swap Modal */
+.item-swap-container {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+.item-swap-column {
+    flex: 1;
+}
+#swap-hand-display .card {
+    cursor: pointer;
+}
+#swap-hand-display .card:hover {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 10px var(--color-danger);
+}
+
 
 /* Toast Notification */
 .toast-notification {

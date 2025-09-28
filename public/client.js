@@ -23,7 +23,6 @@ let apModalShownThisTurn = false; // For AP management pop-up
 const modalQueue = [];
 let isModalActive = false;
 let currentSkipHandler = null; // Holds the function to skip the current skippable modal
-let modalWatchdog = null;
 let selectedItemIdForChallenge = null;
 let isPerformingAction = false; // To prevent modals during an action sequence
 const iceServers = {
@@ -54,6 +53,8 @@ const statVisuals = {
     int:         { icon: 'school', color: 'var(--stat-color-int)' },
     wis:         { icon: 'psychology', color: 'var(--stat-color-wis)' },
     cha:         { icon: 'groups', color: 'var(--stat-color-cha)' },
+    attackBonus: { icon: 'colorize', color: 'var(--stat-color-damage)' },
+    requiredRollToHit: { icon: 'security', color: 'var(--stat-color-shield)' },
 };
 
 // --- DOM Element References ---
@@ -197,6 +198,10 @@ const toastNotification = get('toast-notification');
 const toastMessage = get('toast-message');
 const toastCloseBtn = get('toast-close-btn');
 const animationOverlay = get('animation-overlay');
+const itemSwapModal = get('item-swap-modal');
+const swapNewItemDisplay = get('swap-new-item-display');
+const swapHandDisplay = get('swap-hand-display');
+const discardNewItemBtn = get('discard-new-item-btn');
 
 
 // --- Helper Functions ---
@@ -225,53 +230,26 @@ function generate_random_attack_description() {
     return randomAttackDescriptions[Math.floor(Math.random() * randomAttackDescriptions.length)];
 }
 
-function closeAllModals() {
-    console.error("Force-closing all modals due to watchdog timer.");
-    narrativeModal.classList.add('hidden');
-    apModal.classList.add('hidden');
-    endTurnConfirmModal.classList.add('hidden');
-    diceRollOverlay.classList.add('hidden');
-    eventOverlay.classList.add('hidden');
-    worldEventSaveModal.classList.add('hidden');
-    skillChallengeOverlay.classList.add('hidden');
-    itemSelectModal.classList.add('hidden');
-    equipmentChoiceModal.classList.add('hidden');
-    modalQueue.length = 0; // Clear the queue
-    finishModal(); // Reset state, including watchdog
-}
-
-function startModalWatchdog() {
-    clearModalWatchdog();
-    modalWatchdog = setTimeout(closeAllModals, 15000); // 15 second failsafe
-}
-
-function clearModalWatchdog() {
-    if (modalWatchdog) {
-        clearTimeout(modalWatchdog);
-        modalWatchdog = null;
-    }
-}
-
 function processModalQueue() {
     if (isModalActive || modalQueue.length === 0) {
         return;
     }
     isModalActive = true;
-    startModalWatchdog();
     const { showFunction } = modalQueue.shift();
     showFunction();
 }
 
 function addToModalQueue(showFunction, id) {
-    if (!modalQueue.some(item => item.id === id)) {
-        modalQueue.push({ showFunction, id });
-        processModalQueue();
+    // Avoid adding duplicate modals
+    if (id && modalQueue.some(item => item.id === id)) {
+        return;
     }
+    modalQueue.push({ showFunction, id: id || `modal-${Date.now()}` });
+    processModalQueue();
 }
 
 function finishModal() {
     isModalActive = false;
-    clearModalWatchdog();
     currentSkipHandler = null; // Clear any active skip handler
     skipPopupBtn.classList.add('hidden'); // Ensure skip button is hidden
     setTimeout(processModalQueue, 200); // Small delay for smoother transitions
@@ -368,6 +346,7 @@ function createCardElement(card, actions = {}) {
     }
     
     let monsterHologramHTML = '';
+    let monsterStatsHTML = '';
     if(card.type === 'Monster') {
         const monsterType = card.primaryType ? card.primaryType.toLowerCase() : 'beast';
         const healthPercentage = (card.currentHp / card.maxHp) * 100;
@@ -377,6 +356,13 @@ function createCardElement(card, actions = {}) {
                 <div class="health-bar-container">
                     <div class="health-bar-fill" style="width: ${healthPercentage}%;"></div>
                 </div>
+            </div>
+        `;
+        monsterStatsHTML = `
+            <div class="monster-stats-grid">
+                <div class="card-bonus" style="color: ${statVisuals.attackBonus.color};"><span class="material-symbols-outlined">${statVisuals.attackBonus.icon}</span>+${card.attackBonus}</div>
+                <div class="card-bonus" style="color: ${statVisuals.requiredRollToHit.color};"><span class="material-symbols-outlined">${statVisuals.requiredRollToHit.icon}</span>${card.requiredRollToHit}</div>
+                <div class="card-bonus" style="color: ${statVisuals.ap.color};"><span class="material-symbols-outlined">${statVisuals.ap.icon}</span>${card.ap}</div>
             </div>
         `;
     }
@@ -398,6 +384,7 @@ function createCardElement(card, actions = {}) {
         </div>
         ${statusEffectsHTML}
         <div class="card-footer">
+            ${monsterStatsHTML}
             <div class="card-bonuses-grid">${bonusesHTML}</div>
             <p class="card-type">${typeInfo}</p>
         </div>
@@ -587,6 +574,29 @@ function renderGameState(room) {
         }, 'event-roll');
     } else {
         eventOverlay.classList.add('hidden');
+    }
+    
+    if (myPlayerInfo.pendingItemSwap) {
+        addToModalQueue(() => {
+            const { newCard } = myPlayerInfo.pendingItemSwap;
+            swapNewItemDisplay.innerHTML = '';
+            swapHandDisplay.innerHTML = '';
+            
+            swapNewItemDisplay.appendChild(createCardElement(newCard));
+            myPlayerInfo.hand.forEach(card => {
+                const cardEl = createCardElement(card);
+                cardEl.classList.add('selectable-card');
+                cardEl.onclick = () => {
+                    socket.emit('resolveItemSwap', { cardToDiscardId: card.id });
+                    itemSwapModal.classList.add('hidden');
+                    finishModal();
+                };
+                swapHandDisplay.appendChild(cardEl);
+            });
+            itemSwapModal.classList.remove('hidden');
+        }, `item-swap-${myPlayerInfo.pendingItemSwap.newCard.id}`);
+    } else {
+        itemSwapModal.classList.add('hidden');
     }
     
     if (isMyTurn && myPlayerInfo.pendingEquipmentChoice) {
@@ -1070,6 +1080,13 @@ equipNewBtn.addEventListener('click', () => {
     }
 });
 
+// Item Swap Listener
+discardNewItemBtn.addEventListener('click', () => {
+    socket.emit('resolveItemSwap', { cardToDiscardId: null });
+    itemSwapModal.classList.add('hidden');
+    finishModal();
+});
+
 
 
 // --- SOCKET.IO EVENT HANDLERS ---
@@ -1107,50 +1124,32 @@ socket.on('actionError', (errorMessage) => showToast(errorMessage));
 
 
 function showDiceRoll(options) {
-    const { dieType, roll, title, resultHTML, continueCallback, continueDelay = 3000 } = options;
+    const { dieType, roll, title, resultHTML, continueCallback } = options;
 
     addToModalQueue(() => {
-        let isComplete = false;
-        let timeout;
+        const dieElement = get(`dice-${dieType}`);
+        if(!dieElement) {
+             console.error(`Die type ${dieType} not found!`);
+             finishModal();
+             return;
+        }
 
-        const showResultAndContinue = () => {
-            if (isComplete) return;
-            isComplete = true;
-
-            const dieElement = get(`dice-${dieType}`);
-            dieElement.className = `dice ${dieType} stop-on-${roll}`;
-            
-            diceRollResult.innerHTML = resultHTML;
-            diceRollResult.classList.remove('hidden');
-            
-            diceRollContinueBtn.classList.remove('hidden');
-            diceRollContinueBtn.onclick = () => {
-                clearTimeout(timeout);
-                closeAndCallback();
-            };
-
-            timeout = setTimeout(closeAndCallback, continueDelay);
-
-            currentSkipHandler = () => {
-                clearTimeout(timeout);
-                closeAndCallback();
-            };
-        };
-        
         const closeAndCallback = () => {
             diceRollOverlay.classList.add('hidden');
             if(continueCallback) continueCallback();
             finishModal();
         };
+        
+        const showResult = () => {
+            dieElement.className = `dice ${dieType} stop-on-${roll}`;
+            diceRollResult.innerHTML = resultHTML;
+            diceRollResult.classList.remove('hidden');
+            diceRollContinueBtn.classList.remove('hidden');
+            diceRollContinueBtn.onclick = closeAndCallback;
+        };
 
         // --- Initial setup ---
         document.querySelectorAll('.dice').forEach(d => d.classList.add('hidden'));
-        const dieElement = get(`dice-${dieType}`);
-        if(!dieElement) {
-             console.error(`Die type ${dieType} not found!`);
-             finishModal(); // Abort
-             return;
-        }
         dieElement.classList.remove('hidden');
         
         diceRollTitle.textContent = title;
@@ -1162,7 +1161,7 @@ function showDiceRoll(options) {
         diceRollActionBtn.onclick = () => {
             diceRollActionBtn.classList.add('hidden');
             dieElement.className = `dice ${dieType} is-rolling`;
-            setTimeout(showResultAndContinue, 1500); // Wait for animation to play out
+            setTimeout(showResult, 1500); // Wait for animation to play out
         };
     }, `dice-roll-${Math.random()}`);
 }
@@ -1212,7 +1211,6 @@ socket.on('attackAnimation', (data) => {
         roll: d20Roll,
         title: `${myId === attackerId ? 'You Attack!' : 'Ally Attacks!'}`,
         resultHTML: toHitResultHTML,
-        continueDelay: hit ? 1500 : 3000,
         continueCallback: () => {
             if (hit) {
                 const damageResultHTML = `
@@ -1225,7 +1223,6 @@ socket.on('attackAnimation', (data) => {
                     roll: rawDamageRoll,
                     title: `Damage Roll`,
                     resultHTML: damageResultHTML,
-                    continueDelay: 3000,
                     continueCallback: finalCallback,
                 });
             } else {
@@ -1253,7 +1250,6 @@ socket.on('monsterAttackAnimation', (data) => {
         roll: d20Roll,
         title: `Monster Attacks!`,
         resultHTML: toHitResultHTML,
-        continueDelay: hit ? 1500 : 3000,
         continueCallback: () => {
             if (hit) {
                 const damageResultHTML = `
@@ -1266,7 +1262,6 @@ socket.on('monsterAttackAnimation', (data) => {
                     roll: rawDamageRoll,
                     title: `Damage Roll`,
                     resultHTML: damageResultHTML,
-                    continueDelay: 3000,
                 });
             }
         }
@@ -1319,6 +1314,7 @@ socket.on('skillChallengeRollResult', ({ d20Roll, bonus, itemBonus, totalRoll, d
 
 socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
     worldEventSaveModal.classList.add('hidden');
+    finishModal();
     const resultHTML = `
         ${success ? `<p class="result-line hit">Success!</p>` : `<p class="result-line miss">Failure!</p>`}
         <p class="roll-details">Roll: ${d20Roll} + ${bonus} = <strong>${totalRoll}</strong> vs DC ${dc}</p>
@@ -1329,7 +1325,6 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
         title: 'World Event Save',
         resultHTML,
     });
-    finishModal();
 });
 
 
