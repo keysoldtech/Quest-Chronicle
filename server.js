@@ -96,8 +96,8 @@ class GameManager {
                 gameMode: null,
                 decks: { 
                     item: [], spell: [], monster: { tier1: [], tier2: [], tier3: [] }, weapon: [], armor: [], worldEvent: [],
-                    playerEvent: [...gameData.playerEventCards],
-                    partyEvent: [...gameData.partyEventCards],
+                    playerEvent: [],
+                    partyEvent: [],
                     treasure: [],
                 },
                 turnOrder: [],
@@ -183,7 +183,7 @@ class GameManager {
             isNpc: false,
             role: 'Explorer', // Default role
             class: null,
-            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0 },
+            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
             currentAp: 0,
             lifeCount: 3,
             hand: [],
@@ -331,9 +331,9 @@ class GameManager {
     
     calculatePlayerStats(player) {
         if (!player.class) {
-            return { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0 };
+            return { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
         }
-
+    
         const classStats = gameData.classes[player.class];
         const newStats = {
             maxHp: classStats.baseHp,
@@ -341,14 +341,21 @@ class GameManager {
             shieldBonus: classStats.baseShieldBonus,
             ap: classStats.baseAp,
             shieldHp: player.stats.shieldHp || 0,
+            ...classStats.stats // Base attributes
         };
-
+    
         for (const item of Object.values(player.equipment)) {
             if (item && item.effect && item.effect.bonuses) {
                 newStats.damageBonus += item.effect.bonuses.damageBonus || 0;
                 newStats.shieldBonus += item.effect.bonuses.shieldBonus || 0;
                 newStats.ap += item.effect.bonuses.ap || 0;
-                newStats.maxHp += item.effect.bonuses.hp || 0; 
+                newStats.maxHp += item.effect.bonuses.hp || 0;
+                newStats.str += item.effect.bonuses.str || 0;
+                newStats.dex += item.effect.bonuses.dex || 0;
+                newStats.con += item.effect.bonuses.con || 0;
+                newStats.int += item.effect.bonuses.int || 0;
+                newStats.wis += item.effect.bonuses.wis || 0;
+                newStats.cha += item.effect.bonuses.cha || 0;
             }
         }
         
@@ -362,7 +369,7 @@ class GameManager {
                 }
             }
         }
-
+    
         newStats.currentHp = Math.min(player.stats.currentHp, newStats.maxHp);
         
         return newStats;
@@ -386,41 +393,50 @@ class GameManager {
         const room = this.rooms[roomId];
         const player = room?.players[playerId];
         if (!room || !player) return;
-
-        if ((deckName === 'weapon' || deckName === 'armor') && player.class) {
-            const mainDeck = room.gameState.decks[deckName];
-            
-            const availableCards = mainDeck.filter(card => 
+    
+        const mainDeck = room.gameState.decks[deckName];
+        if (!mainDeck) return;
+    
+        const cardsToDeal = [];
+    
+        // Filter deck by class requirements if the player has a class and the deck isn't 'item'
+        const shouldFilter = player.class && (deckName === 'weapon' || deckName === 'armor' || deckName === 'spell');
+    
+        if (shouldFilter) {
+            const suitableCards = mainDeck.filter(card => 
                 !card.class || card.class.includes("Any") || card.class.includes(player.class)
             );
-
+    
             for (let i = 0; i < count; i++) {
-                if (availableCards.length === 0) {
+                if (suitableCards.length > 0) {
+                    const cardIndex = Math.floor(Math.random() * suitableCards.length);
+                    const card = suitableCards.splice(cardIndex, 1)[0];
+                    cardsToDeal.push(card);
+                    
+                    // Remove the dealt card from the main deck
+                    const mainDeckIndex = mainDeck.findIndex(c => c.id === card.id);
+                    if (mainDeckIndex > -1) {
+                        mainDeck.splice(mainDeckIndex, 1);
+                    }
+                } else {
                     console.log(`No more suitable ${deckName} cards for ${player.class}`);
                     break;
                 }
-
-                const cardToDealIndex = Math.floor(Math.random() * availableCards.length);
-                const cardToDeal = availableCards.splice(cardToDealIndex, 1)[0];
-                
-                player.hand.push(cardToDeal);
-
-                const mainDeckIndex = mainDeck.findIndex(c => c.id === cardToDeal.id);
-                if (mainDeckIndex > -1) {
-                    mainDeck.splice(mainDeckIndex, 1);
-                }
             }
         } else {
-            // Default behavior for items, spells, or players without a class yet
+            // Default behavior for items or players without a class
             for (let i = 0; i < count; i++) {
-                const card = room.gameState.decks[deckName].pop();
-                if (card) {
-                    player.hand.push(card);
+                if (mainDeck.length > 0) {
+                    cardsToDeal.push(mainDeck.pop());
                 } else {
                     console.log(`Deck ${deckName} is empty.`);
                     break;
                 }
             }
+        }
+    
+        if (cardsToDeal.length > 0) {
+            player.hand.push(...cardsToDeal);
         }
     }
 
@@ -431,6 +447,17 @@ class GameManager {
         if (cardIndex === -1) return false;
         
         const cardToEquip = player.hand[cardIndex];
+
+        // Check class requirements
+        if (cardToEquip.class && !cardToEquip.class.includes("Any") && !cardToEquip.class.includes(player.class)) {
+            // Silently fail for NPCs, send error for players
+            if (!player.isNpc) {
+                 const socket = io.sockets.sockets.get(player.id);
+                 if (socket) socket.emit('actionError', `Your class cannot equip ${cardToEquip.name}.`);
+            }
+            return false;
+        }
+
         const itemType = cardToEquip.type.toLowerCase();
     
         if (player.equipment[itemType]) {
@@ -450,8 +477,8 @@ class GameManager {
     
         const success = this._internalEquipItem(room, player, cardId);
         
-        if (!success) {
-            socket.emit('actionError', 'Card not in hand.');
+        if (!success && player) {
+            // Error message is sent inside _internalEquipItem now
             return;
         }
         
@@ -1070,7 +1097,7 @@ class GameManager {
         const player = room.players[attackData.attackerId];
         const target = room.gameState.board.monsters.find(m => m.id === attackData.targetId);
         const weapon = player.equipment.weapon;
-
+    
         if (!player || !target || !weapon) {
              console.error("Could not resolve attack, missing data.");
              this.emitGameState(room.id);
@@ -1081,16 +1108,16 @@ class GameManager {
             channel: 'game', senderName: player.name,
             message: attackData.narrative, isNarrative: true
         });
-
+    
         const isCrit = d20Roll === 20;
         const isFumble = d20Roll === 1;
-
+    
         const totalRollToHit = d20Roll + player.stats.damageBonus;
         const hit = isCrit || (!isFumble && totalRollToHit >= target.requiredRollToHit);
         
         let totalDamage = 0;
         let rawDamageRoll = 0;
-
+    
         if (hit) {
             rawDamageRoll = this.rollDice(weapon.effect.dice);
             if (isCrit) {
@@ -1103,7 +1130,6 @@ class GameManager {
             target.currentHp -= totalDamage;
         }
         
-        // --- LOGGING ---
         let logMessageText = `<b>${player.name}</b> attacks ${target.name}! Roll: ${d20Roll} + ${player.stats.damageBonus} = <b>${totalRollToHit}</b> vs DC ${target.requiredRollToHit}. `;
         if (isCrit) logMessageText = `<b>CRITICAL HIT!</b> ` + logMessageText;
         else if (isFumble) logMessageText = `<b>FUMBLE!</b> ` + logMessageText;
@@ -1114,7 +1140,7 @@ class GameManager {
             logMessageText += `<span style='color: var(--color-danger)'>MISS!</span>`;
         }
         this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessageText });
-
+    
         io.to(room.id).emit('attackAnimation', {
             attackerName: player.name,
             d20Roll,
@@ -1128,37 +1154,62 @@ class GameManager {
             damageBonus: player.stats.damageBonus,
             totalDamage,
         });
-
+    
         if (target.currentHp <= 0) {
             room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== target.id);
             const dialogue = gameData.npcDialogue.dm.monsterDefeated;
             this.sendMessageToRoom(room.id, {
                 channel: 'game', type: 'system',
-                message: `${player.name} defeated ${target.name}!`,
+                message: `${player.name} defeated the ${target.name}!`,
             });
-             this.sendMessageToRoom(room.id, {
+            this.sendMessageToRoom(room.id, {
                 channel: 'game', senderName: 'Dungeon Master',
                 message: dialogue[Math.floor(Math.random() * dialogue.length)], isNarrative: true
             });
+    
+            // --- MONSTER LOOT DROP LOGIC ---
+            const monsterTier = target.tier || 1;
+            const lootChances = { 1: 0.15, 2: 0.35, 3: 0.60 }; // 15%, 35%, 60%
+            const lootChance = lootChances[monsterTier] || 0.15;
+    
+            if (Math.random() < lootChance) {
+                if (room.gameState.decks.treasure.length > 0) {
+                    let card = room.gameState.decks.treasure.pop();
+                    
+                    // Generate magical properties based on monster tier
+                    if (card.type === 'Weapon' || card.type === 'Armor') {
+                        // Pass monster tier to influence quality
+                        card = this.generateMagicalEquipment(card, room.gameState.turnCount, monsterTier);
+                    }
+    
+                    player.hand.push(card);
+                    this.sendMessageToRoom(room.id, {
+                        channel: 'game', type: 'system',
+                        message: `The ${target.name} dropped a <b>${card.name}</b>! It has been added to ${player.name}'s hand.`
+                    });
+                }
+            }
         }
-
+    
         this.emitGameState(room.id);
     }
     
-    generateMagicalEquipment(card, turnCount) {
+    generateMagicalEquipment(card, turnCount, monsterTier = 1) {
         const newCard = JSON.parse(JSON.stringify(card)); // Deep copy
         
-        const magicChance = Math.min(0.1 + (turnCount * 0.04), 0.8); // 10% base + 4% per turn, max 80%
+        // Base chance + turn bonus + monster tier bonus
+        const magicChance = Math.min(0.1 + (turnCount * 0.02) + (monsterTier * 0.1), 0.9);
         if (Math.random() > magicChance) return newCard; // Not magical this time
         
         let availablePrefixes = gameData.magicalAffixes.prefixes.filter(p => p.types.includes(newCard.type.toLowerCase()));
         let availableSuffixes = gameData.magicalAffixes.suffixes.filter(s => s.types.includes(newCard.type.toLowerCase()));
-
-        // Filter by tier based on turn count
-        if (turnCount < 10) {
+    
+        // Filter by combined power of turn count and monster tier
+        const powerLevel = Math.floor(turnCount / 10) + monsterTier; // Simple power score
+        if (powerLevel < 2) { // Early game, Tier 1 monsters
             availablePrefixes = availablePrefixes.filter(p => p.tier === 1);
             availableSuffixes = availableSuffixes.filter(s => s.tier === 1);
-        } else if (turnCount < 20) {
+        } else if (powerLevel < 4) { // Mid game, Tier 2 monsters
             availablePrefixes = availablePrefixes.filter(p => p.tier <= 2);
             availableSuffixes = availableSuffixes.filter(s => s.tier <= 2);
         }
@@ -1168,7 +1219,7 @@ class GameManager {
         const hasPrefix = Math.random() < 0.7 && availablePrefixes.length > 0;
         const hasSuffix = Math.random() < 0.7 && availableSuffixes.length > 0;
         
-        if (!hasPrefix && !hasSuffix) return newCard; // Unlucky roll, no affix
+        if (!hasPrefix && !hasSuffix) return newCard;
         
         let newName = newCard.name;
         if (!newCard.effect.bonuses) newCard.effect.bonuses = {};
@@ -1188,7 +1239,7 @@ class GameManager {
                 newCard.effect.bonuses[key] = (newCard.effect.bonuses[key] || 0) + value;
             }
         }
-
+    
         newCard.name = newName;
         newCard.isMagical = true;
         
@@ -1208,7 +1259,8 @@ class GameManager {
         if (roll > 10) {
             const eventTypeRoll = Math.random();
 
-            if (eventTypeRoll < 0.5 && room.gameState.decks.treasure.length > 0) { // 50% Treasure Draw
+            // Reduced chance for treasure from event to balance monster drops
+            if (eventTypeRoll < 0.35 && room.gameState.decks.treasure.length > 0) { // 35% Treasure Draw
                 outcome = 'equipmentDraw';
                 let card = room.gameState.decks.treasure.pop();
                 
@@ -1223,18 +1275,24 @@ class GameManager {
                 if ((cardType === 'weapon' || cardType === 'armor') && player.equipment[cardType]) {
                     player.pendingEquipmentChoice = { newCard: card, type: cardType };
                 } else if (cardType === 'weapon' || cardType === 'armor') {
-                    player.equipment[cardType] = card;
-                    player.stats = this.calculatePlayerStats(player);
-                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `It has been automatically equipped.` });
+                     // Check class requirement before auto-equipping
+                    if (card.class && !card.class.includes("Any") && !card.class.includes(player.class)) {
+                        player.hand.push(card);
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `They cannot use it, so it was added to their hand.` });
+                    } else {
+                        player.equipment[cardType] = card;
+                        player.stats = this.calculatePlayerStats(player);
+                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `It has been automatically equipped.` });
+                    }
                 } else {
                     player.hand.push(card);
                 }
-            } else if (eventTypeRoll < 0.75 && room.gameState.decks.playerEvent.length >= 2) { // 25% Player Event
+            } else if (eventTypeRoll < 0.70 && room.gameState.decks.playerEvent.length >= 2) { // 35% Player Event
                 outcome = 'playerEvent';
                 const deck = room.gameState.decks.playerEvent;
                 cardOptions = [deck.pop(), deck.pop()];
                 player.pendingEventChoice = { outcome: 'playerEvent', options: cardOptions };
-            } else if (room.gameState.decks.partyEvent.length > 0) { // 25% Party Event
+            } else if (room.gameState.decks.partyEvent.length > 0) { // 30% Party Event
                 outcome = 'partyEvent';
                 const eventCard = room.gameState.decks.partyEvent.pop();
                 this.resolvePartyEvent(room, eventCard);
@@ -1294,9 +1352,8 @@ class GameManager {
             player.stats = this.calculatePlayerStats(player);
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} equipped the new ${newCard.name} and moved ${currentItem.name} to their hand.` });
         } else { // 'keep'
-            room.gameState.decks.treasure.unshift(newCard); // Return to bottom
-            shuffle(room.gameState.decks.treasure); // Reshuffle to be safe
-            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} decided to keep their ${currentItem.name}.` });
+            player.hand.push(newCard); // Add to hand instead of returning to deck
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} kept their ${currentItem.name} and stored the ${newCard.name}.` });
         }
 
         player.pendingEquipmentChoice = null;

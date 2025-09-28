@@ -34,13 +34,14 @@ const iceServers = {
 
 // Static data for rendering class cards without needing a server round-trip
 const classData = {
-    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, description: "A fierce warrior of primal rage.", abilities: ["Rage", "Reckless Attack"] },
-    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, description: "A conduit for divine power.", abilities: ["Channel Divinity", "Turn Undead"] },
-    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, description: "Wielder of arcane energies.", abilities: ["Arcane Recovery", "Spell Mastery"] },
-    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, description: "A peerless hunter and scout.", abilities: ["Favored Enemy", "Hunter's Mark"] },
-    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, description: "A master of stealth and precision.", abilities: ["Sneak Attack", "Evasion"] },
-    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, description: "A master of arms and armor.", abilities: ["Second Wind", "Defensive Stance"] },
+    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, description: "\"Unchecked Assault\" - Discard a spell to deal +6 damage, but lose 2 Shield Points." },
+    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, description: "\"Divine Aid\" - Add 1d4 to an attack roll or saving throw." },
+    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, description: "\"Mystic Recall\" - Draw an additional spell card." },
+    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, description: "\"Focused Shot\" - If range roll is exact, deal double damage." },
+    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, description: "\"Opportunist Strike\" - If first spell is Close range, deal +2 damage." },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, description: "\"Weapon Surge\" - Discard a drawn spell card to add +4 to your damage." },
 };
+
 
 
 // --- DOM Element References ---
@@ -632,11 +633,12 @@ function renderGameState(room) {
                         <h3 class="class-card-title">${classId}</h3>
                         <p class="class-card-desc">${data.description}</p>
                         <div class="class-card-stats">
-                            <span>HP:</span><span>${data.baseHp}</span>
-                            <span>AP:</span><span>${data.baseAp}</span>
-                            <span>DMG Bonus:</span><span>+${data.baseDamageBonus}</span>
-                            <span>SHIELD Bonus:</span><span>+${data.baseShieldBonus}</span>
-                            <span>Health Dice:</span><span>${data.healthDice}</span>
+                            <span>STR:</span><span>${data.stats.str}</span>
+                            <span>DEX:</span><span>${data.stats.dex}</span>
+                            <span>CON:</span><span>${data.stats.con}</span>
+                            <span>INT:</span><span>${data.stats.int}</span>
+                            <span>WIS:</span><span>${data.stats.wis}</span>
+                            <span>CHA:</span><span>${data.stats.cha}</span>
                         </div>
                     `;
                     container.appendChild(card);
@@ -688,48 +690,30 @@ function renderGameState(room) {
 
     let statsHTML = '';
     if (myPlayerInfo.stats && myPlayerInfo.class) {
-        const classDataClient = classData[myPlayerInfo.class];
-        if (classDataClient) {
-            // Calculate bonuses from equipment
-            let equipHpBonus = 0, equipDmgBonus = 0, equipShieldBonus = 0, equipApBonus = 0;
-            Object.values(myPlayerInfo.equipment).forEach(item => {
-                if (item && item.effect && item.effect.bonuses) {
-                    equipHpBonus += item.effect.bonuses.hp || 0;
-                    equipDmgBonus += item.effect.bonuses.damageBonus || 0;
-                    equipShieldBonus += item.effect.bonuses.shieldBonus || 0;
-                    equipApBonus += item.effect.bonuses.ap || 0;
-                }
-            });
-
-            // Calculate bonuses from status effects
-            let eventHpBonus = 0, eventDmgBonus = 0, eventShieldBonus = 0, eventApBonus = 0;
-            (myPlayerInfo.statusEffects || []).forEach(effect => {
-                if (effect.type === 'stat_modifier' && effect.bonuses) {
-                    eventHpBonus += effect.bonuses.hp || 0;
-                    eventDmgBonus += effect.bonuses.damageBonus || 0;
-                    eventShieldBonus += effect.bonuses.shieldBonus || 0;
-                    eventApBonus += effect.bonuses.ap || 0;
-                }
-            });
-
-            const formatBonus = (bonus, label = '') => {
-                if (bonus > 0) return `<span class="stat-bonus">+${bonus} ${label}</span>`.trim();
-                if (bonus < 0) return `<span class="stat-bonus" style="color: var(--color-danger);">${bonus} ${label}</span>`.trim();
-                return '';
-            };
-
-            statsHTML = `
-                <span>HP:</span><span class="stat-value">${myPlayerInfo.stats.currentHp} / ${classDataClient.baseHp}${formatBonus(equipHpBonus)}${formatBonus(eventHpBonus, '(Event)')}</span>
-                ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : ''}
-                <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${classDataClient.baseAp}${formatBonus(equipApBonus)}${formatBonus(eventApBonus, '(Event)')}</span>
-                <span>DMG Bonus:</span><span class="stat-value">${classDataClient.baseDamageBonus}${formatBonus(equipDmgBonus)}${formatBonus(eventDmgBonus, '(Event)')}</span>
-                <span>SHIELD Bonus:</span><span class="stat-value">${classDataClient.baseShieldBonus}${formatBonus(equipShieldBonus)}${formatBonus(eventDmgBonus, '(Event)')}</span>
-                <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d / ${myPlayerInfo.healthDice.max}</span>
-                <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
-            `;
-        } else {
-            statsHTML = `<span>Stats loading...</span>`;
-        }
+        const pStats = myPlayerInfo.stats;
+    
+        const formatBonus = (bonus, label = '') => {
+            if (bonus > 0) return `<span class="stat-bonus">+${bonus} ${label}</span>`.trim();
+            if (bonus < 0) return `<span class="stat-bonus" style="color: var(--color-danger);">${bonus} ${label}</span>`.trim();
+            return '';
+        };
+    
+        statsHTML = `
+            <span>HP:</span><span class="stat-value">${pStats.currentHp} / ${pStats.maxHp}</span>
+            <span>AP:</span><span class="stat-value">${myPlayerInfo.currentAp} / ${pStats.ap}</span>
+            <span>DMG Bonus:</span><span class="stat-value">${pStats.damageBonus}</span>
+            <span>SHIELD Bonus:</span><span class="stat-value">${pStats.shieldBonus}</span>
+            <span>Health Dice:</span><span class="stat-value">${myPlayerInfo.healthDice.current}d${myPlayerInfo.healthDice.max}</span>
+            <span>Lives:</span><span class="stat-value">${myPlayerInfo.lifeCount}</span>
+            
+            <span>STR:</span><span class="stat-value">${pStats.str}</span>
+            <span>DEX:</span><span class="stat-value">${pStats.dex}</span>
+            <span>CON:</span><span class="stat-value">${pStats.con}</span>
+            <span>INT:</span><span class="stat-value">${pStats.int}</span>
+            <span>WIS:</span><span class="stat-value">${pStats.wis}</span>
+            <span>CHA:</span><span class="stat-value">${pStats.cha}</span>
+            ${myPlayerInfo.stats.shieldHp > 0 ? `<span>Shield HP:</span><span class="stat-value shield-hp-value">${myPlayerInfo.stats.shieldHp}</span>` : '<span class="placeholder"></span><span class="placeholder"></span>'}
+        `;
         playerStatsDiv.innerHTML = statsHTML;
         mobileStatsDisplay.innerHTML = statsHTML;
     }

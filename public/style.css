@@ -311,7 +311,7 @@ body.in-game {
 /* Player Stats Panel */
 .player-stats {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto 1fr auto 1fr;
     gap: 0.5rem 1rem;
     align-items: center;
 }
@@ -416,7 +416,7 @@ body.in-game {
 .class-card.selected { border-color: var(--color-special); box-shadow: 0 0 8px var(--color-glow); }
 .class-card-title { font-family: var(--font-title); font-size: 1.25rem; }
 .class-card-desc { font-style: italic; color: var(--color-text-secondary); margin: 0.5rem 0; }
-.class-card-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem; font-size: 0.9rem; }
+.class-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem 1rem; font-size: 0.9rem; }
 .class-confirm-container { padding-top: 1rem; border-top: 1px solid var(--color-border); margin-top: 1rem; }
 #confirm-class-btn { width: 100%; }
 
