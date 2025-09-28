@@ -2,7 +2,14 @@
 // It handles caching of assets for offline functionality and manages the update process
 // to ensure users seamlessly receive new versions of the app.
 
-const CACHE_NAME = 'quest-and-chronicle-v4.5.29-clarityv2';
+// --- INDEX ---
+// 1. CONFIGURATION (CACHE_NAME, urlsToCache)
+// 2. INSTALL Event Listener
+// 3. ACTIVATE Event Listener
+// 4. FETCH Event Listener (Cache-First Strategy)
+
+// --- 1. CONFIGURATION ---
+const CACHE_NAME = 'quest-and-chronicle-v4.5.1-playtest-v1.1';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -15,7 +22,8 @@ const urlsToCache = [
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=MedievalSharp&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap',
 ];
 
-// Install event: triggered when the service worker is first registered.
+// --- 2. INSTALL Event Listener ---
+// This event is triggered when the service worker is first registered.
 // It opens the cache and adds all the core application files to it.
 self.addEventListener('install', event => {
   console.log('[SW] Install event');
@@ -32,7 +40,8 @@ self.addEventListener('install', event => {
   );
 });
 
-// Activate event: triggered after installation. This is the perfect place
+// --- 3. ACTIVATE Event Listener ---
+// This event is triggered after installation. This is the perfect place
 // to clean up old caches from previous versions of the service worker.
 self.addEventListener('activate', event => {
   console.log('[SW] Activate event');
@@ -54,10 +63,10 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch event: triggered for every network request made by the page.
-// This implements a "cache-first" strategy.
+// --- 4. FETCH Event Listener (Cache-First Strategy) ---
+// This event is triggered for every network request made by the page.
 self.addEventListener('fetch', event => {
-  // We only want to cache GET requests.
+  // We only want to cache GET requests. We also ignore socket.io requests.
   if (event.request.method !== 'GET' || event.request.url.includes('/socket.io/')) {
     return;
   }

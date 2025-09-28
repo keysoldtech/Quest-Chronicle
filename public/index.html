@@ -1,7 +1,15 @@
 <!-- 
-  This file is the main HTML entry point for the client-side application. 
-  It defines the complete DOM structure for the lobby, the game area (for both desktop and mobile), 
-  and all modal/overlay elements. It also loads the necessary fonts, CSS stylesheet, and the client-side JavaScript.
+  --- INDEX ---
+  1.  METADATA & STYLESHEETS
+  2.  LOBBY SCREEN (#lobby)
+  3.  GAME AREA (#game-area)
+      - 3.1. DESKTOP LAYOUT (.game-area-desktop)
+        - Header, Player Panel, Character Panel, Board, Info Tabs, Hand, Action Bar
+      - 3.2. MOBILE LAYOUT (.game-area-mobile)
+        - Header, Main Content Screens, Action Bar, Bottom Navigation
+  4.  SHARED OVERLAYS & MODALS
+      - Chat, Narrative, Dice Roll, Events, Skill Challenge, Item Selection, etc.
+  5.  SCRIPTS
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -28,7 +36,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">Prototype 4.5.30 - The New War (ClarityV2)</p>
+        <p class="subtitle-font">v4.5.1 (Playtest-v1.1)</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -99,7 +107,7 @@
                      <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
                      <p id="ap-counter-desktop" class="ap-counter hidden"></p>
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
-                     <p class="build-number-font">v4.5.30 - The New War (ClarityV2)</p>
+                     <p class="build-number-font">v4.5.1 (Playtest-v1.1)</p>
                 </div>
                  <div class="header-controls">
                     <div id="dm-controls" class="dm-controls hidden">

@@ -2,6 +2,27 @@
 // NPC dialogue, skill challenges, and other game constants. It is used exclusively by the server (`server.js`) to populate
 // the game world and manage game mechanics. It is not sent to the client.
 
+// --- INDEX ---
+// 1. CLASSES
+// 2. STATUS EFFECT DEFINITIONS
+// 3. ACTION COSTS
+// 4. SKILL CHALLENGES
+// 5. NPC DIALOGUE
+// 6. MAGICAL AFFIXES (for item generation)
+// 7. CARD DATA
+//    - 7.1. Item Cards
+//    - 7.2. Spell Cards
+//    - 7.3. Weapon Cards
+//    - 7.4. Armor Cards
+//    - 7.5. World Event Cards
+//    - 7.6. Player Event Cards
+//    - 7.7. Party Event Cards
+// 8. MONSTER DATA
+//    - 8.1. All Monsters List
+//    - 8.2. Monster Tiers (for spawning)
+// 9. MODULE EXPORTS
+
+// --- 1. CLASSES ---
 const classes = {
     Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Unchecked Assault', apCost: 1, cost: { type: 'discard', cardType: 'Spell' }, description: 'Discard a Spell card to add +6 damage to your next successful weapon attack this turn.' } },
     Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Aid', apCost: 1, cost: null, description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
@@ -11,6 +32,7 @@ const classes = {
     Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, ability: { name: 'Weapon Surge', apCost: 1, cost: { type: 'discard', cardType: 'Spell' }, description: 'Discard a Spell card to add +4 damage to your next successful weapon attack this turn.' } },
 };
 
+// --- 2. STATUS EFFECT DEFINITIONS ---
 const statusEffectDefinitions = {
     'Poisoned': { trigger: 'start', damage: '1d4', description: 'Takes 1d4 damage at the start of their turn.' },
     'Stunned': { cannotAct: true, description: 'Cannot take actions.' },
@@ -21,12 +43,14 @@ const statusEffectDefinitions = {
     'Inspired': { description: 'Feeling motivated, +2 to attack rolls.' },
 };
 
+// --- 3. ACTION COSTS ---
 const actionCosts = {
     briefRespite: 1,
     fullRest: 2,
     guard: 1
 };
 
+// --- 4. SKILL CHALLENGES ---
 const skillChallenges = [
     {
         id: 'sc-01',
@@ -71,6 +95,7 @@ const skillChallenges = [
     }
 ];
 
+// --- 5. NPC DIALOGUE ---
 const npcDialogue = {
     explorer: {
         attack: [
@@ -102,6 +127,7 @@ const npcDialogue = {
     }
 };
 
+// --- 6. MAGICAL AFFIXES (for item generation) ---
 const magicalAffixes = {
     prefixes: [
         { name: 'Hardened', tier: 1, bonuses: { shieldBonus: 1 }, types: ['armor'] },
@@ -125,6 +151,9 @@ const magicalAffixes = {
     ]
 };
 
+// --- 7. CARD DATA ---
+
+// --- 7.1. Item Cards ---
 const itemCards = [
     { name: "Purifying Flask", type: "Consumable", category: "Damage", apCost: 1, effect: { type: "damage", dice: "2d6", target: "any-monster", description: "Ranged attack (20/60). Deals 2d6 radiant damage to Undead or Fiends." } },
     { name: "Purifying Flask", type: "Consumable", category: "Damage", apCost: 1, effect: { type: "damage", dice: "2d6", target: "any-monster", description: "Ranged attack (20/60). Deals 2d6 radiant damage to Undead or Fiends." } },
@@ -135,126 +164,101 @@ const itemCards = [
     { name: "Combustion Flask", type: "Consumable", category: "Damage", apCost: 1, effect: { type: "damage", dice: "1d4", status: "On Fire", duration: 2, target: "any-monster", description: "Ranged attack (20/60). On hit, target takes 1d4 fire damage immediately and 1d4 fire damage at the start of their turn." } },
     { name: "Combustion Flask", type: "Consumable", category: "Damage", apCost: 1, effect: { type: "damage", dice: "1d4", status: "On Fire", duration: 2, target: "any-monster", description: "Ranged attack (20/60). On hit, target takes 1d4 fire damage immediately and 1d4 fire damage at the start of their turn." } },
     { name: "Combustion Flask", type: "Consumable", category: "Damage", apCost: 1, effect: { type: "damage", dice: "1d4", status: "On Fire", duration: 2, target: "any-monster", description: "Ranged attack (20/60). On hit, target takes 1d4 fire damage immediately and 1d4 fire damage at the start of their turn." } },
-    { name: "Elixir of Restoration", type: "Potion", category: "Healing", apCost: 1, effect: { type: "heal", dice: "4d4+4", target: "any-explorer", description: "Restore 4d4 + 4 HP." } },
-    { name: "Elixir of Restoration", type: "Potion", category: "Healing", apCost: 1, effect: { type: "heal", dice: "4d4+4", target: "any-explorer", description: "Restore 4d4 + 4 HP." } },
-    { name: "Vial of Vitality", type: "Potion", category: "Healing", apCost: 1, effect: { type: "heal", dice: "2d4+2", target: "any-explorer", description: "Restore 2d4 + 2 HP." } },
-    { name: "Vial of Vitality", type: "Potion", category: "Healing", apCost: 1, effect: { type: "heal", dice: "2d4+2", target: "any-explorer", description: "Restore 2d4 + 2 HP." } },
-    { name: "Scroll of Healing Touch", type: "Scroll", category: "Healing", apCost: 1, effect: { type: "heal", dice: "1d8+5", target: "any-explorer", description: "Allows the user to cast the Healing Touch spell as if they were a spellcaster." } },
-    { name: "Climber's Spikes", type: "Utility", category: "Utility", apCost: 0, effect: { type: "utility", description: "Provides advantage on difficult Strength (Athletics) or Dexterity (Acrobatics) checks for climbing." } },
-    { name: "Lockpicks & Shims", type: "Utility", category: "Utility", apCost: 0, effect: { type: "utility", description: "Provides advantage on Skill Challenges related to picking locks or disarming simple traps." } },
+    { name: "Antidote", type: "Consumable", category: "Utility", apCost: 1, effect: { type: "utility", status: "Cure Poison", target: "any-player", description: "Cures one creature of the Poisoned status effect." } },
+    { name: "Sturdy Cord (50 ft)", type: "General", category: "Utility", effect: { type: "utility", description: "A sturdy, 50-foot coil of hempen rope. Can be used in skill challenges." } },
+    { name: "Lockpicks & Shims", type: "General", category: "Utility", effect: { type: "utility", description: "A set of tools for disabling traps and opening locks. Provides a bonus to relevant skill challenges." } },
+    { name: "Climber's Spikes", type: "General", category: "Utility", effect: { type: "utility", description: "Metal spikes that can be attached to boots to aid in climbing. Provides a bonus to climbing-related skill challenges." } }
 ];
+
+// --- 7.2. Spell Cards ---
 const spellCards = [
-    { name: "Acid Burst", type: "Spell", class: ["Mage"], category: "Damage", apCost: 1, effect: { type: "damage", dice: "1d6", target: "any-monster", description: "Deals 1d6 acid damage in a 5-foot radius sphere." } },
-    { name: "Cinder Shot", type: "Spell", class: ["Mage"], category: "Damage", apCost: 1, effect: { type: "damage", dice: "1d10", target: "any-monster", description: "Deals 1d10 fire damage." } },
-    { name: "Force Barrier", type: "Spell", class: ["Mage", "Warrior"], category: "Utility", apCost: 1, effect: { type: "utility", status: "Guarded", duration: 2, target: "self", description: "Increase your Shield Points by 5 until your next turn." } },
-    { name: "Frost Beam", type: "Spell", class: ["Mage", "Ranger"], category: "Damage", apCost: 1, effect: { type: "damage", dice: "1d8", status: "Slowed", duration: 1, target: "any-monster", description: "Deals 1d8 cold damage and slows target." } },
-    { name: "Healing Touch", type: "Spell", class: ["Cleric", "Ranger"], category: "Healing", apCost: 1, effect: { type: "heal", dice: "1d8+5", target: "any-explorer", description: "Heals 1d8 + 5 HP." } },
-    { name: "Inspire Allies", type: "Spell", class: ["Cleric", "Warrior", "Barbarian"], category: "Utility", apCost: 1, effect: { type: "utility", target: "all-explorers", statusToApply: { name: 'Inspired', type: 'stat_modifier', bonuses: { damageBonus: 2 }, duration: 2 }, description: "All explorers gain a +2 bonus to their attack rolls for 1 round." } },
-    { name: "Radiant Strike", type: "Spell", class: ["Cleric"], category: "Damage", apCost: 1, effect: { type: "damage", dice: "4d6", target: "any-monster", description: "Deals 4d6 radiant damage." } },
-    { name: "Immobilize Foe", type: "Spell", class: ["Mage", "Cleric"], category: "Utility", apCost: 2, effect: { type: "utility", status: "Stunned", statusType: "stun", duration: 2, target: "any-monster", description: "A humanoid must make a Wisdom saving throw (DC 13) or be paralyzed." } },
-    { name: "Inferno Rays", type: "Spell", class: ["Mage"], category: "Damage", apCost: 2, effect: { type: "damage", dice: "2d6", target: "any-monster", description: "You create three rays of fire. Each ray deals 2d6 fire damage." } },
-    { name: "Inferno Sphere", type: "Spell", class: ["Mage"], category: "Damage", apCost: 3, effect: { type: "damage", dice: "8d6", target: "any-monster", description: "Deals 8d6 fire damage in a 20-foot radius sphere." } },
+    { name: "Healing Word", type: "Spell", category: "Healing", apCost: 1, class: ["Cleric", "Any"], effect: { type: "heal", dice: "1d8", target: "any-player", description: "Heal an ally you can see for 1d8 HP." } },
+    { name: "Guiding Bolt", type: "Spell", category: "Damage", apCost: 1, class: ["Cleric", "Mage"], effect: { type: "damage", dice: "2d6", status: "Inspired", duration: 1, target: "any-monster", description: "Ranged spell attack. Deals 2d6 radiant damage. The next attack roll against the target has advantage." } },
+    { name: "Magic Missile", type: "Spell", category: "Damage", apCost: 1, class: ["Mage", "Any"], effect: { type: "damage", dice: "2d4", target: "any-monster", description: "Automatically hits, dealing 2d4+1 force damage." } },
+    { name: "Shield of Faith", type: "Spell", category: "Buff", apCost: 1, class: ["Cleric"], effect: { type: "buff", bonuses: { shieldBonus: 2 }, duration: 2, target: "any-player", description: "Grant an ally +2 Shield Bonus for 2 turns." } },
+    { name: "Fire Bolt", type: "Spell", category: "Damage", apCost: 1, class: ["Mage"], effect: { type: "damage", dice: "2d10", target: "any-monster", description: "Ranged spell attack. Deals 2d10 fire damage." } },
+    { name: "Chill Touch", type: "Spell", category: "Damage", apCost: 1, class: ["Mage"], effect: { type: "damage", dice: "2d8", status: "Drained", duration: 1, target: "any-monster", description: "Ranged spell attack. Deals 2d8 necrotic damage. The target cannot regain hit points until the start of your next turn." } },
 ];
+
+// --- 7.3. Weapon Cards ---
 const weaponCards = [
-    { name: "Axechuck", type: "Weapon", class: ["Barbarian", "Ranger", "Warrior"], apCost: 2, effect: { type: "damage", dice: "1d6", description: "Thrown (20/60), Special: Returning Edge - Returns to hand at end of turn (If thrown and hand free)." } },
-    { name: "Balanced Steel", type: "Weapon", class: ["Any"], apCost: 2, effect: { type: "damage", dice: "1d8", description: "Versatile (1d10), Special: Guard Breaker - Ignore 1 point of target's Shield Bonus." } },
-    { name: "Bolt Sprinter", type: "Weapon", class: ["Ranger", "Rogue", "Warrior"], apCost: 2, effect: { type: "damage", dice: "1d8", description: "Ammunition, Loading, Special: Steady Aim - First attack on next turn deals +1d4 damage." } },
-    { name: "Bone Thumper", type: "Weapon", class: ["Any"], apCost: 2, effect: { type: "damage", dice: "1d6", description: "Special: Solid Strike - Deal an additional 1 damage (When hitting target with Shield Bonus from armor, not shield)." } },
-    { name: "Doomcleaver", type: "Weapon", class: ["Barbarian", "Warrior"], apCost: 2, effect: { type: "damage", dice: "2d6", critBonusDice: "1d6", description: "Two-Handed, Heavy, Special: Savage Chop - Make 1 additional melee attack vs same target (Natural 20 on attack roll)." } },
-    { name: "Duelist's Point", type: "Weapon", class: ["Rogue", "Ranger"], apCost: 2, effect: { type: "damage", dice: "1d8", description: "Finesse, Special: Opening Flourish - First successful attack deals +1d4 damage." } },
-    { name: "Farstrike Bow", type: "Weapon", class: ["Ranger", "Warrior"], apCost: 2, effect: { type: "damage", dice: "1d8", description: "Ammunition, Heavy, Two-Handed, Special: Piercing Shot - +1 Attack Roll but ignore 1 point of target's Shield Bonus." } },
-    { name: "Quick Blade", type: "Weapon", class: ["Rogue"], apCost: 1, effect: { type: "damage", dice: "1d6", description: "Finesse, Special: Fluid Motion - Can use Break Away for 0 AP (If make two attacks with this weapon on turn)." } },
-    { name: "Shadowtooth", type: "Weapon", class: ["Rogue"], apCost: 1, effect: { type: "damage", dice: "1d4", description: "Finesse, Thrown (20/60), Special: Poison Ready - Advantage on attack roll when applying poison." } },
-    { name: "Swiftflight Bow", type: "Weapon", class: ["Ranger"], apCost: 2, effect: { type: "damage", dice: "1d6", description: "Ammunition, Close-Range Penalty (-1d4 damage when attacking Close enemy)." } },
+    { name: "Longsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian", "Any"], effect: { dice: "1d8", description: "A versatile and reliable martial weapon." } },
+    { name: "Greataxe", type: "Weapon", apCost: 2, class: ["Barbarian", "Warrior"], effect: { dice: "1d12", description: "A heavy, two-handed axe that deals devastating damage.", bonuses: { damageBonus: 1 } } },
+    { name: "Shortbow", type: "Weapon", apCost: 2, class: ["Ranger", "Rogue", "Any"], effect: { dice: "1d6", description: "A light and fast ranged weapon." } },
+    { name: "Dagger", type: "Weapon", apCost: 1, class: ["Rogue", "Mage", "Any"], effect: { dice: "1d4", description: "A light, concealable blade. Can be used for quick attacks." } },
+    { name: "Mace", type: "Weapon", apCost: 2, class: ["Cleric", "Warrior"], effect: { dice: "1d6", description: "A simple but effective bludgeoning weapon." } },
+    { name: "Greatsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian"], effect: { dice: "2d6", critBonusDice: "1d6", description: "A massive sword that hits hard and can cause grievous wounds on a critical hit." } }
 ];
+
+// --- 7.4. Armor Cards ---
 const armorCards = [
-    { name: "Arcanist's Weave", type: "Armor", class: ["Mage", "Cleric"], effect: { bonuses: { shieldBonus: 2, ap: 2 }, description: "+1 to Magic Resistance." } },
-    { name: "Bastion Shield", type: "Armor", class: ["Warrior", "Cleric"], effect: { bonuses: { shieldBonus: 3, ap: -1 }, description: "Provides cover to adjacent allies." } },
-    { name: "Crystal Hide", type: "Armor", class: ["Warrior", "Barbarian"], effect: { bonuses: { shieldBonus: 6, ap: 0 }, description: "Resistance to non-magical damage." } },
-    { name: "Earth-Forged Mail", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 7, ap: -1 }, description: "Resistance to Bludgeoning damage." } },
-    { name: "Fury Cuirass", type: "Armor", class: ["Barbarian", "Warrior"], effect: { bonuses: { shieldBonus: 6, ap: 1 }, description: "While below half health, gain +1 to attack rolls." } },
-    { name: "Hide Vest", type: "Armor", class: ["Any"], effect: { bonuses: { shieldBonus: 2, ap: 1 }, description: "Light and flexible." } },
-    { name: "Indomitable Plating", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 10, ap: -2 }, description: "Ignores the first point of damage from any attack." } },
-    { name: "Ironclad Harness", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 8, ap: -1 }, description: "Complete coverage in heavy metal." } },
-    { name: "Nightfall Shroud", type: "Armor", class: ["Rogue", "Ranger"], effect: { bonuses: { shieldBonus: 1, ap: 3 }, description: "Advantage on Stealth checks." } },
-    { name: "Phase Shroud", type: "Armor", class: ["Mage", "Rogue"], effect: { bonuses: { shieldBonus: 5, ap: 0 }, description: "Once per turn, may force an attacker to reroll their attack roll." } },
+    { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], effect: { bonuses: { shieldBonus: 1, ap: 1 }, description: "Light and flexible, allowing for quick movements." } },
+    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], effect: { bonuses: { shieldBonus: 3 }, description: "Made of interlocking metal rings, it offers substantial protection." } },
+    { name: "Plate Armor", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 4, hp: 5 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
+    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], effect: { bonuses: { shieldBonus: 2 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
+    { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], effect: { bonuses: { shieldBonus: 2, hp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
 ];
+
+// --- 7.5. World Event Cards ---
 const worldEventCards = [
-    { name: "Crimson Orb", type: "World Event", tags: "Celestial", outcome: "The moon bleeds red, its eerie glow stirring unease and dark dreams.", saveInfo: { save: "Wisdom", dc: 12, effectOnFail: "Gain 1 level of exhaustion." } },
-    { name: "Sky Scourge", type: "World Event", tags: "Celestial", outcome: "Bolts of fire pierce the atmosphere, threatening to fall with destructive force.", saveInfo: { save: "Dexterity", dc: 15, effectOnFail: "Take 2d6 bludgeoning damage." } },
-    { name: "Sun Eater", type: "World Event", tags: "Celestial", outcome: "A creeping shadow consumes the sun, plunging the world into an unnatural, foreboding twilight.", saveInfo: { save: "Constitution", dc: 11, effectOnFail: "Disadvantage on attack rolls for one hour." } },
-    { name: "Groundswell Tremor", type: "World Event", tags: "Hazard", outcome: "A low rumble builds to a violent shake, sending cracks through the earth.", saveInfo: { save: "Dexterity", dc: 13, effectOnFail: "Take 1d6 bludgeoning damage and are knocked prone." } },
-    { name: "Arcane Flux", type: "World Event", tags: "Magical", outcome: "The air crackles with raw magic, and reality seems to twist and bend.", saveInfo: { save: "None", dc: 0, effectOnFail: "" } },
+    { name: "Echoes of the Past", tags: "Environmental / Magical", type: "World Event", description: "A wave of psychic energy washes over the area. Each Explorer must succeed on a DC 13 Wisdom save or be stunned for their next turn.", saveInfo: { save: "WIS", dc: 13 } },
+    { name: "Sudden Downpour", tags: "Environmental", type: "World Event", description: "A torrential rain begins, extinguishing all non-magical flames. Ranged weapon attacks are made with disadvantage.", saveInfo: null },
+    { name: "Whispers in the Dark", tags: "Psychological", type: "World Event", description: "Malevolent whispers claw at the edges of your minds. Each Explorer must succeed on a DC 12 Charisma save or take 2d6 psychic damage.", saveInfo: { save: "CHA", dc: 12 } },
 ];
+
+// --- 7.6. Player Event Cards ---
 const playerEventCards = [
-    { name: "A Moment of Clarity", type: "Player Event", outcome: "Success: A puzzling mystery becomes clear. Failure: The mystery becomes more confusing.", effect: { name: "Insight", type: "utility", duration: 1 } },
-    { name: "Divine Favor", type: "Player Event", outcome: "Success: You gain a blessing (DM's choice). Failure: You attract the attention of a devious entity.", effect: { name: "Blessing", type: "utility", duration: 1 } },
-    { name: "Renewed Vigor", type: "Player Event", outcome: "Success: You recover 1d4 hit points. Failure: You gain 1 level of exhaustion.", effect: { name: "Vigor", type: "utility", duration: 1 } },
-    { name: "Equipment Malfunction", type: "Player Event", outcome: "Success: You fix the problem quickly. Failure: A piece of your equipment breaks or becomes unusable.", effect: { name: "Malfunction", type: "utility", duration: 1 } },
-    { name: "Frightening Vision", type: "Player Event", outcome: "Success: You shake off the vision. Failure: You are frightened for 1d4 rounds.", effect: { name: "Fear", type: "utility", duration: 1 } },
+    { name: "Sudden Insight", type: "Player Event", outcome: "You have a moment of brilliant clarity.", effect: { type: "stat_modifier", bonuses: { int: 2 }, duration: 2 } },
+    { name: "Surge of Adrenaline", type: "Player Event", outcome: "Your heart pounds as you feel a rush of strength.", effect: { type: "stat_modifier", bonuses: { str: 2 }, duration: 2 } },
+    { name: "Moment of Weakness", type: "Player Event", outcome: "A wave of fatigue washes over you.", effect: { type: "stat_modifier", bonuses: { con: -2 }, duration: 2 } },
+    { name: "Fleeting Shadow", type: "Player Event", outcome: "You feel nimble and light on your feet.", effect: { type: "stat_modifier", bonuses: { dex: 2 }, duration: 2 } },
 ];
+
+// --- 7.7. Party Event Cards ---
 const partyEventCards = [
-    { name: "Ailment Cleansed", type: "Party Event", outcome: "You are cured of one condition (blinded, deafened, paralyzed, poisoned, or stunned).", effect: { type: "utility" } },
-    { name: "Endurance Test", type: "Party Event", outcome: "Success: You recover 1d4 hit points. Failure: You gain 1 level of exhaustion.", effect: { type: "heal", dice: "1d4" } },
-    { name: "Fortunate Discovery", type: "Party Event", outcome: "Success: You find a valuable item (GM's choice). Failure: You find nothing of value.", effect: { type: "utility" } },
-    { name: "Moment of Grace", type: "Party Event", outcome: "The next ability check, attack roll, or saving throw you make is rolled with advantage.", effect: { type: "utility" } },
+    { name: "Rallying Cry", type: "Party Event", outcome: "A moment of shared courage inspires the party.", effect: { type: "heal", dice: "1d4", target: "party" } },
+    { name: "Favorable Winds", type: "Party Event", outcome: "A sudden gust of wind seems to aid your movements.", effect: { type: "stat_change", stat: "currentAp", value: 1, target: "party" } },
+    { name: "Shared Burden", type: "Party Event", outcome: "The weight of your quest settles upon you all.", effect: { type: "stat_change", stat: "currentAp", value: -1, target: "party" } }
 ];
 
-const allMonsters = [
-    { name: "Phantom Light", tier: 1, primaryType: "Undead", type: "Monster", maxHp: 5, requiredRollToHit: 12, attackBonus: 2, ap: 1, effect: { type: "damage", dice: "1d8", description: "Incorporeal Movement. Proximity damage." } },
-    { name: "Ember Flicker", tier: 1, primaryType: "Elemental", type: "Monster", maxHp: 6, requiredRollToHit: 12, attackBonus: 4, ap: 2, effect: { type: "damage", dice: "1d10", description: "On miss: Ignite (DC 12 DEX save or catch fire, 1d4 fire/turn)." } },
-    { name: "Pestie Prowler", tier: 1, primaryType: "Humanoid", type: "Monster", maxHp: 7, requiredRollToHit: 10, attackBonus: 8, ap: 2, effect: { type: "damage", dice: "1d6", description: "Sneaky Escape — Dex roll (DC 12) to flee if ≤ 3 HP." } },
-    { name: "Pestie Pilferer", tier: 1, primaryType: "Humanoid", type: "Monster", maxHp: 8, requiredRollToHit: 12, attackBonus: 4, ap: 2, effect: { type: "damage", dice: "1d6+2", description: "Quick Feet (Can Break Away as a bonus action.)." } },
-    { name: "Grotto Weaver", tier: 1, primaryType: "Beast", type: "Monster", maxHp: 10, requiredRollToHit: 12, attackBonus: 6, ap: 2, effect: { type: "damage", dice: "1d6", description: "Web Shot (DC 10 Strength save to escape)." } },
-    { name: "Flutterwing Swarm", tier: 1, primaryType: "Beast", type: "Monster", maxHp: 10, requiredRollToHit: 12, attackBonus: 4, ap: 2, effect: { type: "damage", dice: "2d4", description: "Blind Flight (Immune to blindness conditions.)." } },
-    { name: "Pestie Whisperer", tier: 1, primaryType: "Humanoid", type: "Monster", maxHp: 10, requiredRollToHit: 12, attackBonus: 3, ap: 2, effect: { type: "damage", dice: "1d4", description: "Tribal Magic (+2 attack for pesties)." } },
-    { name: "Scale-kin Skulker", tier: 1, primaryType: "Humanoid", type: "Monster", maxHp: 10, requiredRollToHit: 12, attackBonus: 2, ap: 2, effect: { type: "damage", dice: "1d4+1", description: "Trap Master (Sets a trap at start of combat)." } },
-    { name: "Essence Thief", tier: 1, primaryType: "Undead", type: "Monster", maxHp: 15, requiredRollToHit: 12, attackBonus: 4, ap: 2, effect: { type: "damage", dice: "2d6", description: "Incorporeal." } },
-    { name: "Bone Archer", tier: 1, primaryType: "Undead", type: "Monster", maxHp: 18, requiredRollToHit: 12, attackBonus: 3, ap: 2, effect: { type: "damage", dice: "1d8", description: "Bone Resilience (Immune to poison and charm.)." } },
-    { name: "Veiled Fanatic", tier: 1, primaryType: "Humanoid", type: "Monster", maxHp: 20, requiredRollToHit: 12, attackBonus: 5, ap: 2, effect: { type: "damage", dice: "1d4+3", description: "Unholy Fervor (Can re-roll a failed saving throw)." } },
-    { name: "Striped Marauder", tier: 1, primaryType: "Humanoid", type: "Monster", maxHp: 23, requiredRollToHit: 12, attackBonus: 4, ap: 3, effect: { type: "damage", dice: "1d8+2", description: "Rampage (Make another attack on kill)." } },
-    { name: "Segmented Horror", tier: 1, primaryType: "Beast", type: "Monster", maxHp: 24, requiredRollToHit: 12, attackBonus: 5, ap: 3, effect: { type: "damage", dice: "1d4+3", description: "Wall Climber." } },
-    { name: "Stonegaze Wyrmlet", tier: 1, primaryType: "Monstrosity", type: "Monster", maxHp: 24, requiredRollToHit: 12, attackBonus: 4, ap: 3, effect: { type: "damage", dice: "1d6+2", description: "Petrification Gaze (DC 12 CON save or petrified)" } },
-    { name: "Caustic Sludge", tier: 1, primaryType: "Ooze", type: "Monster", maxHp: 24, requiredRollToHit: 12, attackBonus: 3, ap: 2, effect: { type: "damage", dice: "1d8", description: "Split on Lightning." } },
-    { name: "Sky Lurer", tier: 2, primaryType: "Monstrosity", type: "Monster", maxHp: 27, requiredRollToHit: 12, attackBonus: 4, ap: 3, effect: { type: "damage", dice: "1d6+1", description: "Swooping Attack." } },
-    { name: "Highway Scourge", tier: 2, primaryType: "Humanoid", type: "Monster", maxHp: 28, requiredRollToHit: 12, attackBonus: 6, ap: 3, effect: { type: "damage", dice: "2d6+3", description: "Shout (+1 attack for allies)." } },
-    { name: "Ruined Sentinel", tier: 2, primaryType: "Construct", type: "Monster", maxHp: 33, requiredRollToHit: 13, attackBonus: 6, ap: 3, effect: { type: "damage", dice: "2d8", description: "Magic Resistance." } },
-    { name: "Shadowmaw Alpha", tier: 2, primaryType: "Beast", type: "Monster", maxHp: 34, requiredRollToHit: 13, attackBonus: 5, ap: 3, effect: { type: "damage", dice: "2d6+2", description: "Pack Tactics." } },
-    { name: "Stone Wing", tier: 2, primaryType: "Monstrosity", type: "Monster", maxHp: 35, requiredRollToHit: 13, attackBonus: 5, ap: 3, effect: { type: "damage", dice: "1d6+3", description: "Stone Form." } },
-    { name: "Haunted Cuirass", tier: 2, primaryType: "Construct", type: "Monster", maxHp: 41, requiredRollToHit: 13, attackBonus: 4, ap: 3, effect: { type: "damage", dice: "2d6", description: "Unyielding Form (Immune to poison, fear)." } },
-    { name: "Greenskin Mauler", tier: 2, primaryType: "Humanoid", type: "Monster", maxHp: 44, requiredRollToHit: 14, attackBonus: 5, ap: 3, effect: { type: "damage", dice: "1d12+3", description: "Relentless Endurance (Survives at 1 HP)." } },
-    { name: "Spectral Corruptor", tier: 2, primaryType: "Undead", type: "Monster", maxHp: 45, requiredRollToHit: 14, attackBonus: 6, ap: 3, effect: { type: "damage", dice: "3d6", description: "Incorporeal Passage." } },
-    { name: "Axehorn Brute", tier: 2, primaryType: "Monstrosity", type: "Monster", maxHp: 55, requiredRollToHit: 14, attackBonus: 7, ap: 4, effect: { type: "damage", dice: "2d12+4", description: "Labyrinthine Recall." } },
-    { name: "Briar Witch", tier: 2, primaryType: "Humanoid", type: "Monster", maxHp: 59, requiredRollToHit: 14, attackBonus: 5, ap: 4, effect: { type: "damage", dice: "2d6", description: "Cackle of Madness (Confuse enemies)." } },
-    { name: "Wrapped Ancient", tier: 2, primaryType: "Undead", type: "Monster", maxHp: 60, requiredRollToHit: 14, attackBonus: 5, ap: 4, effect: { type: "damage", dice: "2d6+3", description: "Undead Fortitude (Can drop to 1 HP)." } },
-    { name: "Watery Charmer", tier: 3, primaryType: "Elemental", type: "Monster", maxHp: 63, requiredRollToHit: 14, attackBonus: 6, ap: 4, effect: { type: "damage", dice: "1d6+3", description: "Captivating Song (Charmed)." } },
-    { name: "Hill Oaf", tier: 3, primaryType: "Humanoid", type: "Monster", maxHp: 64, requiredRollToHit: 15, attackBonus: 6, ap: 4, effect: { type: "damage", dice: "2d8+4", description: "Powerful Blow (+2 damage)." } },
-    { name: "Deathlord Marshal", tier: 3, primaryType: "Undead", type: "Monster", maxHp: 78, requiredRollToHit: 15, attackBonus: 7, ap: 4, effect: { type: "damage", dice: "3d6+4", description: "Unholy Endurance (Can rise with 10 HP)." } },
-    { name: "Earth Colossus", tier: 3, primaryType: "Construct", type: "Monster", maxHp: 112, requiredRollToHit: 16, attackBonus: 8, ap: 5, effect: { type: "damage", dice: "2d10+5", description: "Immutable Form." } },
-    { name: "Winter Juggernaut", tier: 3, primaryType: "Construct", type: "Monster", maxHp: 130, requiredRollToHit: 17, attackBonus: 9, ap: 5, effect: { type: "damage", dice: "3d12+6", description: "Icy Aura (Deals cold damage)." } },
-    { name: "Hellfire Sovereign", tier: 3, primaryType: "Elemental", type: "Monster", maxHp: 195, requiredRollToHit: 18, attackBonus: 9, ap: 6, effect: { type: "damage", dice: "4d6+5", description: "Hellish Regeneration." } },
-    { name: "Rotwood Behemoth", tier: 3, primaryType: "Beast", type: "Monster", maxHp: 214, requiredRollToHit: 18, attackBonus: 8, ap: 6, effect: { type: "damage", dice: "3d8+4", description: "Rooted Horror (difficult terrain)." } },
-];
+// --- 8. MONSTER DATA ---
 
-const monsterTiers = {
-    tier1: allMonsters.filter(m => m.tier === 1),
-    tier2: allMonsters.filter(m => m.tier === 2),
-    tier3: allMonsters.filter(m => m.tier === 3),
+// --- 8.1. All Monsters List ---
+const allMonsters = {
+    // Tier 1
+    goblin: { name: "Goblin", type: "Monster", maxHp: 7, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
+    giantRat: { name: "Giant Rat", type: "Monster", maxHp: 5, attackBonus: 3, requiredRollToHit: 12, effect: { dice: "1d4" }, ap: 1 },
+    skeleton: { name: "Skeleton", type: "Monster", maxHp: 13, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
+    // Tier 2
+    orc: { name: "Orc", type: "Monster", maxHp: 15, attackBonus: 5, requiredRollToHit: 13, effect: { dice: "1d12" }, ap: 2 },
+    hobgoblin: { name: "Hobgoblin", type: "Monster", maxHp: 11, attackBonus: 3, requiredRollToHit: 18, effect: { dice: "1d8" }, ap: 2 },
+    bugbear: { name: "Bugbear", type: "Monster", maxHp: 27, attackBonus: 4, requiredRollToHit: 16, effect: { dice: "2d8" }, ap: 1 },
+    // Tier 3
+    troll: { name: "Troll", type: "Monster", maxHp: 84, attackBonus: 7, requiredRollToHit: 15, effect: { dice: "2d6" }, ap: 3 },
+    ogre: { name: "Ogre", type: "Monster", maxHp: 59, attackBonus: 6, requiredRollToHit: 11, effect: { dice: "2d8" }, ap: 2 },
+    beholder: { name: "Beholder", type: "Monster", maxHp: 180, attackBonus: 5, requiredRollToHit: 18, effect: { dice: "4d6" }, ap: 4 },
 };
 
+// --- 8.2. Monster Tiers (for spawning) ---
+const monsterTiers = {
+    tier1: [allMonsters.goblin, allMonsters.giantRat, allMonsters.skeleton],
+    tier2: [allMonsters.orc, allMonsters.hobgoblin, allMonsters.bugbear],
+    tier3: [allMonsters.troll, allMonsters.ogre, allMonsters.beholder]
+};
+
+// --- 9. MODULE EXPORTS ---
 module.exports = {
-  classes,
-  itemCards,
-  spellCards,
-  monsterTiers,
-  weaponCards,
-  armorCards,
-  worldEventCards,
-  playerEventCards,
-  partyEventCards,
-  statusEffectDefinitions,
-  npcDialogue,
-  skillChallenges,
-  actionCosts,
-  magicalAffixes,
+    classes,
+    itemCards,
+    spellCards,
+    weaponCards,
+    armorCards,
+    worldEventCards,
+    playerEventCards,
+    partyEventCards,
+    monsterTiers,
+    npcDialogue,
+    skillChallenges,
+    magicalAffixes,
+    actionCosts
 };

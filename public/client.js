@@ -4,9 +4,39 @@
 // the game state received from the server into the HTML DOM. It also contains WebRTC logic for voice chat
 // and the spinner animation logic for dice rolls.
 
-const socket = io();
+// --- INDEX ---
+// 1.  CLIENT STATE & SETUP
+//     - 1.1. State Variables
+//     - 1.2. Static Data (Classes, Visuals)
+//     - 1.3. DOM Element References
+// 2.  HELPER FUNCTIONS
+//     - 2.1. Toast Notifications
+//     - 2.2. Modal & Queue Management
+//     - 2.3. Logging
+// 3.  RENDERING LOGIC
+//     - 3.1. createCardElement()
+//     - 3.2. renderPlayerList()
+//     - 3.3. renderClassAbilityCard()
+//     - 3.4. renderGameState() (Main render function)
+// 4.  UI EVENT LISTENERS
+//     - 4.1. Lobby & Game Setup
+//     - 4.2. Turn & Action Controls
+//     - 4.3. Navigation (Mobile & Desktop)
+//     - 4.4. Chat & Modals
+//     - 4.5. Menu & Custom Settings
+//     - 4.6. Help & Tutorial
+// 5.  SOCKET.IO EVENT HANDLERS
+//     - 5.1. Connection & Room Events
+//     - 5.2. Game State & Info
+//     - 5.3. Action/Animation Events
+// 6.  VOICE CHAT (WebRTC) LOGIC
+// 7.  DICE SPINNER & ANIMATION LOGIC
+// 8.  INITIALIZATION & PWA SERVICE WORKER
 
-// --- Client State ---
+// --- 1. CLIENT STATE & SETUP ---
+
+// --- 1.1. State Variables ---
+const socket = io();
 let myPlayerInfo = {};
 let myId = '';
 let currentRoomState = {};
@@ -31,7 +61,7 @@ const iceServers = {
     ]
 };
 
-// Static data for rendering class cards without needing a server round-trip
+// --- 1.2. Static Data (Classes, Visuals) ---
 const classData = {
     Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Unchecked Assault', apCost: 1, description: 'Discard a Spell to add +6 damage to your next successful weapon attack this turn.' } },
     Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Aid', apCost: 1, description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
@@ -72,7 +102,7 @@ const statusEffectVisuals = {
     'Divine Aid':        { icon: 'auto_awesome', color: '#fff176' },
 };
 
-// --- DOM Element References ---
+// --- 1.3. DOM Element References ---
 const get = (id) => document.getElementById(id);
 
 // Lobby
@@ -178,7 +208,6 @@ const mobileMuteVoiceBtn = get('mobile-mute-voice-btn');
 const mobileDisconnectVoiceBtn = get('mobile-disconnect-voice-btn');
 const mobileLeaveGameBtn = get('mobile-leave-game-btn');
 
-
 // Shared Overlays & Modals
 const chatOverlay = get('chat-overlay');
 const chatCloseBtn = get('chat-close-btn');
@@ -249,7 +278,9 @@ const helpModal = get('help-modal');
 const toastContainer = get('toast-container');
 
 
-// --- Helper Functions ---
+// --- 2. HELPER FUNCTIONS ---
+
+// --- 2.1. Toast Notifications ---
 let toastTimeout;
 
 function showToast(message) {
@@ -275,8 +306,10 @@ function generate_random_attack_description() {
     return randomAttackDescriptions[Math.floor(Math.random() * randomAttackDescriptions.length)];
 }
 
+// --- 2.2. Modal & Queue Management ---
 function processModalQueue() {
-    if (isModalActive || modalQueue.length === 0) {
+    // BUG FIX: Prevent new modals from appearing while another action/animation is in progress.
+    if (isModalActive || modalQueue.length === 0 || isPerformingAction) {
         return;
     }
     isModalActive = true;
@@ -299,6 +332,7 @@ function finishModal() {
     setTimeout(processModalQueue, 200); 
 }
 
+// --- 2.3. Logging ---
 function logMessage(message, options = {}) {
     const { type = 'system', channel, senderName, isNarrative = false } = options;
     const p = document.createElement('p');
@@ -358,6 +392,9 @@ function closeNarrativeModal() {
     finishModal();
 }
 
+// --- 3. RENDERING LOGIC ---
+
+// --- 3.1. createCardElement() ---
 function createCardElement(card, actions = {}) {
     const { isPlayable = false, isEquippable = false, isTargetable = false } = actions;
     const cardDiv = document.createElement('div');
@@ -387,6 +424,7 @@ function createCardElement(card, actions = {}) {
     else if (card.type === 'World Event' && card.tags) typeInfo = card.tags;
     
     let bonusesHTML = '';
+    // BUG FIX: Add optional chaining to prevent crash if a card has no effect or bonuses property.
     if (card.effect?.bonuses) {
         bonusesHTML = Object.entries(card.effect.bonuses).map(([key, value]) => {
             const visual = statVisuals[key];
@@ -459,6 +497,7 @@ function createCardElement(card, actions = {}) {
     return cardDiv;
 }
 
+// --- 3.2. renderPlayerList() ---
 function renderPlayerList(players, gameState, listElement, settingsDisplayElement) {
     const currentPlayerId = gameState.turnOrder[gameState.currentPlayerIndex] || null;
     listElement.innerHTML = ''; 
@@ -481,13 +520,18 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
                 return `<span class="material-symbols-outlined status-effect-icon-sm" style="color: ${visual.color};" title="${title}">${visual.icon}</span>`;
             })
             .join('');
+        
+        // BUG FIX: Display "-- / --" for HP in lobby instead of "? / ?"
+        const hpDisplay = gameState.phase === 'lobby'
+            ? 'HP: -- / --'
+            : `HP: ${player.stats.currentHp || '?'} / ${player.stats.maxHp || '?'}`;
 
         li.innerHTML = `
             <div class="player-info">
                 <span>${npcTag}${player.name}${classText}</span>
                 <span class="player-role ${roleClass}">${player.role}</span>
             </div>
-            <div class="player-hp">HP: ${player.stats.currentHp || '?'} / ${player.stats.maxHp || '?'}</div>
+            <div class="player-hp">${hpDisplay}</div>
             <div class="player-status-effects">${statusEffectsHTML}</div>
         `;
         listElement.appendChild(li);
@@ -511,6 +555,7 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
     }
 }
 
+// --- 3.3. renderClassAbilityCard() ---
 function renderClassAbilityCard(player, container) {
     if (!player || !player.class) {
         container.classList.add('hidden');
@@ -537,7 +582,7 @@ function renderClassAbilityCard(player, container) {
     };
 }
 
-
+// --- 3.4. renderGameState() (Main render function) ---
 function renderGameState(room) {
     const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
     currentRoomState = room;
@@ -644,7 +689,7 @@ function renderGameState(room) {
     }
 
 
-    if (isMyTurn && !isMyTurnPreviously) {
+    if (isMyTurn && !isMyTurnPreviously && !isPerformingAction) {
         pendingAbilityConfirmation = null;
         selectedWeaponId = null;
         selectedTargetId = null;
@@ -976,7 +1021,7 @@ function renderGameState(room) {
             
             if ((weapon && weapon.id === selectedWeaponId) || selectedWeaponId === 'unarmed') {
                 const isUnarmed = selectedWeaponId === 'unarmed';
-                const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
+                const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
                 if (myPlayerInfo.currentAp < apCost) {
                     socket.emit('actionError', `Not enough Action Points. Needs ${apCost} AP.`);
                     return;
@@ -996,9 +1041,9 @@ function renderGameState(room) {
     });
 }
 
-// --- UI EVENT LISTENERS ---
+// --- 4. UI EVENT LISTENERS ---
 
-// Lobby
+// --- 4.1. Lobby & Game Setup ---
 createRoomBtn.addEventListener('click', () => {
     const playerName = playerNameInput.value.trim();
     if (!playerName) {
@@ -1039,7 +1084,6 @@ joinRoomBtn.addEventListener('click', () => {
     }
 });
 
-// Game Setup
 [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => {
     const selectedMode = document.querySelector('input[name="gameMode"]:checked').value;
      let customSettings = {};
@@ -1067,7 +1111,7 @@ joinRoomBtn.addEventListener('click', () => {
     }
 }));
 
-// Turn Controls
+// --- 4.2. Turn & Action Controls ---
 [actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => {
     socket.emit('endTurn');
 }));
@@ -1078,10 +1122,9 @@ actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { 
 mobileActionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
 mobileActionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
 
-
 dmPlayMonsterBtn.addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
 
-// Navigation (Mobile & Desktop)
+// --- 4.3. Navigation (Mobile & Desktop) ---
 mobileBottomNav.addEventListener('click', (e) => {
     const navBtn = e.target.closest('.nav-btn');
     if (!navBtn || !navBtn.dataset.screen) return;
@@ -1108,8 +1151,7 @@ desktopTabButtons.forEach(button => {
     });
 });
 
-
-// Chat, Modals, etc.
+// --- 4.4. Chat & Modals ---
 chatToggleBtn.addEventListener('click', () => {
     chatOverlay.classList.toggle('hidden');
     menuDropdown.classList.add('hidden');
@@ -1157,7 +1199,6 @@ narrativeConfirmBtn.addEventListener('click', () => {
     }
 
     if (pendingActionData) {
-        isPerformingAction = true;
         socket.emit('playerAction', { ...pendingActionData, narrative: narrativeText });
         closeNarrativeModal();
     }
@@ -1266,7 +1307,93 @@ itemFoundCloseBtn.addEventListener('click', () => {
     finishModal();
 });
 
-// --- SOCKET.IO EVENT HANDLERS ---
+// --- 4.5. Menu & Custom Settings ---
+document.querySelectorAll('.slider').forEach(slider => {
+    const valueSpan = get(`${slider.id}-value`);
+    if (valueSpan) {
+        slider.addEventListener('input', () => {
+            valueSpan.textContent = slider.value;
+        });
+    }
+});
+
+get('enemy-scaling').addEventListener('change', (e) => {
+    get('scaling-rate-group').classList.toggle('hidden', !e.target.checked);
+});
+
+// --- 4.6. Help & Tutorial ---
+const tutorialContent = [
+    { title: "Welcome to Quest & Chronicle!", content: "<p>This is a quick guide to get you started. On your turn, you'll gain <strong>Action Points (AP)</strong> based on your class and gear. Use them wisely!</p><p>Your primary goal is to work with your party to defeat monsters and overcome challenges thrown at you by the Dungeon Master.</p>" },
+    { title: "Your Turn", content: "<p>At the start of your turn, you'll get to roll a <strong>d20</strong> for a random event. This could lead to finding new items, special player events, or nothing at all.</p><p>After that, you can spend your AP on actions. The main actions are attacking, guarding, or resting to heal.</p>" },
+    { title: "Combat & Abilities", content: "<p>To attack, first click your <strong>equipped weapon</strong>, then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Your <strong>Class Ability</strong> is a powerful, unique skill. Check the Character tab to see its description and cost, and use it to turn the tide of battle!</p>" },
+    { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, and items. Click an equippable item in your hand to equip it.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
+];
+let currentTutorialPage = 0;
+
+function showTutorial() {
+    tutorialModal.classList.remove('hidden');
+    renderTutorialPage();
+}
+function renderTutorialPage() {
+    const page = tutorialContent[currentTutorialPage];
+    get('tutorial-content').innerHTML = `<h2>${page.title}</h2>${page.content}`;
+    get('tutorial-page-indicator').textContent = `${currentTutorialPage + 1} / ${tutorialContent.length}`;
+    get('tutorial-prev-btn').disabled = currentTutorialPage === 0;
+    get('tutorial-next-btn').textContent = currentTutorialPage === tutorialContent.length - 1 ? "Finish" : "Next";
+}
+function closeTutorial() {
+    tutorialModal.classList.add('hidden');
+    localStorage.setItem('tutorialCompleted', 'true');
+}
+get('tutorial-next-btn').addEventListener('click', () => {
+    if (currentTutorialPage < tutorialContent.length - 1) {
+        currentTutorialPage++;
+        renderTutorialPage();
+    } else {
+        closeTutorial();
+    }
+});
+get('tutorial-prev-btn').addEventListener('click', () => {
+    if (currentTutorialPage > 0) {
+        currentTutorialPage--;
+        renderTutorialPage();
+    }
+});
+get('tutorial-skip-btn').addEventListener('click', closeTutorial);
+
+const helpContentHTML = `
+    <h3>Core Mechanics</h3>
+    <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or using abilities, cost AP. Your total AP is determined by your class and equipment.</p>
+    <p><strong>Health (HP):</strong> Your life force. If it reaches 0, you fall but can get back up by spending a Life. If you're out of Lives, you're out of the game!</p>
+    <p><strong>Dice Rolls:</strong> Most actions are resolved with a d20 roll. To succeed, you usually need to roll a number that meets or exceeds a target's Defense Class (DC) or Armor Class (AC).</p>
+
+    <h3>Player Stats</h3>
+    <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit.</p>
+    <p><strong>Shield Bonus:</strong> Your Armor Class (AC). Monsters must roll higher than this number to hit you.</p>
+    <p><strong>Health Dice:</strong> A resource used for the Respite and Rest actions to heal outside of combat.</p>
+    <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes, used for Skill Challenges and certain card effects.</p>
+    
+    <h3>Turn Events & Challenges</h3>
+    <p><strong>Turn Event:</strong> At the start of your turn, you roll a d20. On a 11+, something happens! This can be finding an item, a personal story event, or a party-wide event.</p>
+    <p><strong>World Events:</strong> The DM can trigger these powerful, ongoing events that affect the whole party. You may need to make a "saving throw" (a d20 roll) to resist their negative effects.</p>
+    <p><strong>Skill Challenges:</strong> A party-wide objective, like climbing a cliff or disarming a trap. On your turn, you can spend 1 AP to contribute by making a skill check.</p>
+
+    <h3>UI Navigation</h3>
+    <p><strong>Game Tab:</strong> Your main view, showing the monster board, your equipment, and your hand.</p>
+    <p><strong>Character Tab:</strong> Shows your detailed stats and your unique Class Ability.</p>
+    <p><strong>Party Tab:</strong> A list of all players in the game, their current health, and status.</p>
+    <p><strong>Info Tab:</strong> Displays active World Events and any treasure the party has discovered but not yet distributed.</p>
+    <p><strong>Log Tab:</strong> A running log of all game events and player chat.</p>
+`;
+
+get('help-content').innerHTML = helpContentHTML;
+[helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => helpModal.classList.remove('hidden')));
+get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden');
+
+
+// --- 5. SOCKET.IO EVENT HANDLERS ---
+
+// --- 5.1. Connection & Room Events ---
 socket.on('connect', () => { myId = socket.id; });
 socket.on('roomCreated', (room) => {
     document.body.classList.add('in-game');
@@ -1287,6 +1414,9 @@ socket.on('joinSuccess', (room) => {
     gameModeSelector.classList.add('hidden');
     renderGameState(room);
 });
+socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
+
+// --- 5.2. Game State & Info ---
 socket.on('playerListUpdate', (room) => renderGameState(room));
 socket.on('gameStarted', (room) => {
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.add('hidden'));
@@ -1296,7 +1426,6 @@ socket.on('gameStarted', (room) => {
 });
 socket.on('gameStateUpdate', (room) => renderGameState(room));
 socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
-socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 socket.on('actionError', (errorMessage) => {
     if(typeof errorMessage === 'string' && errorMessage.toLowerCase().includes('action points')) {
         noApMessage.textContent = errorMessage;
@@ -1308,6 +1437,7 @@ socket.on('actionError', (errorMessage) => {
     }
 });
 
+// --- 5.3. Action/Animation Events ---
 socket.on('simpleRollAnimation', (data) => {
     if (data.playerId !== myId) {
         showNonBlockingRollToast(data);
@@ -1317,11 +1447,13 @@ socket.on('simpleRollAnimation', (data) => {
 });
 
 socket.on('attackAnimation', (data) => {
+    isPerformingAction = true;
     const { attackerId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, damageBonus, totalDamage } = data;
     const isMyAttack = attackerId === myId;
     
     const finalCallback = () => {
         isPerformingAction = false;
+        processModalQueue(); // Resume modal queue after action completes
         if (currentRoomState.id) {
             renderGameState(currentRoomState);
         }
@@ -1365,6 +1497,7 @@ socket.on('attackAnimation', (data) => {
         if(hit) {
             setTimeout(() => showNonBlockingRollToast(damageData), 1000); // Show damage toast after a delay
         }
+        finalCallback(); // For non-player attacks, just end the action state immediately after showing toasts
     }
 });
 
@@ -1456,7 +1589,7 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
 });
 
 
-// --- VOICE CHAT ---
+// --- 6. VOICE CHAT (WebRTC) LOGIC ---
 function updateVoiceButtons() {
     const isMuted = localStream ? !localStream.getAudioTracks()[0].enabled : false;
 
@@ -1601,7 +1734,7 @@ socket.on('voice-peer-disconnect', ({ peerId }) => {
     }
 });
 
-// --- MENU ---
+// --- 7. DICE SPINNER & ANIMATION LOGIC ---
 function toggleMenu(menu, button) {
     const isHidden = menu.classList.toggle('hidden');
     button.innerHTML = isHidden
@@ -1629,21 +1762,6 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// --- CUSTOM SETTINGS LISTENERS ---
-document.querySelectorAll('.slider').forEach(slider => {
-    const valueSpan = get(`${slider.id}-value`);
-    if (valueSpan) {
-        slider.addEventListener('input', () => {
-            valueSpan.textContent = slider.value;
-        });
-    }
-});
-
-get('enemy-scaling').addEventListener('change', (e) => {
-    get('scaling-rate-group').classList.toggle('hidden', !e.target.checked);
-});
-
-// --- Initial UI Setup ---
 function initializeLobby() {
     // Programmatically set the default radio button to ensure state consistency
     const beginnerRadio = document.querySelector('input[name="gameMode"][value="Beginner"]');
@@ -1662,95 +1780,6 @@ document.querySelector('.radio-group').addEventListener('change', (e) => {
     }
 });
 
-// --- HELP & TUTORIAL ---
-const tutorialContent = [
-    { title: "Welcome to Quest & Chronicle!", content: "<p>This is a quick guide to get you started. On your turn, you'll gain <strong>Action Points (AP)</strong> based on your class and gear. Use them wisely!</p><p>Your primary goal is to work with your party to defeat monsters and overcome challenges thrown at you by the Dungeon Master.</p>" },
-    { title: "Your Turn", content: "<p>At the start of your turn, you'll get to roll a <strong>d20</strong> for a random event. This could lead to finding new items, special player events, or nothing at all.</p><p>After that, you can spend your AP on actions. The main actions are attacking, guarding, or resting to heal.</p>" },
-    { title: "Combat & Abilities", content: "<p>To attack, first click your <strong>equipped weapon</strong>, then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Your <strong>Class Ability</strong> is a powerful, unique skill. Check the Character tab to see its description and cost, and use it to turn the tide of battle!</p>" },
-    { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, and items. Click an equippable item in your hand to equip it.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
-];
-let currentTutorialPage = 0;
-
-function showTutorial() {
-    tutorialModal.classList.remove('hidden');
-    renderTutorialPage();
-}
-function renderTutorialPage() {
-    const page = tutorialContent[currentTutorialPage];
-    get('tutorial-content').innerHTML = `<h2>${page.title}</h2>${page.content}`;
-    get('tutorial-page-indicator').textContent = `${currentTutorialPage + 1} / ${tutorialContent.length}`;
-    get('tutorial-prev-btn').disabled = currentTutorialPage === 0;
-    get('tutorial-next-btn').textContent = currentTutorialPage === tutorialContent.length - 1 ? "Finish" : "Next";
-}
-function closeTutorial() {
-    tutorialModal.classList.add('hidden');
-    localStorage.setItem('tutorialCompleted', 'true');
-}
-get('tutorial-next-btn').addEventListener('click', () => {
-    if (currentTutorialPage < tutorialContent.length - 1) {
-        currentTutorialPage++;
-        renderTutorialPage();
-    } else {
-        closeTutorial();
-    }
-});
-get('tutorial-prev-btn').addEventListener('click', () => {
-    if (currentTutorialPage > 0) {
-        currentTutorialPage--;
-        renderTutorialPage();
-    }
-});
-get('tutorial-skip-btn').addEventListener('click', closeTutorial);
-
-const helpContentHTML = `
-    <h3>Core Mechanics</h3>
-    <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or using abilities, cost AP. Your total AP is determined by your class and equipment.</p>
-    <p><strong>Health (HP):</strong> Your life force. If it reaches 0, you fall but can get back up by spending a Life. If you're out of Lives, you're out of the game!</p>
-    <p><strong>Dice Rolls:</strong> Most actions are resolved with a d20 roll. To succeed, you usually need to roll a number that meets or exceeds a target's Defense Class (DC) or Armor Class (AC).</p>
-
-    <h3>Player Stats</h3>
-    <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit.</p>
-    <p><strong>Shield Bonus:</strong> Your Armor Class (AC). Monsters must roll higher than this number to hit you.</p>
-    <p><strong>Health Dice:</strong> A resource used for the Respite and Rest actions to heal outside of combat.</p>
-    <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes, used for Skill Challenges and certain card effects.</p>
-    
-    <h3>Turn Events & Challenges</h3>
-    <p><strong>Turn Event:</strong> At the start of your turn, you roll a d20. On a 11+, something happens! This can be finding an item, a personal story event, or a party-wide event.</p>
-    <p><strong>World Events:</strong> The DM can trigger these powerful, ongoing events that affect the whole party. You may need to make a "saving throw" (a d20 roll) to resist their negative effects.</p>
-    <p><strong>Skill Challenges:</strong> A party-wide objective, like climbing a cliff or disarming a trap. On your turn, you can spend 1 AP to contribute by making a skill check.</p>
-
-    <h3>UI Navigation</h3>
-    <p><strong>Game Tab:</strong> Your main view, showing the monster board, your equipment, and your hand.</p>
-    <p><strong>Character Tab:</strong> Shows your detailed stats and your unique Class Ability.</p>
-    <p><strong>Party Tab:</strong> A list of all players in the game, their current health, and status.</p>
-    <p><strong>Info Tab:</strong> Displays active World Events and any treasure the party has discovered but not yet distributed.</p>
-    <p><strong>Log Tab:</strong> A running log of all game events and player chat.</p>
-`;
-
-get('help-content').innerHTML = helpContentHTML;
-[helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => helpModal.classList.remove('hidden')));
-get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden');
-
-// --- INITIAL LOAD ---
-document.addEventListener('DOMContentLoaded', () => {
-    initializeLobby();
-    if (!localStorage.getItem('tutorialCompleted')) {
-        showTutorial();
-    }
-});
-
-// PWA Service Worker Registration
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(registration => {
-            console.log('SW registered: ', registration);
-        }).catch(registrationError => {
-            console.log('SW registration failed: ', registrationError);
-        });
-    });
-}
-
-// --- DICE SPINNER LOGIC ---
 function showNonBlockingRollToast(data) {
     const toast = document.createElement('div');
     toast.className = 'toast-roll-overlay';
@@ -1827,4 +1856,22 @@ function playEffectAnimation(targetElement, effectType) {
     setTimeout(() => {
         effectEl.remove();
     }, 1000); 
+}
+
+// --- 8. INITIALIZATION & PWA SERVICE WORKER ---
+document.addEventListener('DOMContentLoaded', () => {
+    initializeLobby();
+    if (!localStorage.getItem('tutorialCompleted')) {
+        showTutorial();
+    }
+});
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('SW registered: ', registration);
+        }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+        });
+    });
 }
