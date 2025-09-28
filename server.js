@@ -467,7 +467,7 @@ class GameManager {
 
     determine_ai_action(player, gameState, allPlayers) {
         const { board } = gameState;
-        const { currentAp, stats, hand, healthDice } = player;
+        const { currentAp, stats, hand, healthDice, equipment } = player;
         const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
 
         // Priority 1: Healing (Cards)
@@ -522,10 +522,10 @@ class GameManager {
         }
 
         // Priority 3: Attack
-        const weapon = player.equipment.weapon;
+        const weapon = equipment.weapon;
         if (weapon && board.monsters.length > 0) {
-            const apCost = weapon.apCost || 2;
-            if (currentAp >= apCost) {
+            const apCost = weapon.apCost; // Rely on card data for cost
+            if (apCost && currentAp >= apCost) {
                 let bestTarget = board.monsters.reduce((prev, curr) => (prev.currentHp < curr.currentHp) ? prev : curr);
                 if (bestTarget) {
                     return { action: 'attack', targetId: bestTarget.id, weaponId: weapon.id, apCost: apCost };
@@ -589,7 +589,7 @@ class GameManager {
                         this.sendMessageToRoom(room.id, {
                             channel: 'game',
                             type: 'system',
-                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack, targeting the weakest foe.`
+                            message: `<b>${player.name}</b> used ${bestAction.apCost} AP to Attack.`
                         });
                         const d20Roll = Math.floor(Math.random() * 20) + 1;
                         this._resolveAttack(room, {
@@ -762,6 +762,18 @@ class GameManager {
             totalDamage += damageToShield; // For logging purposes, show total damage dealt
         }
         
+        // --- LOGGING ---
+        let logMessageText = `The <b>${monster.name}</b> attacks ${target.name}! Roll: ${d20Roll} + ${monster.attackBonus} = <b>${totalRollToHit}</b> vs DC ${requiredRollToHit}. `;
+        if (isCrit) logMessageText = `<b>CRITICAL HIT!</b> ` + logMessageText;
+        else if (isFumble) logMessageText = `<b>FUMBLE!</b> ` + logMessageText;
+        
+        if (hit) {
+            logMessageText += `<span style='color: var(--color-success)'>HIT!</span> Dealing <b>${totalDamage}</b> damage.`;
+        } else {
+            logMessageText += `<span style='color: var(--color-danger)'>MISS!</span>`;
+        }
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessageText });
+
         io.to(room.id).emit('monsterAttackAnimation', {
             attackerName: monster.name,
             targetName: target.name,
@@ -1037,7 +1049,7 @@ class GameManager {
             return socket.emit('actionError', 'Invalid attack parameters.');
         }
         
-        const apCost = weapon.apCost || 1;
+        const apCost = weapon.apCost || 2; // Default to 2 for safety, data should have it
         if (player.currentAp < apCost) {
             return socket.emit('actionError', 'Not enough Action Points.');
         }
@@ -1090,6 +1102,18 @@ class GameManager {
             target.currentHp -= totalDamage;
         }
         
+        // --- LOGGING ---
+        let logMessageText = `<b>${player.name}</b> attacks ${target.name}! Roll: ${d20Roll} + ${player.stats.damageBonus} = <b>${totalRollToHit}</b> vs DC ${target.requiredRollToHit}. `;
+        if (isCrit) logMessageText = `<b>CRITICAL HIT!</b> ` + logMessageText;
+        else if (isFumble) logMessageText = `<b>FUMBLE!</b> ` + logMessageText;
+        
+        if (hit) {
+            logMessageText += `<span style='color: var(--color-success)'>HIT!</span> Dealing <b>${totalDamage}</b> damage.`;
+        } else {
+            logMessageText += `<span style='color: var(--color-danger)'>MISS!</span>`;
+        }
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: logMessageText });
+
         io.to(room.id).emit('attackAnimation', {
             attackerName: player.name,
             d20Roll,

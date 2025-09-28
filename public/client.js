@@ -96,6 +96,7 @@ const actionEndTurnBtn = get('action-end-turn-btn');
 // Mobile
 const mobileTurnIndicator = get('mobile-turn-indicator');
 const mobileTurnCounter = get('mobile-turn-counter');
+const mobileRoomCode = get('mobile-room-code');
 const mobileStartGameBtn = get('mobile-startGameBtn');
 const mobileBoardCards = get('mobile-board-cards');
 const mobilePlayerHand = get('mobile-player-hand');
@@ -139,7 +140,6 @@ const narrativeInput = get('narrative-input');
 const narrativeCancelBtn = get('narrative-cancel-btn');
 const narrativeConfirmBtn = get('narrative-confirm-btn');
 const yourTurnPopup = get('your-turn-popup');
-const rollResultPopup = get('roll-result-popup');
 const apModal = get('ap-modal');
 const apModalCancelBtn = get('ap-modal-cancel-btn');
 const apModalConfirmBtn = get('ap-modal-confirm-btn');
@@ -268,18 +268,6 @@ function finishModal() {
     setTimeout(processModalQueue, 200); // Small delay for smoother transitions
 }
 
-
-function showRollResult(rollValue, type = 'd20') {
-    if (!rollResultPopup) return;
-    
-    rollResultPopup.textContent = `${type}: ${rollValue}`;
-    rollResultPopup.classList.add('visible');
-    
-    setTimeout(() => {
-        rollResultPopup.classList.remove('visible');
-    }, 1500); // Display for 1.5 seconds
-}
-
 function logMessage(message, options = {}) {
     const { type = 'system', channel, senderName, isNarrative = false } = options;
     const p = document.createElement('p');
@@ -321,8 +309,8 @@ function logMessage(message, options = {}) {
 function openNarrativeModal(actionData, cardName) {
     addToModalQueue(() => {
         pendingActionData = actionData;
-        narrativePrompt.textContent = `How do you use ${cardName}?`;
-        narrativeInput.value = '';
+        narrativePrompt.textContent = `How do you want to attack with your ${cardName}?`;
+        narrativeInput.value = ''; // Clear previous input
         narrativeModal.classList.remove('hidden');
         narrativeInput.focus();
     }, 'narrative-modal');
@@ -883,9 +871,11 @@ joinRoomBtn.addEventListener('click', () => {
 
     const weapon = myPlayerInfo.equipment.weapon;
     if (weapon && weapon.id === selectedWeaponId) {
-        const apCost = weapon.apCost || 1;
+        const apCost = weapon.apCost || 2; // Client-side check for immediate feedback
         if (myPlayerInfo.currentAp < apCost) {
-            showToast('Not enough Action Points to attack.');
+            const message = 'Not enough Action Points to attack.';
+            showToast(message);
+            logMessage(message, { channel: 'game', type: 'system' });
             return;
         }
         openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, weapon.name);
@@ -1088,6 +1078,7 @@ socket.on('roomCreated', (room) => {
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
     roomCodeDisplay.textContent = room.id;
+    mobileRoomCode.textContent = room.id;
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.remove('hidden'));
     gameModeSelector.classList.remove('hidden');
     renderGameState(room);
@@ -1097,6 +1088,7 @@ socket.on('joinSuccess', (room) => {
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
     roomCodeDisplay.textContent = room.id;
+    mobileRoomCode.textContent = room.id;
     gameModeSelector.classList.add('hidden');
     renderGameState(room);
 });
@@ -1123,7 +1115,7 @@ socket.on('attackAnimation', (data) => {
             if (data.isCrit) {
                 resultHTML += `<p class="result-line hit">CRITICAL HIT!</p>`;
             } else if (data.isFumble) {
-                resultHTML += `<p class="result-line miss">CRITICAL MISS!</p>`;
+                resultHTML += `<p class="result-line miss">CRITICAL FUMBLE!</p>`;
             } else {
                 resultHTML += data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
             }
@@ -1147,7 +1139,7 @@ socket.on('attackAnimation', (data) => {
             if (!fastForwarded) {
                 renderResult();
                 fastForwarded = true;
-                const closeTimeout = setTimeout(close, 3000);
+                const closeTimeout = setTimeout(close, 4000);
                 timeouts = [closeTimeout];
                 // Update handler for the second skip
                 currentSkipHandler = () => {
@@ -1159,7 +1151,6 @@ socket.on('attackAnimation', (data) => {
             }
         };
 
-        showRollResult(data.d20Roll, 'd20');
         diceRollTitle.textContent = `${data.attackerName} attacks!`;
         diceRollResult.innerHTML = '';
         diceRollResult.classList.add('hidden');
@@ -1172,7 +1163,7 @@ socket.on('attackAnimation', (data) => {
         const timeout1 = setTimeout(() => {
             renderResult();
             fastForwarded = true;
-            const timeout2 = setTimeout(close, 3000);
+            const timeout2 = setTimeout(close, 4000);
             timeouts = [timeout2];
         }, 1500);
         timeouts.push(timeout1);
@@ -1191,7 +1182,7 @@ socket.on('monsterAttackAnimation', (data) => {
             if (data.isCrit) {
                 resultHTML += `<p class="result-line hit">CRITICAL HIT!</p>`;
             } else if (data.isFumble) {
-                resultHTML += `<p class="result-line miss">CRITICAL MISS!</p>`;
+                resultHTML += `<p class="result-line miss">CRITICAL FUMBLE!</p>`;
             } else {
                 resultHTML += data.hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`;
             }
@@ -1215,7 +1206,7 @@ socket.on('monsterAttackAnimation', (data) => {
             if (!fastForwarded) {
                 renderResult();
                 fastForwarded = true;
-                const closeTimeout = setTimeout(close, 3000);
+                const closeTimeout = setTimeout(close, 4000);
                 timeouts = [closeTimeout];
                 currentSkipHandler = () => {
                     clearTimeout(closeTimeout);
@@ -1226,7 +1217,6 @@ socket.on('monsterAttackAnimation', (data) => {
             }
         };
 
-        showRollResult(data.d20Roll, 'd20');
         diceRollTitle.textContent = `${data.attackerName} attacks ${data.targetName}!`;
         diceRollResult.innerHTML = '';
         diceRollResult.classList.add('hidden');
@@ -1239,7 +1229,7 @@ socket.on('monsterAttackAnimation', (data) => {
         const timeout1 = setTimeout(() => {
             renderResult();
             fastForwarded = true;
-            const timeout2 = setTimeout(close, 3000);
+            const timeout2 = setTimeout(close, 4000);
             timeouts = [timeout2];
         }, 1500);
         timeouts.push(timeout1);
@@ -1291,10 +1281,65 @@ socket.on('eventRollResult', ({ roll, outcome, cardOptions }) => {
         renderResult();
     };
 
-    showRollResult(roll, 'd20');
     // The roll button click already started the dice animation
     timeoutId = setTimeout(renderResult, 1500);
 });
+
+socket.on('skillChallengeRollResult', ({ d20Roll, bonus, itemBonus, totalRoll, dc, success }) => {
+     addToModalQueue(() => {
+        let fastForwarded = false;
+        let timeouts = [];
+
+        const renderResult = () => {
+            attackDice.classList.remove('is-rolling');
+            let resultHTML = success ? `<p class="result-line hit">SUCCESS!</p>` : `<p class="result-line miss">FAILURE!</p>`;
+            resultHTML += `<p class="roll-details">Roll: ${d20Roll} + ${bonus}(stat) ${itemBonus > 0 ? `+ ${itemBonus}(item)` : ''} = <strong>${totalRoll}</strong> vs DC ${dc}</p>`;
+            
+            diceRollResult.innerHTML = resultHTML;
+            diceRollResult.classList.remove('hidden');
+        };
+
+        const close = () => {
+            diceRollOverlay.classList.add('hidden');
+            finishModal();
+        };
+
+        currentSkipHandler = () => {
+            timeouts.forEach(clearTimeout);
+            if (!fastForwarded) {
+                renderResult();
+                fastForwarded = true;
+                const closeTimeout = setTimeout(close, 3000);
+                timeouts = [closeTimeout];
+                currentSkipHandler = () => {
+                    clearTimeout(closeTimeout);
+                    close();
+                };
+            } else {
+                close();
+            }
+        };
+
+        diceRollTitle.textContent = `Contributing to Challenge...`;
+        diceRollResult.innerHTML = '';
+        diceRollResult.classList.add('hidden');
+        diceRollOverlay.classList.remove('hidden');
+
+        attackDice.classList.remove('is-rolling');
+        void attackDice.offsetWidth;
+        attackDice.classList.add('is-rolling');
+
+        const timeout1 = setTimeout(() => {
+            renderResult();
+            fastForwarded = true;
+            const timeout2 = setTimeout(close, 3000);
+            timeouts = [timeout2];
+        }, 1500);
+        timeouts.push(timeout1);
+
+    }, 'skill-challenge-roll-result');
+});
+
 
 socket.on('eventCardReveal', ({ chosenCard }) => {
     eventCardSelection.innerHTML = '';
@@ -1309,7 +1354,11 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
         
         // Hide the roll button, show the result.
         worldEventSaveRollBtn.classList.add('hidden');
-        worldEventRollResult.textContent = `You rolled ${d20Roll} + ${bonus} = ${totalRoll} vs DC ${dc}. ${success ? 'Success!' : 'Failure!'}`;
+        
+        let resultHTML = `<p class="roll-details">Roll: ${d20Roll} + ${bonus} = <strong>${totalRoll}</strong> vs DC ${dc}</p>`;
+        resultHTML += success ? `<p class="result-line hit">Success!</p>` : `<p class="result-line miss">Failure!</p>`;
+        
+        worldEventRollResult.innerHTML = resultHTML;
         worldEventRollResult.classList.remove('hidden');
         
         // Show the continue button to allow faster closing, but also set a timeout as a failsafe.
@@ -1330,9 +1379,6 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
             worldEventSaveModal.classList.add('hidden');
             finishModal();
         };
-
-        // Show the small popup at the top
-        showRollResult(d20Roll, 'd20');
 
         // Clear any skip handlers, this modal is now interactive and not on a timer
         currentSkipHandler = null;

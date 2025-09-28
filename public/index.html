@@ -158,6 +158,7 @@
                 <div class="mobile-header-info">
                      <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
                      <p class="turn-counter">Turn: <span id="mobile-turn-counter">0</span></p>
+                     <p class="room-code-mobile">Code: <span id="mobile-room-code">----</span></p>
                 </div>
                  <div class="mobile-header-controls">
                     <div id="mobile-header-action-buttons">
@@ -312,8 +313,6 @@
     </div>
 
     <div id="your-turn-popup" class="your-turn-popup hidden">YOUR TURN</div>
-    
-    <div id="roll-result-popup" class="roll-result-popup"></div>
 
     <div id="dice-roll-overlay" class="modal-overlay hidden">
         <div class="dice-roll-content">
@@ -351,7 +350,7 @@
             <div class="dice-scene" style="margin: 1.5rem auto;">
                 <div id="world-event-dice" class="dice"><div class="face front"></div><div class="face back"></div><div class="face right"></div><div class="face left"></div><div class="face top"></div><div class="face bottom"></div></div>
             </div>
-            <p id="world-event-roll-result" class="hidden" style="font-weight: bold; font-size: 1.2rem; margin-bottom: 1rem;"></p>
+            <div id="world-event-roll-result" class="dice-roll-result-container hidden" style="padding: 1rem; margin-top: 1rem;"></div>
             <button id="world-event-save-roll-btn" class="btn btn-special">Roll d20</button>
             <button id="world-event-save-continue-btn" class="btn btn-primary hidden">Continue</button>
         </div>
