@@ -42,7 +42,18 @@ const classData = {
     Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, description: "\"Weapon Surge\" - Discard a drawn spell card to add +4 to your damage." },
 };
 
-
+const statVisuals = {
+    hp:          { icon: 'favorite', color: 'var(--stat-color-hp)' },
+    ap:          { icon: 'bolt', color: 'var(--stat-color-ap)' },
+    damageBonus: { icon: 'swords', color: 'var(--stat-color-damage)' },
+    shieldBonus: { icon: 'shield', color: 'var(--stat-color-shield)' },
+    str:         { icon: 'fitness_center', color: 'var(--stat-color-str)' },
+    dex:         { icon: 'sprint', color: 'var(--stat-color-dex)' },
+    con:         { icon: 'health_and_safety', color: 'var(--stat-color-con)' },
+    int:         { icon: 'school', color: 'var(--stat-color-int)' },
+    wis:         { icon: 'psychology', color: 'var(--stat-color-wis)' },
+    cha:         { icon: 'groups', color: 'var(--stat-color-cha)' },
+};
 
 // --- DOM Element References ---
 const get = (id) => document.getElementById(id);
@@ -343,9 +354,15 @@ function createCardElement(card, actions = {}) {
     
     let bonusesHTML = '';
     if (card.effect?.bonuses) {
-        bonusesHTML = Object.entries(card.effect.bonuses).map(([key, value]) => 
-            `<div class="card-bonus">${key.charAt(0).toUpperCase() + key.slice(1)}: ${value > 0 ? '+' : ''}${value}</div>`
-        ).join('');
+        bonusesHTML = Object.entries(card.effect.bonuses).map(([key, value]) => {
+            const visual = statVisuals[key];
+            if (!visual) return '';
+            const sign = value > 0 ? '+' : '';
+            return `<div class="card-bonus" style="color: ${visual.color};">
+                        <span class="material-symbols-outlined">${visual.icon}</span> 
+                        ${key.charAt(0).toUpperCase() + key.slice(1)}: ${sign}${value}
+                    </div>`;
+        }).join('');
     }
     
     let monsterStatsHTML = '';
@@ -359,15 +376,17 @@ function createCardElement(card, actions = {}) {
             card.statusEffects.map(e => `<span class="status-effect">${e.name}</span>`).join(' ') +
             `</div>`;
     }
+    
+    const cardTitle = card.isMagical ? `<span class="magical-item">${card.name}</span>` : card.name;
 
     cardDiv.innerHTML = `
         <div class="card-content">
-            <h3 class="card-title">${card.name}</h3>
+            <h3 class="card-title">${cardTitle}</h3>
             <p class="card-effect">${card.effect?.description || card.description || card.outcome || ''}</p>
         </div>
         ${statusEffectsHTML}
         <div class="card-footer">
-            ${bonusesHTML}
+            <div class="card-bonuses-grid">${bonusesHTML}</div>
             ${monsterStatsHTML}
             <p class="card-type">${typeInfo}</p>
         </div>

@@ -29,6 +29,18 @@
     --color-dm: #9333ea; /* Purple for DM */
     --color-glow: rgba(255, 193, 7, 0.7);
 
+    /* Stat Colors */
+    --stat-color-hp: #f44336;          /* Red */
+    --stat-color-ap: #2196f3;          /* Blue */
+    --stat-color-damage: #ff9800;      /* Orange */
+    --stat-color-shield: #9e9e9e;      /* Grey */
+    --stat-color-str: #e57373;          /* Light Red */
+    --stat-color-dex: #81c784;          /* Light Green */
+    --stat-color-con: #a1887f;          /* Brown */
+    --stat-color-int: #7986cb;          /* Indigo */
+    --stat-color-wis: #ba68c8;          /* Purple */
+    --stat-color-cha: #ffd54f;          /* Amber */
+
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
     --shadow-md: 0 4px 6px rgba(0,0,0,0.25);
     --shadow-lg: 0 10px 15px rgba(0,0,0,0.3);
@@ -388,10 +400,20 @@ body.in-game {
 .card:hover { transform: translateY(-5px) scale(1.05); border-color: var(--color-primary); }
 .card-content { flex-grow: 1; }
 .card-title { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.magical-item { color: var(--color-special); text-shadow: 0 0 5px var(--color-special); }
 .card-effect { font-size: 0.8rem; color: var(--color-text-secondary); }
 .card-footer { border-top: 1px solid var(--color-border); padding-top: 0.5rem; }
 .card-type { font-size: 0.75rem; font-weight: 700; color: var(--color-text-secondary); text-align: right; }
-.card-bonus { font-size: 0.8rem; font-weight: bold; color: var(--color-success); }
+.card-bonuses-grid { display: grid; grid-template-columns: 1fr; gap: 0.25rem; margin-bottom: 0.25rem; }
+.card-bonus { 
+    font-size: 0.8rem; 
+    font-weight: bold; 
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.card-bonus .material-symbols-outlined { font-size: 1rem; }
+
 .card-actions { position: absolute; bottom: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; }
 .card:hover .card-actions { opacity: 1; }
 

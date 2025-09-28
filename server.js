@@ -399,11 +399,11 @@ class GameManager {
     
         const cardsToDeal = [];
     
-        // Filter deck by class requirements if the player has a class and the deck isn't 'item'
-        const shouldFilter = player.class && (deckName === 'weapon' || deckName === 'armor' || deckName === 'spell');
+        // Always filter deck by class requirements if the player has a class
+        const shouldFilter = player.class;
     
         if (shouldFilter) {
-            const suitableCards = mainDeck.filter(card => 
+            let suitableCards = mainDeck.filter(card => 
                 !card.class || card.class.includes("Any") || card.class.includes(player.class)
             );
     
@@ -413,7 +413,6 @@ class GameManager {
                     const card = suitableCards.splice(cardIndex, 1)[0];
                     cardsToDeal.push(card);
                     
-                    // Remove the dealt card from the main deck
                     const mainDeckIndex = mainDeck.findIndex(c => c.id === card.id);
                     if (mainDeckIndex > -1) {
                         mainDeck.splice(mainDeckIndex, 1);
@@ -424,7 +423,7 @@ class GameManager {
                 }
             }
         } else {
-            // Default behavior for items or players without a class
+            // Default behavior for players without a class (e.g. lobby)
             for (let i = 0; i < count; i++) {
                 if (mainDeck.length > 0) {
                     cardsToDeal.push(mainDeck.pop());
@@ -1167,18 +1166,27 @@ class GameManager {
                 message: dialogue[Math.floor(Math.random() * dialogue.length)], isNarrative: true
             });
     
-            // --- MONSTER LOOT DROP LOGIC ---
+            // --- MONSTER LOOT DROP LOGIC (CLASS-BASED) ---
             const monsterTier = target.tier || 1;
-            const lootChances = { 1: 0.15, 2: 0.35, 3: 0.60 }; // 15%, 35%, 60%
+            const lootChances = { 1: 0.15, 2: 0.35, 3: 0.60 };
             const lootChance = lootChances[monsterTier] || 0.15;
     
             if (Math.random() < lootChance) {
-                if (room.gameState.decks.treasure.length > 0) {
-                    let card = room.gameState.decks.treasure.pop();
-                    
-                    // Generate magical properties based on monster tier
+                const suitableTreasure = room.gameState.decks.treasure.filter(card =>
+                    !card.class || card.class.includes("Any") || card.class.includes(player.class)
+                );
+    
+                if (suitableTreasure.length > 0) {
+                    const cardIndex = Math.floor(Math.random() * suitableTreasure.length);
+                    let card = suitableTreasure[cardIndex];
+    
+                    // Remove from main deck
+                    const mainDeckIndex = room.gameState.decks.treasure.findIndex(c => c.id === card.id);
+                    if (mainDeckIndex > -1) {
+                        room.gameState.decks.treasure.splice(mainDeckIndex, 1);
+                    }
+    
                     if (card.type === 'Weapon' || card.type === 'Armor') {
-                        // Pass monster tier to influence quality
                         card = this.generateMagicalEquipment(card, room.gameState.turnCount, monsterTier);
                     }
     
@@ -1258,13 +1266,19 @@ class GameManager {
 
         if (roll > 10) {
             const eventTypeRoll = Math.random();
+            const suitableTreasure = room.gameState.decks.treasure.filter(card => 
+                !card.class || card.class.includes("Any") || card.class.includes(player.class)
+            );
 
-            // Reduced chance for treasure from event to balance monster drops
-            if (eventTypeRoll < 0.35 && room.gameState.decks.treasure.length > 0) { // 35% Treasure Draw
+            // Reduced chance for treasure to balance monster drops
+            if (eventTypeRoll < 0.20 && suitableTreasure.length > 0) { // 20% Treasure Draw
                 outcome = 'equipmentDraw';
-                let card = room.gameState.decks.treasure.pop();
                 
-                // --- SCALING LOGIC ---
+                const cardIndex = Math.floor(Math.random() * suitableTreasure.length);
+                let card = suitableTreasure[cardIndex];
+                const mainDeckIndex = room.gameState.decks.treasure.findIndex(c => c.id === card.id);
+                if (mainDeckIndex > -1) room.gameState.decks.treasure.splice(mainDeckIndex, 1);
+                
                 if (card.type === 'Weapon' || card.type === 'Armor') {
                     card = this.generateMagicalEquipment(card, room.gameState.turnCount);
                 }
@@ -1275,24 +1289,18 @@ class GameManager {
                 if ((cardType === 'weapon' || cardType === 'armor') && player.equipment[cardType]) {
                     player.pendingEquipmentChoice = { newCard: card, type: cardType };
                 } else if (cardType === 'weapon' || cardType === 'armor') {
-                     // Check class requirement before auto-equipping
-                    if (card.class && !card.class.includes("Any") && !card.class.includes(player.class)) {
-                        player.hand.push(card);
-                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `They cannot use it, so it was added to their hand.` });
-                    } else {
-                        player.equipment[cardType] = card;
-                        player.stats = this.calculatePlayerStats(player);
-                        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `It has been automatically equipped.` });
-                    }
+                    player.equipment[cardType] = card;
+                    player.stats = this.calculatePlayerStats(player);
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `It has been automatically equipped.` });
                 } else {
                     player.hand.push(card);
                 }
-            } else if (eventTypeRoll < 0.70 && room.gameState.decks.playerEvent.length >= 2) { // 35% Player Event
+            } else if (eventTypeRoll < 0.60 && room.gameState.decks.playerEvent.length >= 2) { // 40% Player Event
                 outcome = 'playerEvent';
                 const deck = room.gameState.decks.playerEvent;
                 cardOptions = [deck.pop(), deck.pop()];
                 player.pendingEventChoice = { outcome: 'playerEvent', options: cardOptions };
-            } else if (room.gameState.decks.partyEvent.length > 0) { // 30% Party Event
+            } else if (room.gameState.decks.partyEvent.length > 0) { // 40% Party Event
                 outcome = 'partyEvent';
                 const eventCard = room.gameState.decks.partyEvent.pop();
                 this.resolvePartyEvent(room, eventCard);
