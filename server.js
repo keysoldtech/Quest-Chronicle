@@ -458,9 +458,13 @@ class GameManager {
         const shouldFilter = player.class && (deckName === 'weapon' || deckName === 'armor' || deckName === 'spell');
     
         if (shouldFilter) {
-            let suitableCards = mainDeck.filter(card => 
-                !card.class || card.class.includes("Any") || card.class.includes(player.class)
-            );
+            let suitableCards = mainDeck.filter(card => {
+                // POLISH: Special rule for Barbarians/Warriors to draw any spell for their abilities.
+                if ((player.class === 'Barbarian' || player.class === 'Warrior') && card.type === 'Spell') {
+                    return true;
+                }
+                return !card.class || card.class.includes("Any") || card.class.includes(player.class);
+            });
     
             for (let i = 0; i < count; i++) {
                 if (suitableCards.length > 0) {
@@ -993,6 +997,9 @@ class GameManager {
         }
         
         // Handle "Dungeon Pressure" escalation
+        // LOGIC NOTE: This check runs *after* the main action. This is intentional.
+        // It creates a chance for a monster to spawn even if a skill challenge or world event
+        // was just triggered, increasing the tension and pressure on the party.
         const escalationChance = room.gameState.customSettings.dungeonPressure / 100;
         if (Math.random() < escalationChance) {
             this.sendMessageToRoom(room.id, {

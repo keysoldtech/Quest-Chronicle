@@ -568,7 +568,16 @@ function renderClassAbilityCard(player, container) {
         return;
     }
 
-    const canUse = player.currentAp >= ability.apCost;
+    let canUse = player.currentAp >= ability.apCost;
+
+    // POLISH: Add client-side check for Warrior/Barbarian ability requirements.
+    if (player.class === 'Barbarian' || player.class === 'Warrior') {
+        const hasSpellCard = player.hand.some(card => card.type === 'Spell');
+        if (!hasSpellCard) {
+            canUse = false;
+        }
+    }
+    
     container.innerHTML = `
         <h3 class="sub-header-font">Class Ability</h3>
         <p class="ability-title">${ability.name} (-${ability.apCost} AP)</p>
@@ -584,13 +593,24 @@ function renderClassAbilityCard(player, container) {
 
 // --- 3.4. renderGameState() (Main render function) ---
 function renderGameState(room) {
+    // --- 3.4.1. State Update & Variable Setup ---
     const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
     currentRoomState = room;
     const { players, gameState, hostId } = room;
     myPlayerInfo = players[myId];
     if (!myPlayerInfo) return;
     const newLootCount = gameState.lootPool?.length || 0;
+    
+    const isHost = myId === hostId;
+    const isDM = myPlayerInfo.role === 'DM';
+    const isExplorer = myPlayerInfo.role === 'Explorer';
+    const hasConfirmedClass = !!myPlayerInfo.class;
+    const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
+    const isMyTurn = currentTurnTakerId === myId;
+    const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
+    const challenge = gameState.skillChallenge;
 
+    // --- 3.4.2. Highlight Tabs & Player List ---
     const worldEventTab = document.querySelector('[data-tab="world-events-tab"]');
     if (myPlayerInfo.pendingWorldEventSave) {
         worldEventTab.classList.add('highlight');
@@ -608,18 +628,10 @@ function renderGameState(room) {
         mobileInfoTab.classList.add('highlight');
     }
 
-
     renderPlayerList(players, gameState, playerList, lobbySettingsDisplay);
     renderPlayerList(players, gameState, mobilePlayerList, mobileLobbySettingsDisplay);
     
-    const isHost = myId === hostId;
-    const isDM = myPlayerInfo.role === 'DM';
-    const isExplorer = myPlayerInfo.role === 'Explorer';
-    const hasConfirmedClass = !!myPlayerInfo.class;
-    const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
-    const isMyTurn = currentTurnTakerId === myId;
-    const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
-    
+    // --- 3.4.3. Phase-Specific UI Toggling (Lobby, Class Selection, etc.) ---
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby'));
     [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.classList.toggle('hidden', gameState.phase === 'lobby'));
     
@@ -660,8 +672,8 @@ function renderGameState(room) {
         });
     }
 
+    // --- 3.4.4. Action Bar & Turn Indicators ---
     const showActionBar = isMyTurn && isExplorer && !isStunned;
-    const challenge = gameState.skillChallenge;
     fixedActionBar.classList.toggle('hidden', !showActionBar);
     mobileActionBar.classList.toggle('hidden', !showActionBar);
     [apCounterDesktop, apCounterMobile].forEach(el => {
@@ -688,7 +700,7 @@ function renderGameState(room) {
         mobileActionFullRestBtn.disabled = !canFullRest;
     }
 
-
+    // --- 3.4.5. Pending Action Modals & Popups ---
     if (isMyTurn && !isMyTurnPreviously && !isPerformingAction) {
         pendingAbilityConfirmation = null;
         selectedWeaponId = null;
@@ -808,7 +820,8 @@ function renderGameState(room) {
     } else {
         skillChallengeOverlay.classList.add('hidden');
     }
-
+    
+    // --- 3.4.6. Class Selection Rendering ---
     if (!hasConfirmedClass && isExplorer && gameState.phase === 'class_selection') {
         [classCardsContainer, mobileClassCardsContainer].forEach(container => {
              if (container.children.length === 0) {
@@ -849,6 +862,7 @@ function renderGameState(room) {
         tempSelectedClassId = null;
     }
     
+    // --- 3.4.7. General UI Text & Info ---
     [turnCounter, mobileTurnCounter].forEach(el => el.textContent = gameState.turnCount);
     if (gameState.phase !== 'lobby') {
         const turnTaker = players[currentTurnTakerId];
@@ -862,6 +876,7 @@ function renderGameState(room) {
         mobileTurnIndicator.textContent = isMyTurn ? "Your Turn" : turnTaker?.name || "Waiting...";
     }
     
+    // --- 3.4.8. Player-Specific Character Panel & Stats ---
     if (myPlayerInfo.class && isExplorer) {
         const className = myPlayerInfo.class;
         playerClassName.textContent = `The ${className}`;
@@ -921,6 +936,7 @@ function renderGameState(room) {
         mobileStatsDisplay.innerHTML = statsHTML;
     }
 
+    // --- 3.4.9. Player Hand & Equipment ---
     [equippedItemsDiv, mobileEquippedItems].forEach(container => {
         container.innerHTML = '';
         const weapon = myPlayerInfo.equipment.weapon;
@@ -986,6 +1002,7 @@ function renderGameState(room) {
         });
     });
 
+    // --- 3.4.10. Board, Events, & Loot ---
     [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, gameBoardDiv, mobileBoardCards, partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '');
 
     if (gameState.worldEvents.currentEvent) {
