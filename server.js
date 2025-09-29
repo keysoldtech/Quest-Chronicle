@@ -125,6 +125,7 @@ class GameManager {
                 phase: 'class_selection', // Start at class selection
                 gameMode: gameMode || 'Beginner',
                 customSettings: customSettings || defaultSettings,
+                // Ensure decks are initialized to avoid crashes
                 decks: {
                     item: [], spell: [], monster: { tier1: [], tier2: [], tier3: [] },
                     weapon: [], armor: [], worldEvent: [], playerEvent: [],
@@ -143,7 +144,7 @@ class GameManager {
             chatLog: []
         };
     
-        // DON'T create NPCs yet - wait until after class selection
+        // Player role assignment
         newPlayer.role = 'Explorer';
     
         this.rooms[newRoomId] = newRoom;
@@ -151,9 +152,9 @@ class GameManager {
         this.socketToRoom[socket.id] = newRoomId;
     
         // Send room data WITH class data so client can show selection
-        socket.emit('roomCreated', {
+        io.to(newRoomId).emit('roomCreated', {
             ...newRoom,
-            availableClasses: gameData.classes // Explicitly send class data
+            availableClasses: gameData.classes
         });
     }
     
@@ -279,6 +280,8 @@ class GameManager {
     
         // Since this is single-player, start immediately after class selection
         this._completeSetupAndStartGame(room);
+        // Inform the room that a player has selected a class (for UI sync)
+        io.to(room.id).emit('roomUpdate', room);
     }
     
     calculatePlayerStats(player) {
