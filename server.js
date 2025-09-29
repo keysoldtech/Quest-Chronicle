@@ -1280,9 +1280,9 @@ class GameManager {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
         if (!player || !player.pendingItemSwap) return;
-    
+
         const newCard = player.pendingItemSwap.newCard;
-    
+
         if (cardToDiscardId === null) {
             // Player chose to discard the new item.
             this.sendMessageToRoom(room.id, {
@@ -1302,12 +1302,23 @@ class GameManager {
                 });
             }
         }
-    
+
         player.pendingItemSwap = null; // CRITICAL: Clear the pending state
-        this.emitGameState(room.id);
         
-        // CRITICAL: Re-check if the game can now start after the swap is resolved.
+        // --- BUG FIX FOR BLANK SCREEN ---
+        // By checking the game phase *before* and *after* running checkAllPlayersReady,
+        // we can determine if a phase transition occurred (which triggers its own emit).
+        // This prevents sending two rapid-fire game state updates, which was causing
+        // a race condition and a blank screen on the client.
+        const previousPhase = room.gameState.phase;
         this.checkAllPlayersReady(room);
+        const newPhase = room.gameState.phase;
+        
+        // Only emit here if the phase hasn't changed. If it has changed to 'started',
+        // the startTurn() function will have already emitted the definitive new state.
+        if (previousPhase === newPhase) {
+            this.emitGameState(room.id);
+        }
     }
 }
 

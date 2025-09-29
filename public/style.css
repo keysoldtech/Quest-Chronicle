@@ -897,11 +897,13 @@ label {
     overflow: hidden;
 }
 .toast-roll-content {
-    padding: 1.5rem;
+    padding: 1rem;
     position: relative;
 }
 .toast-roll-content .panel-header {
-    margin: -1.5rem -1.5rem 1rem -1.5rem;
+    margin: -1rem -1rem 0.75rem -1rem;
+    font-size: 1.2rem;
+    padding: 0.5rem 1rem;
 }
 .toast-roll-close {
     position: absolute;
@@ -913,6 +915,13 @@ label {
     font-size: 1.5rem;
     cursor: pointer;
 }
+.toast-roll-content .result-line {
+    font-size: 1.2rem;
+}
+.toast-roll-content .roll-details {
+    font-size: 0.9rem;
+}
+
 
 /* Other Modals, etc. (No major changes) */
 .dice-roll-content { text-align: center; }
@@ -929,9 +938,12 @@ label {
 
 .equipment-choice-container { display: flex; gap: 1rem; justify-content: space-around; }
 .equipment-choice-item { flex: 1; text-align: center; }
-.item-swap-container { display: flex; gap: 1rem; }
+.item-swap-container { display: flex; gap: 1rem; flex-direction: column; }
 .item-swap-column { flex: 1; }
-.item-swap-column .card-container-row { flex-wrap: wrap; max-height: 400px; }
+.item-swap-column .card-container-row { 
+    flex-wrap: nowrap; /* CRITICAL FIX: Prevents wrapping to ensure horizontal scroll */
+    padding-bottom: 1rem; /* Add space for scrollbar */
+}
 .selectable-card { cursor: pointer; }
 
 /* ... (rest of the file is unchanged, including mobile styles) ... */
@@ -967,7 +979,12 @@ label {
     .mobile-header-info { text-align: left; flex-grow: 1; display: flex; flex-direction: column; }
     .mobile-header .turn-indicator-font { font-size: 1rem; }
     .mobile-header .ap-counter { font-size: 0.9rem; padding: 0.1rem 0.5rem; width: fit-content; }
-    .mobile-header-controls { flex-shrink: 0; }
+    .mobile-header-controls { 
+        flex-shrink: 0; 
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
     .room-code-display.mobile p { font-size: 1rem; }
 
     .mobile-main {
