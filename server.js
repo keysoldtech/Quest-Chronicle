@@ -186,7 +186,6 @@ class GameManager {
             
             socket.join(roomId);
             this.socketToRoom[socket.id] = roomId; // Map socket to room for efficiency
-            // BUG FIX: Late joiners also need the authoritative class data.
             socket.emit('joinSuccess', { room, classData: gameData.classes });
             this.emitGameState(roomId);
             return;
@@ -255,13 +254,7 @@ class GameManager {
                 const randomClassId = classKeys[Math.floor(Math.random() * classKeys.length)];
                 this.assignClassToPlayer(room.id, npc, randomClassId);
                 
-                this.dealCard(room.id, npc.id, 'weapon', 1);
-                this.dealCard(room.id, npc.id, 'armor', 1);
-                this.dealCard(room.id, npc.id, 'item', 2);
-                this.dealCard(room.id, npc.id, 'spell', 2);
-                
-                this._npcAutoEquip(room, npc);
-                
+                // NPC setup will now happen in the atomic _finalizeAndStartGame function
                 room.players[npc.id] = npc;
                 explorerNpcs.push(npc);
             }
@@ -309,7 +302,6 @@ class GameManager {
 
         room.gameState.phase = 'class_selection';
         
-        // BUG FIX: Send the authoritative class data to all clients to prevent data mismatch.
         io.to(room.id).emit('gameStarted', { room, classData: gameData.classes });
     }
 
@@ -332,7 +324,7 @@ class GameManager {
         if (!player || player.class || player.role !== 'Explorer') return;
     
         this.assignClassToPlayer(room.id, player, classId);
-        this._checkAndAdvanceSetupPhase(room);
+        this._checkAndFinalizeSetup(room);
     }
 
     chooseAdvancedSetup(socket, { choice }) {
@@ -352,7 +344,7 @@ class GameManager {
             this.dealCard(room.id, player.id, 'spell', 1);
         }
         
-        this._checkAndAdvanceSetupPhase(room);
+        this._checkAndFinalizeSetup(room);
     }
     
     calculatePlayerStats(player) {
@@ -401,80 +393,85 @@ class GameManager {
         return newStats;
     }
     
-    // BUG FIX: Centralized gatekeeper for setup phases.
-    _checkAndAdvanceSetupPhase(room) {
+    // REFACTORED: Centralized gatekeeper for setup phases.
+    _checkAndFinalizeSetup(room) {
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
         if (explorers.length === 0) return;
-    
-        let phaseAdvanced = false;
-    
-        // Stage 1: Class Selection
+
+        // Stage 1: Wait for all explorers to choose a class
         if (room.gameState.phase === 'class_selection') {
             if (explorers.every(p => p.class)) {
+                // Everyone has a class. What's next?
                 if (room.gameState.gameMode === 'Advanced') {
                     room.gameState.phase = 'advanced_setup_choice';
+                    this.emitGameState(room.id); // Show the advanced choice screen
                 } else {
-                    // For Beginner/Custom, deal cards and move to swap resolution.
-                    this._setupPlayerHandsAndEquipment(room, explorers);
-                    room.gameState.phase = 'item_swap_resolution';
+                    // For Beginner/Custom, setup is done. Finalize.
+                    this._finalizeAndStartGame(room);
                 }
-                phaseAdvanced = true;
+            } else {
+                // Not everyone has chosen a class yet, just update.
+                this.emitGameState(room.id);
             }
+            return;
         }
-    
-        // Stage 2: Advanced Setup Choice
+
+        // Stage 2: Wait for all explorers to make their advanced choice
         if (room.gameState.phase === 'advanced_setup_choice') {
             if (explorers.every(p => p.madeAdvancedChoice)) {
-                this._setupPlayerHandsAndEquipment(room, explorers);
-                room.gameState.phase = 'item_swap_resolution';
-                phaseAdvanced = true;
+                // Everyone made their choice. Finalize.
+                this._finalizeAndStartGame(room);
+            } else {
+                // Not everyone has chosen yet, just update.
+                this.emitGameState(room.id);
             }
         }
-    
-        // Stage 3: Item Swap Resolution
-        if (room.gameState.phase === 'item_swap_resolution') {
-            if (!explorers.some(p => p.pendingItemSwap)) {
-                // Everyone is ready, start the game!
-                room.gameState.phase = 'started';
-                this.startFirstTurn(room.id); // This emits the final state.
-                return;
-            }
-        }
-    
-        // If we are in a waiting state, or a phase just advanced, emit the current state.
-        this.emitGameState(room.id);
     }
-    
-    _setupPlayerHandsAndEquipment(room, explorers) {
+
+    // NEW: Atomic setup function that runs ONCE.
+    _finalizeAndStartGame(room) {
+        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
+
+        // This is the atomic setup block.
         explorers.forEach(player => {
+            // Only setup players who haven't been dealt cards yet (prevents re-setup on disconnect/reconnect)
+            if (player.hand.length > 0 || player.equipment.weapon || player.equipment.armor) return;
+
             const gameMode = room.gameState.gameMode;
             const settings = room.gameState.customSettings;
-    
-            // This logic now runs for ALL explorers at the same time.
+
+            // Deal gear first based on mode
             if (gameMode === 'Beginner') {
                 this.dealCard(room.id, player.id, 'weapon', 1);
                 this.dealCard(room.id, player.id, 'armor', 1);
             } else if (gameMode === 'Custom') {
                 if (settings.startWithWeapon) this.dealCard(room.id, player.id, 'weapon', 1);
                 if (settings.startWithArmor) this.dealCard(room.id, player.id, 'armor', 1);
-            } // Advanced mode gear choices were handled in chooseAdvancedSetup
-    
-            // CRITICAL FIX: Equip gear BEFORE dealing other cards to prevent false "hand full" prompts.
+            }
+            // Advanced mode gear was already dealt in chooseAdvancedSetup
+
+            // CRITICAL FIX: Equip gear BEFORE dealing other cards to prevent any "hand full" issues.
             const weapon = player.hand.find(c => c.type === 'Weapon');
             if (weapon) this._internalEquipItem(room, player, weapon.id);
             const armor = player.hand.find(c => c.type === 'Armor');
             if (armor) this._internalEquipItem(room, player, armor.id);
-    
+
             // Now, deal the rest of the cards.
-             if (gameMode === 'Beginner') {
+            if (gameMode === 'Beginner') {
                 this.dealCard(room.id, player.id, 'item', 2);
                 this.dealCard(room.id, player.id, 'spell', 2);
             } else if (gameMode === 'Custom') {
                 if (settings.startingItems > 0) this.dealCard(room.id, player.id, 'item', settings.startingItems);
                 if (settings.startingSpells > 0) this.dealCard(room.id, player.id, 'spell', settings.startingSpells);
-            } // Advanced resources were handled in chooseAdvancedSetup
+            }
+            // Advanced resources were already dealt in chooseAdvancedSetup
         });
+
+        // NOW that setup is fully complete, start the game.
+        room.gameState.phase = 'started';
+        this.startFirstTurn(room.id); // This will emit the final, correct state.
     }
+
 
     dealCard(roomId, playerId, deckName, count) {
         const room = this.rooms[roomId];
@@ -489,7 +486,6 @@ class GameManager {
     
         if (shouldFilter) {
             let suitableCards = mainDeck.filter(card => {
-                // POLISH: Special rule for Barbarians/Warriors to draw any spell for their abilities.
                 if ((player.class === 'Barbarian' || player.class === 'Warrior') && card.type === 'Spell') {
                     return true;
                 }
@@ -526,7 +522,6 @@ class GameManager {
             }
         }
 
-        // BUG FIX: Notify player if they couldn't draw a full hand due to filtering.
         if (cardsToDeal.length < count && shouldFilter) {
             this.sendMessageToRoom(roomId, {
                 channel: 'game', type: 'system',
@@ -562,21 +557,13 @@ class GameManager {
             }
             return false;
         }
-
-        // BUG FIX: "Double Swap" inventory loop.
-        // The correct sequence is:
-        // 1. Remove the new item from the hand.
-        // 2. Take the old item from the equipment slot.
-        // 3. Put the old item into the hand.
-        // 4. Put the new item into the equipment slot.
-        // This prevents hand size from ever exceeding the max during the swap.
         
         const cardToEquip = player.hand.splice(cardIndex, 1)[0];
         const itemType = cardToEquip.type.toLowerCase();
     
         if (player.equipment[itemType]) {
             const oldItem = player.equipment[itemType];
-            player.hand.push(oldItem); // Add the previously equipped item back to hand.
+            player.hand.push(oldItem);
         }
         
         player.equipment[itemType] = cardToEquip;
@@ -617,7 +604,6 @@ class GameManager {
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
         if (!player) return;
 
-        // Process status effect durations at the start of any turn
         if (player.statusEffects && player.statusEffects.length > 0) {
             player.statusEffects.forEach(effect => {
                 if (effect.duration) effect.duration--;
@@ -636,24 +622,20 @@ class GameManager {
             }
         }
         
-        // Handle DM Turn Logic
         if (player.isNpc && player.role === 'DM') {
             await this.handleDmTurn(room);
-            // DM turn automatically advances to the next player
-            setTimeout(() => this.endTurn(null, player.id), 1500); // Pass player ID to bypass socket check
+            setTimeout(() => this.endTurn(null, player.id), 1500);
             return;
         }
 
-        // Handle NPC Explorer Turn Logic
         if (player.isNpc && player.role === 'Explorer') {
             player.stats = this.calculatePlayerStats(player);
             player.currentAp = player.stats.ap;
             this.emitGameState(roomId);
-            this.handleNpcExplorerTurn(room, player); // This function will handle advancing the turn
+            this.handleNpcExplorerTurn(room, player);
             return;
         }
 
-        // Handle Human Player Turn Logic
         player.stats = this.calculatePlayerStats(player);
         player.currentAp = player.stats.ap;
         
@@ -683,7 +665,6 @@ class GameManager {
             });
         }
         
-        // Shield HP resets at the end of the player's turn
         player.stats.shieldHp = 0;
         
         room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
@@ -726,13 +707,11 @@ class GameManager {
         const { currentAp, stats, hand, healthDice, equipment, class: playerClass } = player;
         const partyMembers = Object.values(allPlayers).filter(p => p.role === 'Explorer');
         
-        // --- PRIORITY 1: HEALING ---
         let bestHealTarget = { utility: -1, target: null, card: null };
         hand.forEach(card => {
             const cardApCost = card.apCost || 1;
             if (currentAp >= cardApCost && card.effect && card.effect.type === 'heal') {
                 partyMembers.forEach(ally => {
-                    // Heal allies below 50% health
                     if (ally.stats.currentHp < ally.stats.maxHp * 0.5) {
                         const healthDeficit = 1 - (ally.stats.currentHp / ally.stats.maxHp);
                         if (healthDeficit > bestHealTarget.utility) {
@@ -746,7 +725,6 @@ class GameManager {
             return { action: 'useCard', cardId: bestHealTarget.card.id, targetId: bestHealTarget.target.id, apCost: bestHealTarget.card.apCost || 1 };
         }
 
-        // --- PRIORITY 2: COMBAT (ATTACKING) ---
         if (board.monsters.length > 0) {
             const weapon = equipment.weapon;
             if (weapon) {
@@ -765,53 +743,46 @@ class GameManager {
             }
         }
         
-        // --- PRIORITY 3: USE CLASS ABILITY ---
         const classAbility = gameData.classes[playerClass]?.ability;
         if (classAbility && currentAp >= classAbility.apCost) {
             let canUseAbility = true;
-            // BUG FIX: Check for required discard card before deciding to use ability.
             if (classAbility.cost?.type === 'discard' && classAbility.cost?.cardType === 'Spell') {
                 if (!hand.some(card => card.type === 'Spell')) {
                     canUseAbility = false;
                 }
             }
             if (canUseAbility) {
-                if (playerClass === 'Mage') return { action: 'useClassAbility', apCost: classAbility.apCost }; // Always good to draw a spell
-                if (playerClass === 'Cleric' && board.monsters.length > 0) return { action: 'useClassAbility', apCost: classAbility.apCost }; // Buff next attack
+                if (playerClass === 'Mage') return { action: 'useClassAbility', apCost: classAbility.apCost };
+                if (playerClass === 'Cleric' && board.monsters.length > 0) return { action: 'useClassAbility', apCost: classAbility.apCost };
                 if ((playerClass === 'Barbarian' || playerClass === 'Warrior') && board.monsters.length > 0) {
                     return { action: 'useClassAbility', apCost: classAbility.apCost };
                 }
             }
         }
         
-        // --- PRIORITY 4: USE UTILITY/DAMAGE CARDS ---
         if (board.monsters.length > 0) {
             for (const card of hand) {
                 const cardApCost = card.apCost || 1;
                 if (currentAp >= cardApCost && card.effect && (card.effect.type === 'utility' || card.effect.type === 'damage')) {
-                    const target = board.monsters[0]; // Simple logic: use first available utility card on first monster
+                    const target = board.monsters[0];
                     return { action: 'useCard', cardId: card.id, targetId: target.id, apCost: cardApCost };
                 }
             }
         }
         
-        // --- PRIORITY 5: CONTRIBUTE TO CHALLENGE ---
         if (skillChallenge.isActive && currentAp >= 1) {
             const challengeData = gameData.skillChallenges.find(c => c.id === skillChallenge.challengeId);
             const myStat = stats[challengeData.skill] || 0;
-            // Only contribute if they have a non-negative stat for it
             if (myStat >= 0) {
                 return { action: 'contributeToSkillChallenge', apCost: 1 };
             }
         }
 
-        // --- PRIORITY 6: DEFENSIVE/RECOVERY ---
         const guardApCost = gameData.actionCosts.guard;
         if (currentAp >= guardApCost && stats.currentHp < stats.maxHp * 0.75) {
             return { action: 'guard', apCost: guardApCost };
         }
         
-        // Only rest if there are no monsters
         if (board.monsters.length === 0) {
             const fullRestApCost = gameData.actionCosts.fullRest;
             if (currentAp >= fullRestApCost && healthDice.current >= 2 && stats.currentHp < stats.maxHp) {
@@ -823,7 +794,6 @@ class GameManager {
             }
         }
 
-        // --- LAST RESORT: WAIT ---
         return { action: 'wait', apCost: 0 };
     }
 
@@ -922,16 +892,14 @@ class GameManager {
             message: `It is the Dungeon Master's turn.` 
         });
         
-        // Simple DM logic: Play a monster if there are none, otherwise monsters attack.
         if (room.gameState.board.monsters.length === 0) {
             this.dmPlayMonster(room);
         } else {
             for (const monster of room.gameState.board.monsters) {
-                // Each monster gets to act
                 const targetId = this._chooseMonsterTarget(room);
                 if (targetId) {
                     this._resolveMonsterAttack(room, monster.id, targetId);
-                    await new Promise(res => setTimeout(res, 1000)); // Stagger attacks
+                    await new Promise(res => setTimeout(res, 1000));
                 }
             }
         }
@@ -941,7 +909,6 @@ class GameManager {
     _chooseMonsterTarget(room) {
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
         if (explorers.length > 0) {
-            // Simple logic: attack a random explorer
             return explorers[Math.floor(Math.random() * explorers.length)].id;
         }
         return null;
@@ -1044,7 +1011,7 @@ class GameManager {
         if (hit) {
             rawDamageRoll = this.rollDice(weapon.effect.dice);
             totalDamage = rawDamageRoll + attacker.stats.damageBonus;
-            if(isCrit) totalDamage += this.rollDice(weapon.effect.dice); // Crits deal extra weapon dice damage
+            if(isCrit) totalDamage += this.rollDice(weapon.effect.dice);
             
             target.currentHp -= totalDamage;
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>HIT!</b> ${attacker.name} dealt <b>${totalDamage}</b> damage to ${target.name}.` });
@@ -1081,12 +1048,12 @@ class GameManager {
         const d20Roll = this.rollDice('1d20');
         const isCrit = d20Roll === 20;
         const isFumble = d20Roll === 1;
-        const totalRollToHit = d20Roll + attacker.stats.str; // Use STR for unarmed
+        const totalRollToHit = d20Roll + attacker.stats.str;
         const hit = isCrit || (!isFumble && totalRollToHit >= target.requiredRollToHit);
         
         let totalDamage = 0;
         if (hit) {
-            totalDamage = 1 + attacker.stats.str; // 1 + STR mod for damage
+            totalDamage = 1 + attacker.stats.str;
             if (isCrit) totalDamage *= 2;
             target.currentHp -= totalDamage;
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>HIT!</b> ${attacker.name} dealt <b>${totalDamage}</b> damage to ${target.name} with their fists.` });
@@ -1117,7 +1084,7 @@ class GameManager {
         const isCrit = d20Roll === 20;
         const isFumble = d20Roll === 1;
         const totalRollToHit = d20Roll + monster.attackBonus;
-        const requiredRoll = 10 + target.stats.shieldBonus; // Player AC is 10 + shield bonus
+        const requiredRoll = 10 + target.stats.shieldBonus;
         const hit = isCrit || (!isFumble && totalRollToHit >= requiredRoll);
         
         let totalDamage = 0;
@@ -1153,7 +1120,6 @@ class GameManager {
             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The <b>${monster.name}</b> has been defeated!` });
             room.gameState.board.monsters.splice(monsterIndex, 1);
 
-            // Add loot to the loot pool based on custom settings
             if (Math.random() * 100 < room.gameState.customSettings.lootDropRate) {
                 if (room.gameState.decks.treasure.length > 0) {
                     const lootCard = room.gameState.decks.treasure.pop();
@@ -1181,11 +1147,10 @@ class GameManager {
             player.stats.currentHp = 0;
             player.lifeCount -= 1;
             if (player.lifeCount > 0) {
-                player.stats.currentHp = Math.floor(player.stats.maxHp / 2); // Respawn at half health
+                player.stats.currentHp = Math.floor(player.stats.maxHp / 2);
                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> has fallen but gets back up! They have ${player.lifeCount} lives remaining.` });
             } else {
                  this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> has fallen and is out of the fight!` });
-                 // Handle permanent defeat logic here
             }
         }
     }
@@ -1281,7 +1246,6 @@ class GameManager {
 
         const choice = player.pendingEventChoice.options.find(c => c.id === cardId);
         if (choice) {
-            // TODO: Resolve the event card's effect. For now, just log it.
             this.sendMessageToRoom(room.id, {
                 channel: 'game', type: 'system',
                 message: `<b>${player.name}</b> chose: <b>${choice.name}</b>. ${choice.outcome}`
@@ -1300,18 +1264,16 @@ class GameManager {
         const newCard = player.pendingItemSwap.newCard;
 
         if (cardToDiscardId === null) {
-            // Player chose to discard the new item.
             this.sendMessageToRoom(room.id, {
                 channel: 'game', type: 'system',
                 message: `<b>${player.name}</b> discarded the newly found <b>${newCard.name}</b>.`
             });
         } else {
-            // Player chose to discard an item from their hand.
             const cardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
             if (cardIndex > -1) {
                 const discardedCard = player.hand[cardIndex];
-                player.hand.splice(cardIndex, 1); // Remove old card
-                player.hand.push(newCard); // Add new card
+                player.hand.splice(cardIndex, 1);
+                player.hand.push(newCard);
                 this.sendMessageToRoom(room.id, {
                     channel: 'game', type: 'system',
                     message: `<b>${player.name}</b> swapped their <b>${discardedCard.name}</b> for the new <b>${newCard.name}</b>.`
@@ -1319,8 +1281,8 @@ class GameManager {
             }
         }
 
-        player.pendingItemSwap = null; // CRITICAL: Clear the pending state
-        this._checkAndAdvanceSetupPhase(room);
+        player.pendingItemSwap = null;
+        this.emitGameState(room.id);
     }
 }
 
@@ -1388,11 +1350,9 @@ io.on('connection', (socket) => {
             const player = room.players[socket.id];
             if (player) {
                 gameManager.sendMessageToRoom(room.id, { type: 'system', message: `${player.name} has disconnected.` });
-                // Simple disconnect logic: convert player to NPC
                 player.isNpc = true;
                 player.id = `npc-disconnected-${player.name.toLowerCase().replace(/\s/g, '')}`;
                 
-                // Update turn order
                 const turnIndex = room.gameState.turnOrder.indexOf(socket.id);
                 if (turnIndex > -1) {
                     room.gameState.turnOrder[turnIndex] = player.id;

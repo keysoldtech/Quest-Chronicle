@@ -267,7 +267,6 @@ const toastContainer = get('toast-container');
 
 // --- 2.1. Toast Notifications ---
 function showInfoToast(message, type = 'info') {
-    // A new toast replaces any existing toast to prevent stacking.
     toastContainer.innerHTML = ''; 
 
     const toast = document.createElement('div');
@@ -289,7 +288,6 @@ function showInfoToast(message, type = 'info') {
     toast.appendChild(closeBtn);
     toastContainer.appendChild(toast);
 
-    // Force reflow to enable animation
     requestAnimationFrame(() => {
         toast.classList.add('visible');
     });
@@ -569,17 +567,14 @@ function renderLobbyState(room) {
     const { players, gameState, hostId, id: roomId } = room;
     const isHost = myId === hostId;
 
-    // Show lobby, hide game area
     lobbyScreen.classList.remove('hidden');
     gameArea.classList.add('hidden');
 
-    // Switch from form view to player list view
     lobbyFormView.classList.add('hidden');
     lobbyPlayerView.classList.remove('hidden');
     
     lobbyRoomCodeDisplay.textContent = roomId;
     
-    // Render the list of players in the lobby
     lobbyPlayerList.innerHTML = '';
     Object.values(players).forEach(player => {
         const li = document.createElement('li');
@@ -589,7 +584,6 @@ function renderLobbyState(room) {
         lobbyPlayerList.appendChild(li);
     });
 
-    // Show custom settings if applicable
     if (gameState.phase === 'lobby' && gameState.gameMode === 'Custom') {
         lobbySettingsDisplay.classList.remove('hidden');
         const s = gameState.customSettings;
@@ -607,19 +601,15 @@ function renderLobbyState(room) {
         lobbySettingsDisplay.classList.add('hidden');
     }
 
-    // Show/hide start game button
     lobbyStartGameBtn.classList.toggle('hidden', !isHost);
 }
 
 
 // --- 3.4. renderClassSelection() ---
 function renderClassSelection(room) {
-    // This function is now only responsible for populating the class selection content.
-    // The decision to show/hide its container is handled by the main render router.
     const isExplorer = myPlayerInfo.role === 'Explorer';
     if (!isExplorer || myPlayerInfo.class) return;
 
-    // Force mobile view to character screen
     if (!get('mobile-screen-character').classList.contains('active')) {
         document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
         get('mobile-screen-character').classList.add('active');
@@ -669,7 +659,6 @@ function renderAdvancedSetup(room) {
     const isExplorer = myPlayerInfo.role === 'Explorer';
     if (!isExplorer || myPlayerInfo.madeAdvancedChoice) return;
 
-    // Force mobile view to character screen
     if (!get('mobile-screen-character').classList.contains('active')) {
         document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
         get('mobile-screen-character').classList.add('active');
@@ -699,7 +688,6 @@ function renderGameplayState(room) {
     const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
     const challenge = gameState.skillChallenge;
 
-    // Render action bars
     const showActionBar = isMyTurn && isExplorer && !isStunned;
     fixedActionBar.classList.toggle('hidden', !showActionBar);
     mobileActionBar.classList.toggle('hidden', !showActionBar);
@@ -720,7 +708,6 @@ function renderGameplayState(room) {
         mobileActionFullRestBtn.disabled = !canFullRest;
     }
 
-    // Render Character Sheet
     if (myPlayerInfo.class && isExplorer) {
         playerClassName.textContent = `The ${myPlayerInfo.class}`;
         mobilePlayerClassName.textContent = `The ${myPlayerInfo.class}`;
@@ -748,7 +735,6 @@ function renderGameplayState(room) {
         [playerClassName, mobilePlayerClassName, classAbilityCard, mobileClassAbilityCard].forEach(el => el.classList.add('hidden'));
     }
 
-    // Render Stats
     if (myPlayerInfo.stats && myPlayerInfo.class) {
         const pStats = myPlayerInfo.stats;
         const statsOrder = ['hp', 'ap', 'damageBonus', 'shieldBonus', 'healthDice', 'lifeCount', 'shieldHp', 'str', 'dex', 'con', 'int', 'wis', 'cha'];
@@ -774,7 +760,6 @@ function renderGameplayState(room) {
         [playerStatsDiv, mobileStatsDisplay].forEach(el => el.innerHTML = statsHTML);
     }
 
-    // Render Hand & Equipment
     [equippedItemsDiv, mobileEquippedItems].forEach(container => {
         container.innerHTML = '';
         const weapon = myPlayerInfo.equipment.weapon;
@@ -822,7 +807,6 @@ function renderGameplayState(room) {
         });
     });
 
-    // Render Board
     [gameBoardDiv, mobileBoardCards].forEach(container => {
         container.innerHTML = '';
         if (gameState.board.monsters.length > 0) {
@@ -858,21 +842,17 @@ function renderUIForPhase(room) {
 
     const { players, gameState } = room;
 
-    // --- Phase-Based Routing ---
     if (gameState.phase === 'lobby') {
         renderLobbyState(room);
-        return; // Stop here for lobby
+        return;
     }
 
-    // --- If not in lobby, proceed to render the main game area ---
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
 
-    // --- Always-on Renders for In-Game state ---
     renderPlayerList(players, gameState, playerList, gameLobbySettingsDisplay);
     renderPlayerList(players, gameState, mobilePlayerList, mobileGameLobbySettingsDisplay);
     
-    // Header & Turn Info
     roomCodeDisplay.textContent = room.id;
     mobileRoomCode.textContent = room.id;
     [turnCounter, mobileTurnCounter].forEach(el => el.textContent = gameState.turnCount);
@@ -897,7 +877,6 @@ function renderUIForPhase(room) {
         }
     });
 
-    // Info Tabs
     const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
     const newLootCount = gameState.lootPool?.length || 0;
     [worldEventsContainer, mobileWorldEventsContainer].forEach(c => {
@@ -917,16 +896,12 @@ function renderUIForPhase(room) {
         }
     });
 
-    // Tab Highlights
     const mobileInfoTab = document.querySelector('.nav-btn[data-screen="info"]');
     mobileInfoTab.classList.toggle('highlight', myPlayerInfo.pendingWorldEventSave || newLootCount > oldLootCount || gameState.currentPartyEvent);
     document.querySelector('[data-tab="world-events-tab"]').classList.toggle('highlight', myPlayerInfo.pendingWorldEventSave);
     document.querySelector('[data-tab="party-events-tab"]').classList.toggle('highlight', !!gameState.currentPartyEvent);
     document.querySelector('[data-tab="party-loot-tab"]').classList.toggle('highlight', newLootCount > oldLootCount);
 
-    // --- In-Game Phase Specific Renders ---
-    // BUG FIX: Comprehensively hide ALL interchangeable panels for both desktop and mobile
-    // before showing the correct one for the current phase. This prevents state conflicts.
     [
         classSelectionDiv, advancedCardChoiceDiv, playerStatsContainer,
         mobileClassSelection, mobileAdvancedCardChoiceDiv, mobilePlayerStats
@@ -935,13 +910,11 @@ function renderUIForPhase(room) {
 
     switch (gameState.phase) {
         case 'class_selection':
-            // BUG FIX: Add a specific view for the DM during this phase.
             if (myPlayerInfo.role === 'DM') {
                 playerStatsContainer.classList.remove('hidden');
                 playerStatsContainer.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
                 mobilePlayerStats.classList.remove('hidden');
                 mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
-                // Force mobile view to character screen
                 if (!get('mobile-screen-character').classList.contains('active')) {
                     document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
                     get('mobile-screen-character').classList.add('active');
@@ -959,12 +932,11 @@ function renderUIForPhase(room) {
             mobileAdvancedCardChoiceDiv.classList.remove('hidden');
             renderAdvancedSetup(room);
             break;
-        case 'item_swap_resolution':
         case 'started':
             playerStatsContainer.classList.remove('hidden');
             mobilePlayerStats.classList.remove('hidden');
             renderGameplayState(room);
-            if (gameState.phase === 'started' && isMyTurn && !isMyTurnPreviously) {
+            if (isMyTurn && !isMyTurnPreviously) {
                  addToModalQueue(() => {
                     yourTurnPopup.classList.remove('hidden');
                     const timeoutId = setTimeout(() => { yourTurnPopup.classList.add('hidden'); finishModal(); }, 2500);
@@ -977,7 +949,6 @@ function renderUIForPhase(room) {
     }
     isMyTurnPreviously = isMyTurn;
 
-    // --- Modal Logic (runs regardless of phase, if in-game) ---
     if (isMyTurn && myPlayerInfo.pendingEventRoll) {
         addToModalQueue(() => {
             diceRollOverlay.classList.remove('hidden');
@@ -1022,7 +993,6 @@ function renderUIForPhase(room) {
 
 // --- 5. SOCKET.IO EVENT HANDLERS ---
 
-// --- 5.1. Connection & Room Events ---
 socket.on('connect', () => { myId = socket.id; });
 socket.on('roomCreated', (room) => {
     document.body.classList.add('in-game');
@@ -1036,7 +1006,6 @@ socket.on('joinSuccess', (data) => {
 });
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 
-// --- 5.2. Game State & Info ---
 socket.on('playerListUpdate', (room) => renderUIForPhase(room));
 socket.on('gameStarted', (data) => {
     authoritativeClassData = data.classData;
@@ -1048,7 +1017,6 @@ socket.on('actionError', (errorMessage) => {
     showInfoToast(errorMessage, 'error');
 });
 
-// --- 5.3. Action/Animation Events ---
 socket.on('simpleRollAnimation', (data) => {
     if (data.playerId !== myId) {
         showNonBlockingRollToast(data);
@@ -1176,7 +1144,6 @@ socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) =
 function updateVoiceButtons() {
     const isMuted = localStream ? !localStream.getAudioTracks()[0].enabled : false;
 
-    // Desktop
     joinVoiceBtn.classList.toggle('hidden', isVoiceConnected);
     muteVoiceBtn.classList.toggle('hidden', !isVoiceConnected);
     disconnectVoiceBtn.classList.toggle('hidden', !isVoiceConnected);
@@ -1186,7 +1153,6 @@ function updateVoiceButtons() {
             : `<span class="material-symbols-outlined">mic_off</span>Mute`;
     }
 
-    // Mobile
     mobileJoinVoiceBtn.classList.toggle('hidden', isVoiceConnected);
     mobileMuteVoiceBtn.classList.toggle('hidden', !isVoiceConnected);
     mobileDisconnectVoiceBtn.classList.toggle('hidden', !isVoiceConnected);
