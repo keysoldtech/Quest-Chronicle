@@ -764,7 +764,6 @@ function renderGameplayState(room) {
                     const isUnarmed = selectedWeaponId === 'unarmed';
                     const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
                     if (myPlayerInfo.currentAp < apCost) return showInfoToast(`Not enough AP. Needs ${apCost}.`, 'error');
-                    // CRITICAL FIX: The 'targetId' variable was undefined. It is now correctly passed using 'selectedTargetId'.
                     openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, isUnarmed ? 'Fists' : weapon.name);
                 };
                 container.appendChild(cardEl);
@@ -863,7 +862,6 @@ function renderUIForPhase(room) {
                 mobilePlayerStats.classList.remove('hidden');
                 mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
             } else {
-                [playerStatsContainer, mobilePlayerStats].forEach(el => el.classList.remove('hidden'));
                 renderSetupChoices(room);
             }
             break;

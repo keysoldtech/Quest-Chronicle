@@ -9,7 +9,7 @@
 // 4. FETCH Event Listener (Cache-First Strategy)
 
 // --- 1. CONFIGURATION ---
-const CACHE_NAME = 'quest-and-chronicle-v5.0.1-playtest-v5.0.1';
+const CACHE_NAME = 'quest-and-chronicle-v5.0.3-playtest-v5.0.3';
 const urlsToCache = [
   '/',
   '/index.html',
