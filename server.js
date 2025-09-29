@@ -363,8 +363,7 @@ class GameManager {
             player.madeAdvancedChoice = false;
         }
     
-        this.checkAllPlayersReady(room);
-        this.emitGameState(room.id);
+        this._attemptToAdvancePhase(room);
     }
 
     chooseAdvancedSetup(socket, { choice }) {
@@ -388,8 +387,7 @@ class GameManager {
             this.dealCard(room.id, player.id, 'spell', 1);
         }
         
-        this.checkAllPlayersReady(room);
-        this.emitGameState(room.id);
+        this._attemptToAdvancePhase(room);
     }
     
     calculatePlayerStats(player) {
@@ -438,12 +436,13 @@ class GameManager {
         return newStats;
     }
 
-    checkAllPlayersReady(room) {
+    _attemptToAdvancePhase(room) {
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
-        if (explorers.length === 0 && room.gameState.phase !== 'lobby') return;
+        if (explorers.length === 0) return; // No one to check
     
-        // CRITICAL FIX: Do not start the game if any player has a pending action from setup.
+        // This is the most important gate: if anyone is busy with a swap, just send the latest state and wait.
         if (explorers.some(p => p.pendingItemSwap)) {
+            this.emitGameState(room.id);
             return;
         }
     
@@ -452,23 +451,25 @@ class GameManager {
             if (allSelectedClass) {
                 if (room.gameState.gameMode === 'Advanced') {
                     room.gameState.phase = 'advanced_setup_choice';
+                    this.emitGameState(room.id); // Emit state for advanced choice screen
                 } else {
-                    // For Beginner/Custom, check for pending swaps one last time before starting
-                    if (!explorers.some(p => p.pendingItemSwap)) {
-                        room.gameState.phase = 'started';
-                        this.startFirstTurn(room.id);
-                    }
+                    room.gameState.phase = 'started';
+                    this.startFirstTurn(room.id); // This function will emit the final "started" state
                 }
+            } else {
+                this.emitGameState(room.id); // Not everyone has chosen a class, just update state
             }
         } else if (room.gameState.phase === 'advanced_setup_choice') {
             const allMadeChoice = explorers.every(p => p.madeAdvancedChoice);
             if (allMadeChoice) {
-                // For Advanced, check for pending swaps one last time before starting
-                if (!explorers.some(p => p.pendingItemSwap)) {
-                    room.gameState.phase = 'started';
-                    this.startFirstTurn(room.id);
-                }
+                room.gameState.phase = 'started';
+                this.startFirstTurn(room.id); // This function will emit the final "started" state
+            } else {
+                this.emitGameState(room.id); // Not everyone has made their choice, just update state
             }
+        } else {
+            // If we're in another phase (like 'lobby' or 'started'), an update is still warranted
+            this.emitGameState(room.id);
         }
     }
     
@@ -1305,20 +1306,7 @@ class GameManager {
 
         player.pendingItemSwap = null; // CRITICAL: Clear the pending state
         
-        // --- BUG FIX FOR BLANK SCREEN ---
-        // By checking the game phase *before* and *after* running checkAllPlayersReady,
-        // we can determine if a phase transition occurred (which triggers its own emit).
-        // This prevents sending two rapid-fire game state updates, which was causing
-        // a race condition and a blank screen on the client.
-        const previousPhase = room.gameState.phase;
-        this.checkAllPlayersReady(room);
-        const newPhase = room.gameState.phase;
-        
-        // Only emit here if the phase hasn't changed. If it has changed to 'started',
-        // the startTurn() function will have already emitted the definitive new state.
-        if (previousPhase === newPhase) {
-            this.emitGameState(room.id);
-        }
+        this._attemptToAdvancePhase(room);
     }
 }
 
