@@ -612,7 +612,6 @@ function renderGameState(room) {
     const { players, gameState, hostId } = room;
     myPlayerInfo = players[myId];
     
-    // BUG FIX: Add a defensive check. If my player info doesn't exist for some reason, abort the render.
     if (!myPlayerInfo) {
         console.warn("My player info not found in game state update. Aborting render.");
         return;
@@ -627,7 +626,7 @@ function renderGameState(room) {
         mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         document.querySelector('.nav-btn[data-screen="game"]').classList.add('active');
     }
-    previousGamePhase = newGamePhase; // Update the phase tracker for the next render.
+    previousGamePhase = newGamePhase;
     
     const newLootCount = gameState.lootPool?.length || 0;
     
@@ -639,32 +638,17 @@ function renderGameState(room) {
     const isMyTurn = currentTurnTakerId === myId;
     const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
     const challenge = gameState.skillChallenge;
-
-    // BUG FIX: Handle "waiting" state to prevent blank screens.
-    const isWaitingForOthers = (gameState.phase === 'item_swap_resolution' || gameState.phase === 'advanced_setup_choice') && !myPlayerInfo.pendingItemSwap && !myPlayerInfo.madeAdvancedChoice;
-    if (isWaitingForOthers) {
-        const waitingMessage = '<p class="empty-pool-text">Waiting for other players to set up...</p>';
-        gameBoardDiv.innerHTML = waitingMessage;
-        mobileBoardCards.innerHTML = waitingMessage;
-        playerHandDiv.innerHTML = '';
-        mobilePlayerHand.innerHTML = '';
-    }
+    const isDuringSetup = setupPhases.includes(gameState.phase);
 
     // --- 3.4.2. Highlight Tabs & Player List ---
     const worldEventTab = document.querySelector('[data-tab="world-events-tab"]');
-    if (myPlayerInfo.pendingWorldEventSave) {
-        worldEventTab.classList.add('highlight');
-    }
+    if (myPlayerInfo.pendingWorldEventSave) worldEventTab.classList.add('highlight');
     const partyEventTab = document.querySelector('[data-tab="party-events-tab"]');
-    if(gameState.currentPartyEvent) {
-        partyEventTab.classList.add('highlight');
-    }
+    if(gameState.currentPartyEvent) partyEventTab.classList.add('highlight');
     const partyLootTab = document.querySelector('[data-tab="party-loot-tab"]');
-    if (newLootCount > oldLootCount) {
-        partyLootTab.classList.add('highlight');
-    }
+    if (newLootCount > oldLootCount) partyLootTab.classList.add('highlight');
     const mobileInfoTab = document.querySelector('.nav-btn[data-screen="info"]');
-     if (myPlayerInfo.pendingWorldEventSave || newLootCount > oldLootCount || gameState.currentPartyEvent) {
+    if (myPlayerInfo.pendingWorldEventSave || newLootCount > oldLootCount || gameState.currentPartyEvent) {
         mobileInfoTab.classList.add('highlight');
     }
 
@@ -683,8 +667,6 @@ function renderGameState(room) {
 
     // --- Mobile: Handle Character Screen visibility during setup ---
     const inMobileSetupPhase = (gameState.phase === 'class_selection' || gameState.phase === 'advanced_setup_choice') && isExplorer;
-
-    // If we are in a setup phase and haven't completed it, force the Character screen to be active.
     if (inMobileSetupPhase && !myPlayerInfo.madeAdvancedChoice && !myPlayerInfo.class) {
         if (!get('mobile-screen-character').classList.contains('active')) {
              document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
@@ -693,15 +675,8 @@ function renderGameState(room) {
              document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
         }
     }
-    
-    // --- Mobile: Toggle content inside the Character screen ---
-    // Show class selection UI only if in that phase AND no class has been chosen.
     mobileClassSelection.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || !isExplorer);
-    
-    // Show advanced setup UI only if in that phase AND no choice has been made.
     mobileAdvancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice || !isExplorer);
-    
-    // Show player stats as soon as a class is chosen. This fixes the "disappearing" sheet.
     mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
     
     if (gameState.phase === 'advanced_setup_choice' && !myPlayerInfo.madeAdvancedChoice) {
@@ -718,11 +693,11 @@ function renderGameState(room) {
     }
 
     // --- 3.4.4. Action Bar & Turn Indicators ---
-    const showActionBar = isMyTurn && isExplorer && !isStunned && !isWaitingForOthers;
+    const showActionBar = isMyTurn && isExplorer && !isStunned && !isDuringSetup;
     fixedActionBar.classList.toggle('hidden', !showActionBar);
     mobileActionBar.classList.toggle('hidden', !showActionBar);
     [apCounterDesktop, apCounterMobile].forEach(el => {
-        el.classList.toggle('hidden', !isMyTurn || isWaitingForOthers);
+        el.classList.toggle('hidden', !isMyTurn || isDuringSetup);
         if (isMyTurn && myPlayerInfo.stats.ap) {
             el.innerHTML = `<span class="material-symbols-outlined">bolt</span> AP: ${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}`;
         }
@@ -769,7 +744,6 @@ function renderGameState(room) {
     
     if (isMyTurn && myPlayerInfo.pendingEventRoll) {
         addToModalQueue(() => {
-            // New sequence: show the full dice roll modal immediately
             diceRollOverlay.classList.remove('hidden');
             diceRollTitle.textContent = "An Event Occurs!";
             diceRollResult.innerHTML = `<p>Roll a d20 to see what happens on your journey.</p>`;
@@ -785,7 +759,7 @@ function renderGameState(room) {
             };
         }, 'event-roll');
     } else if (!myPlayerInfo.pendingEventChoice) {
-        eventOverlay.classList.add('hidden'); // Ensure the old modal is hidden
+        eventOverlay.classList.add('hidden');
     }
     
     if (myPlayerInfo.pendingItemSwap) {
@@ -816,17 +790,10 @@ function renderGameState(room) {
         addToModalQueue(() => {
             const { newCard, type } = myPlayerInfo.pendingEquipmentChoice;
             const currentItem = myPlayerInfo.equipment[type];
-            
-            equippedItemDisplay.innerHTML = '';
+            equippedItemDisplay.innerHTML = currentItem ? '' : '<p>Nothing equipped.</p>';
             newItemDisplay.innerHTML = '';
-            
-            if (currentItem) {
-                equippedItemDisplay.appendChild(createCardElement(currentItem));
-            }
-            if (newCard) {
-                newItemDisplay.appendChild(createCardElement(newCard));
-            }
-            
+            if (currentItem) equippedItemDisplay.appendChild(createCardElement(currentItem));
+            if (newCard) newItemDisplay.appendChild(createCardElement(newCard));
             equipmentChoiceModal.classList.remove('hidden');
         }, `equipment-choice-${myPlayerInfo.pendingEquipmentChoice.newCard.id}`);
     } else {
@@ -1057,25 +1024,37 @@ function renderGameState(room) {
     });
 
     // --- 3.4.10. Board, Events, & Loot ---
-    if (!isWaitingForOthers) {
-        [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, gameBoardDiv, mobileBoardCards, partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '');
+    // BUG FIX: Refactored logic to be clearer and more robust.
+    // The board and other central panels are now always rendered. During setup, they show a "waiting" message.
+    [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '');
+    
+    // Always render central info panels
+    if (gameState.worldEvents.currentEvent) {
+        [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.appendChild(createCardElement(gameState.worldEvents.currentEvent)));
+    } else {
+        [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No active world event.</p>');
+    }
+    if (gameState.currentPartyEvent) {
+        [partyEventContainer, mobilePartyEventContainer].forEach(c => c.appendChild(createCardElement(gameState.currentPartyEvent)));
+    } else {
+        [partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No active party event.</p>');
+    }
+    if (gameState.lootPool && gameState.lootPool.length > 0) {
+        gameState.lootPool.forEach(card => {
+            [partyLootContainer, mobilePartyLootContainer].forEach(c => c.appendChild(createCardElement(card, {})));
+        });
+    } else {
+        [partyLootContainer, mobilePartyLootContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>');
+    }
 
-        if (gameState.worldEvents.currentEvent) {
-            [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.appendChild(createCardElement(gameState.worldEvents.currentEvent)));
-        }
-         if (gameState.currentPartyEvent) {
-            [partyEventContainer, mobilePartyEventContainer].forEach(c => c.appendChild(createCardElement(gameState.currentPartyEvent)));
-        } else {
-            [partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No active party event.</p>');
-        }
-        if (gameState.lootPool && gameState.lootPool.length > 0) {
-            gameState.lootPool.forEach(card => {
-                [partyLootContainer, mobilePartyLootContainer].forEach(c => c.appendChild(createCardElement(card, {})));
-            });
-        } else {
-            [partyLootContainer, mobilePartyLootContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>');
-        }
-        
+    // Conditionally render the main game board content
+    if (isDuringSetup) {
+        const waitingMessage = '<p class="empty-pool-text">Waiting for other players to set up...</p>';
+        gameBoardDiv.innerHTML = waitingMessage;
+        mobileBoardCards.innerHTML = waitingMessage;
+    } else {
+        gameBoardDiv.innerHTML = '';
+        mobileBoardCards.innerHTML = '';
         gameState.board.monsters.forEach(monster => {
             const clickHandler = () => {
                 if (!isMyTurn || isStunned) return;
@@ -1111,8 +1090,14 @@ function renderGameState(room) {
             mobileCardEl.addEventListener('click', clickHandler);
             mobileBoardCards.appendChild(mobileCardEl);
         });
+        if (gameState.board.monsters.length === 0) {
+            const noMonstersMessage = '<p class="empty-pool-text">The board is clear of enemies.</p>';
+            gameBoardDiv.innerHTML = noMonstersMessage;
+            mobileBoardCards.innerHTML = noMonstersMessage;
+        }
     }
 }
+
 
 // --- 5. SOCKET.IO EVENT HANDLERS ---
 
