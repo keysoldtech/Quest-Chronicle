@@ -140,9 +140,6 @@ function main() {
             joinRoomBtn.click();
         }
     });
-
-    // --- Attach all other non-menu event listeners ---
-    attachGlobalEventListeners();
     
     // --- FINAL UI LISTENERS: TAB SWITCHING ---
     const tabButtons = document.querySelectorAll('.tab-btn');
@@ -481,6 +478,7 @@ function selectClass(classId) {
 
 
 socket.on('connect', () => { myId = socket.id; });
+
 socket.on('roomCreated', (roomData) => {
     console.log('Room created:', roomData);
     currentRoom = roomData;
@@ -491,12 +489,40 @@ socket.on('roomCreated', (roomData) => {
     menuScreen.classList.remove('active');
     gameScreen.classList.add('active');
     
-    if (roomData.gameState.phase === 'class_selection') {
-        showClassSelectionUI(roomData.gameState.classData);
+    // CRITICAL FIX: Initialize all game UI listeners for tabs/buttons
+    initializeGameUIListeners(); 
+
+    // CHECK STATE: If the server confirms we are in class selection, switch the UI
+    if (roomData.gameState.phase === 'class_selection' && roomData.availableClasses) {
+        
+        // 1. Force the UI to switch to the Character tab/screen
+        const get = id => document.getElementById(id);
+        // Deactivate all buttons and screens first
+        get('mobile-bottom-nav').querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active'));
+        // Activate the target button and screen
+        const navBtn = get('mobile-bottom-nav').querySelector(`.nav-btn[data-screen="character"]`);
+        if (navBtn) navBtn.classList.add('active');
+        const screenEl = get(`mobile-screen-character`);
+        if (screenEl) screenEl.classList.add('active');
+        
+        // 2. RENDER the class cards
+        showClassSelectionUI(roomData.availableClasses); 
+        
+    } else {
+        // Default to game content if the phase is anything else
+        const get = id => document.getElementById(id);
+        get('mobile-bottom-nav').querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+        get('mobile-bottom-nav').querySelector('.nav-btn[data-screen="game"]').classList.add('active');
+        document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active'));
+        get('mobile-screen-game').classList.add('active');
+        switchTab('game-log-tab');
     }
+
     renderUIForPhase(roomData);
 });
-socket.on('joinSuccess', (roomData) => { console.log('Joined room:', roomData); currentRoom = roomData; const menuScreen = document.getElementById('menu-screen'); const gameScreen = document.getElementById('game-screen'); menuScreen.classList.remove('active'); gameScreen.classList.add('active'); renderUIForPhase(roomData); });
+
+socket.on('joinSuccess', (roomData) => { console.log('Joined room:', roomData); currentRoom = roomData; const menuScreen = document.getElementById('menu-screen'); const gameScreen = document.getElementById('game-screen'); menuScreen.classList.remove('active'); gameScreen.classList.add('active'); initializeGameUIListeners(); renderUIForPhase(roomData); });
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 socket.on('playerListUpdate', (room) => renderUIForPhase(room));
 socket.on('gameStarted', (roomData) => { console.log('Game started!', roomData); currentRoom = roomData; renderUIForPhase(roomData); });
@@ -530,7 +556,7 @@ function showDiceRoll(options) { const { dieType, roll, title, resultHTML, conti
 function playEffectAnimation(targetElement, effectType) { if (!targetElement) return; const animationOverlay = document.getElementById('animation-overlay') || document.createElement('div'); if(!animationOverlay.id) { animationOverlay.id = 'animation-overlay'; document.body.appendChild(animationOverlay); } const effectEl = document.createElement('div'); effectEl.className = `effect-animation ${effectType}-effect`; const rect = targetElement.getBoundingClientRect(); effectEl.style.top = `${rect.top + rect.height / 2}px`; effectEl.style.left = `${rect.left + rect.width / 2}px`; animationOverlay.appendChild(effectEl); setTimeout(() => effectEl.remove(), 1000); }
 
 // --- 4. UI EVENT LISTENERS ---
-function attachGlobalEventListeners() {
+function initializeGameUIListeners() {
     const get = (id) => document.getElementById(id);
     [get('action-end-turn-btn'), get('mobile-action-end-turn-btn')].forEach(btn => btn.addEventListener('click', () => addToModalQueue(() => get('end-turn-confirm-modal').classList.remove('hidden'), 'end-turn-confirm')));
     [get('action-guard-btn'), get('mobile-action-guard-btn')].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
