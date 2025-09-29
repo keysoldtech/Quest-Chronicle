@@ -329,41 +329,7 @@ class GameManager {
         if (!player || player.class || player.role !== 'Explorer') return;
     
         this.assignClassToPlayer(room.id, player, classId);
-        
-        const gameMode = room.gameState.gameMode;
-        const settings = room.gameState.customSettings;
-    
-        if (gameMode === 'Beginner') {
-            this.dealCard(room.id, player.id, 'weapon', 1);
-            this.dealCard(room.id, player.id, 'armor', 1);
-            this.dealCard(room.id, player.id, 'item', 2);
-            this.dealCard(room.id, player.id, 'spell', 2);
-            
-            const weapon = player.hand.find(c => c.type === 'Weapon');
-            if (weapon) this._internalEquipItem(room, player, weapon.id);
-            const armor = player.hand.find(c => c.type === 'Armor');
-            if (armor) this._internalEquipItem(room, player, armor.id);
-            
-        } else if (gameMode === 'Custom') {
-            if (settings.startWithWeapon) this.dealCard(room.id, player.id, 'weapon', 1);
-            if (settings.startWithArmor) this.dealCard(room.id, player.id, 'armor', 1);
-            if (settings.startingItems > 0) this.dealCard(room.id, player.id, 'item', settings.startingItems);
-            if (settings.startingSpells > 0) this.dealCard(room.id, player.id, 'spell', settings.startingSpells);
-    
-            // Auto-equip logic from beginner mode, respecting the custom settings
-            if (settings.startWithWeapon) {
-                const weapon = player.hand.find(c => c.type === 'Weapon');
-                if (weapon) this._internalEquipItem(room, player, weapon.id);
-            }
-            if (settings.startWithArmor) {
-                const armor = player.hand.find(c => c.type === 'Armor');
-                if (armor) this._internalEquipItem(room, player, armor.id);
-            }
-        } else { // Advanced
-            player.madeAdvancedChoice = false;
-        }
-    
-        this._attemptToAdvancePhase(room);
+        this._checkAndAdvanceSetupPhase(room);
     }
 
     chooseAdvancedSetup(socket, { choice }) {
@@ -378,16 +344,12 @@ class GameManager {
         if (choice === 'gear') {
             this.dealCard(room.id, player.id, 'weapon', 1);
             this.dealCard(room.id, player.id, 'armor', 1);
-            const weapon = player.hand.find(c => c.type === 'Weapon');
-            if (weapon) this._internalEquipItem(room, player, weapon.id);
-            const armor = player.hand.find(c => c.type === 'Armor');
-            if (armor) this._internalEquipItem(room, player, armor.id);
         } else if (choice === 'resources') {
             this.dealCard(room.id, player.id, 'item', 2);
             this.dealCard(room.id, player.id, 'spell', 1);
         }
         
-        this._attemptToAdvancePhase(room);
+        this._checkAndAdvanceSetupPhase(room);
     }
     
     calculatePlayerStats(player) {
@@ -435,44 +397,82 @@ class GameManager {
         
         return newStats;
     }
-
-    _attemptToAdvancePhase(room) {
+    
+    // BUG FIX: Centralized gatekeeper for setup phases.
+    _checkAndAdvanceSetupPhase(room) {
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
-        if (explorers.length === 0) return; // No one to check
+        if (explorers.length === 0) return;
     
-        // This is the most important gate: if anyone is busy with a swap, just send the latest state and wait.
-        if (explorers.some(p => p.pendingItemSwap)) {
-            this.emitGameState(room.id);
-            return;
-        }
+        let phaseAdvanced = false;
     
+        // Stage 1: Class Selection
         if (room.gameState.phase === 'class_selection') {
-            const allSelectedClass = explorers.every(p => p.class);
-            if (allSelectedClass) {
+            if (explorers.every(p => p.class)) {
                 if (room.gameState.gameMode === 'Advanced') {
                     room.gameState.phase = 'advanced_setup_choice';
-                    this.emitGameState(room.id); // Emit state for advanced choice screen
                 } else {
-                    room.gameState.phase = 'started';
-                    this.startFirstTurn(room.id); // This function will emit the final "started" state
+                    // For Beginner/Custom, deal cards and move to swap resolution.
+                    this._setupPlayerHandsAndEquipment(room, explorers);
+                    room.gameState.phase = 'item_swap_resolution';
                 }
-            } else {
-                this.emitGameState(room.id); // Not everyone has chosen a class, just update state
+                phaseAdvanced = true;
             }
-        } else if (room.gameState.phase === 'advanced_setup_choice') {
-            const allMadeChoice = explorers.every(p => p.madeAdvancedChoice);
-            if (allMadeChoice) {
-                room.gameState.phase = 'started';
-                this.startFirstTurn(room.id); // This function will emit the final "started" state
-            } else {
-                this.emitGameState(room.id); // Not everyone has made their choice, just update state
-            }
-        } else {
-            // If we're in another phase (like 'lobby' or 'started'), an update is still warranted
-            this.emitGameState(room.id);
         }
+    
+        // Stage 2: Advanced Setup Choice
+        if (room.gameState.phase === 'advanced_setup_choice') {
+            if (explorers.every(p => p.madeAdvancedChoice)) {
+                this._setupPlayerHandsAndEquipment(room, explorers);
+                room.gameState.phase = 'item_swap_resolution';
+                phaseAdvanced = true;
+            }
+        }
+    
+        // Stage 3: Item Swap Resolution
+        if (room.gameState.phase === 'item_swap_resolution') {
+            if (!explorers.some(p => p.pendingItemSwap)) {
+                // Everyone is ready, start the game!
+                room.gameState.phase = 'started';
+                this.startFirstTurn(room.id); // This emits the final state.
+                return;
+            }
+        }
+    
+        // If we are in a waiting state, or a phase just advanced, emit the current state.
+        this.emitGameState(room.id);
     }
     
+    _setupPlayerHandsAndEquipment(room, explorers) {
+        explorers.forEach(player => {
+            const gameMode = room.gameState.gameMode;
+            const settings = room.gameState.customSettings;
+    
+            // This logic now runs for ALL explorers at the same time.
+            if (gameMode === 'Beginner') {
+                this.dealCard(room.id, player.id, 'weapon', 1);
+                this.dealCard(room.id, player.id, 'armor', 1);
+            } else if (gameMode === 'Custom') {
+                if (settings.startWithWeapon) this.dealCard(room.id, player.id, 'weapon', 1);
+                if (settings.startWithArmor) this.dealCard(room.id, player.id, 'armor', 1);
+            } // Advanced mode gear choices were handled in chooseAdvancedSetup
+    
+            // CRITICAL FIX: Equip gear BEFORE dealing other cards to prevent false "hand full" prompts.
+            const weapon = player.hand.find(c => c.type === 'Weapon');
+            if (weapon) this._internalEquipItem(room, player, weapon.id);
+            const armor = player.hand.find(c => c.type === 'Armor');
+            if (armor) this._internalEquipItem(room, player, armor.id);
+    
+            // Now, deal the rest of the cards.
+             if (gameMode === 'Beginner') {
+                this.dealCard(room.id, player.id, 'item', 2);
+                this.dealCard(room.id, player.id, 'spell', 2);
+            } else if (gameMode === 'Custom') {
+                if (settings.startingItems > 0) this.dealCard(room.id, player.id, 'item', settings.startingItems);
+                if (settings.startingSpells > 0) this.dealCard(room.id, player.id, 'spell', settings.startingSpells);
+            } // Advanced resources were handled in chooseAdvancedSetup
+        });
+    }
+
     dealCard(roomId, playerId, deckName, count) {
         const room = this.rooms[roomId];
         const player = room?.players[playerId];
@@ -1305,8 +1305,7 @@ class GameManager {
         }
 
         player.pendingItemSwap = null; // CRITICAL: Clear the pending state
-        
-        this._attemptToAdvancePhase(room);
+        this._checkAndAdvanceSetupPhase(room);
     }
 }
 

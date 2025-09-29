@@ -621,6 +621,16 @@ function renderGameState(room) {
     const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
     const challenge = gameState.skillChallenge;
 
+    // BUG FIX: Handle "waiting" state to prevent blank screens.
+    const isWaitingForOthers = (gameState.phase === 'item_swap_resolution' || gameState.phase === 'advanced_setup_choice') && !myPlayerInfo.pendingItemSwap && !myPlayerInfo.madeAdvancedChoice;
+    if (isWaitingForOthers) {
+        const waitingMessage = '<p class="empty-pool-text">Waiting for other players to set up...</p>';
+        gameBoardDiv.innerHTML = waitingMessage;
+        mobileBoardCards.innerHTML = waitingMessage;
+        playerHandDiv.innerHTML = '';
+        mobilePlayerHand.innerHTML = '';
+    }
+
     // --- 3.4.2. Highlight Tabs & Player List ---
     const worldEventTab = document.querySelector('[data-tab="world-events-tab"]');
     if (myPlayerInfo.pendingWorldEventSave) {
@@ -689,11 +699,11 @@ function renderGameState(room) {
     }
 
     // --- 3.4.4. Action Bar & Turn Indicators ---
-    const showActionBar = isMyTurn && isExplorer && !isStunned;
+    const showActionBar = isMyTurn && isExplorer && !isStunned && !isWaitingForOthers;
     fixedActionBar.classList.toggle('hidden', !showActionBar);
     mobileActionBar.classList.toggle('hidden', !showActionBar);
     [apCounterDesktop, apCounterMobile].forEach(el => {
-        el.classList.toggle('hidden', !isMyTurn);
+        el.classList.toggle('hidden', !isMyTurn || isWaitingForOthers);
         if (isMyTurn && myPlayerInfo.stats.ap) {
             el.innerHTML = `<span class="material-symbols-outlined">bolt</span> AP: ${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}`;
         }
@@ -1028,59 +1038,61 @@ function renderGameState(room) {
     });
 
     // --- 3.4.10. Board, Events, & Loot ---
-    [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, gameBoardDiv, mobileBoardCards, partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '');
+    if (!isWaitingForOthers) {
+        [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, gameBoardDiv, mobileBoardCards, partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '');
 
-    if (gameState.worldEvents.currentEvent) {
-        [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.appendChild(createCardElement(gameState.worldEvents.currentEvent)));
-    }
-     if (gameState.currentPartyEvent) {
-        [partyEventContainer, mobilePartyEventContainer].forEach(c => c.appendChild(createCardElement(gameState.currentPartyEvent)));
-    } else {
-        [partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No active party event.</p>');
-    }
-    if (gameState.lootPool && gameState.lootPool.length > 0) {
-        gameState.lootPool.forEach(card => {
-            [partyLootContainer, mobilePartyLootContainer].forEach(c => c.appendChild(createCardElement(card, {})));
-        });
-    } else {
-        [partyLootContainer, mobilePartyLootContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>');
-    }
-    
-    gameState.board.monsters.forEach(monster => {
-        const clickHandler = () => {
-            if (!isMyTurn || isStunned) return;
+        if (gameState.worldEvents.currentEvent) {
+            [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.appendChild(createCardElement(gameState.worldEvents.currentEvent)));
+        }
+         if (gameState.currentPartyEvent) {
+            [partyEventContainer, mobilePartyEventContainer].forEach(c => c.appendChild(createCardElement(gameState.currentPartyEvent)));
+        } else {
+            [partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No active party event.</p>');
+        }
+        if (gameState.lootPool && gameState.lootPool.length > 0) {
+            gameState.lootPool.forEach(card => {
+                [partyLootContainer, mobilePartyLootContainer].forEach(c => c.appendChild(createCardElement(card, {})));
+            });
+        } else {
+            [partyLootContainer, mobilePartyLootContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>');
+        }
+        
+        gameState.board.monsters.forEach(monster => {
+            const clickHandler = () => {
+                if (!isMyTurn || isStunned) return;
 
-            if (!selectedWeaponId) {
-                showInfoToast("Select your equipped weapon or fists before choosing a target.", 'error');
-                const equippedContainer = get('equipped-items-container');
-                equippedContainer.classList.add('pulse-highlight');
-                setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
-                return;
-            }
-            
-            selectedTargetId = monster.id;
-            const weapon = myPlayerInfo.equipment.weapon;
-            
-            if ((weapon && weapon.id === selectedWeaponId) || selectedWeaponId === 'unarmed') {
-                const isUnarmed = selectedWeaponId === 'unarmed';
-                const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
-                if (myPlayerInfo.currentAp < apCost) {
-                    showInfoToast(`Not enough Action Points. Needs ${apCost} AP.`, 'error');
+                if (!selectedWeaponId) {
+                    showInfoToast("Select your equipped weapon or fists before choosing a target.", 'error');
+                    const equippedContainer = get('equipped-items-container');
+                    equippedContainer.classList.add('pulse-highlight');
+                    setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
                     return;
                 }
-                const cardName = isUnarmed ? 'Fists' : weapon.name;
-                openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, cardName);
-            }
-        };
+                
+                selectedTargetId = monster.id;
+                const weapon = myPlayerInfo.equipment.weapon;
+                
+                if ((weapon && weapon.id === selectedWeaponId) || selectedWeaponId === 'unarmed') {
+                    const isUnarmed = selectedWeaponId === 'unarmed';
+                    const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
+                    if (myPlayerInfo.currentAp < apCost) {
+                        showInfoToast(`Not enough Action Points. Needs ${apCost} AP.`, 'error');
+                        return;
+                    }
+                    const cardName = isUnarmed ? 'Fists' : weapon.name;
+                    openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, cardName);
+                }
+            };
 
-        const desktopCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
-        desktopCardEl.addEventListener('click', clickHandler);
-        gameBoardDiv.appendChild(desktopCardEl);
-        
-        const mobileCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
-        mobileCardEl.addEventListener('click', clickHandler);
-        mobileBoardCards.appendChild(mobileCardEl);
-    });
+            const desktopCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
+            desktopCardEl.addEventListener('click', clickHandler);
+            gameBoardDiv.appendChild(desktopCardEl);
+            
+            const mobileCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
+            mobileCardEl.addEventListener('click', clickHandler);
+            mobileBoardCards.appendChild(mobileCardEl);
+        });
+    }
 }
 
 // --- 5. SOCKET.IO EVENT HANDLERS ---
