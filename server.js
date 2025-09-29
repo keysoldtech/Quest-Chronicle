@@ -112,7 +112,7 @@ class GameManager {
             players: { [socket.id]: newPlayer },
             voiceChatPeers: [],
             gameState: {
-                phase: 'lobby',
+                phase: 'class_selection', // MODIFIED: Go directly to class selection
                 gameMode: gameMode,
                 customSettings: customSettings,
                 decks: { 
@@ -133,15 +133,26 @@ class GameManager {
                 },
                 currentPartyEvent: null,
                 skillChallenge: { isActive: false },
-                // ARCHITECTURAL FIX: Class data is now a permanent part of the game state from the beginning.
                 classData: gameData.classes, 
             },
             chatLog: []
         };
+
+        // MODIFIED: Immediately set up for single player
+        const player = newRoom.players[socket.id];
+        player.role = 'Explorer';
+        const dmNpc = this.createPlayerObject('npc-dm', 'Dungeon Master');
+        dmNpc.role = 'DM'; dmNpc.isNpc = true; newRoom.players[dmNpc.id] = dmNpc;
+        const npcNames = ["Grok", "Lyra", "Finn"];
+        for (const name of npcNames) {
+            const npcId = `npc-${name.toLowerCase()}`;
+            const npc = this.createPlayerObject(npcId, name);
+            npc.isNpc = true; npc.role = 'Explorer'; newRoom.players[npc.id] = npc;
+        }
         
         this.rooms[newRoomId] = newRoom;
         socket.join(newRoomId);
-        this.socketToRoom[socket.id] = newRoomId; // Map socket to room for efficiency
+        this.socketToRoom[socket.id] = newRoomId;
         socket.emit('roomCreated', newRoom);
     }
     
@@ -221,24 +232,14 @@ class GameManager {
             pendingEventChoice: null,
             pendingEquipmentChoice: null, 
             pendingItemSwap: null,
-            madeAdvancedChoice: false,
             pendingWorldEventSave: null,
             healthDice: { current: 0, max: 0 }
         };
     }
 
     // --- 3.3. Game Lifecycle (Create, Join, Start) ---
-    // REBUILT & SIMPLIFIED: This function now sets the phase and sends a single, authoritative update.
-    startGame(socket) {
-        const room = this.findRoomBySocket(socket);
-        if (!room || room.hostId !== socket.id || room.gameState.phase !== 'lobby') return;
-
-        room.gameState.phase = 'class_selection';
-        
-        // The single update now contains all data the client needs to render the class selection screen.
-        this.emitGameState(room.id);
-    }
-
+    // REMOVED: startGame is no longer needed as game setup starts on room creation.
+    
     // --- 3.4. Player Setup (Class, Stats, Cards) ---
     assignClassToPlayer(roomId, player, classId) {
         const classStats = gameData.classes[classId];
@@ -258,19 +259,10 @@ class GameManager {
         if (!player || player.class || player.role !== 'Explorer') return;
     
         this.assignClassToPlayer(room.id, player, classId);
-        this._checkAndFinalizeSetup(room);
+        this._completeSetupAndStartGame(room);
     }
 
-    chooseAdvancedSetup(socket, { choice }) {
-        const room = this.findRoomBySocket(socket);
-        const player = room?.players[socket.id];
-        if (!room || !player || player.madeAdvancedChoice) {
-            return;
-        }
-
-        player.madeAdvancedChoice = choice; // Store the choice ('gear' or 'resources')
-        this._checkAndFinalizeSetup(room);
-    }
+    // REMOVED: chooseAdvancedSetup is no longer needed.
     
     calculatePlayerStats(player) {
         if (!player.class) {
@@ -318,57 +310,16 @@ class GameManager {
         return newStats;
     }
     
-    // REBUILT: Unified "gatekeeper" function.
-    _checkAndFinalizeSetup(room) {
-        const humanExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
-        if (humanExplorers.length === 0) return; // No one to set up
+    // REMOVED: _checkAndFinalizeSetup and _finalizeAndStartGame are replaced by a single new function.
 
-        // Check if every single human explorer is ready.
-        const allReady = humanExplorers.every(p => {
-            if (!p.class) return false; // Must have a class.
-            if (room.gameState.gameMode === 'Advanced' && !p.madeAdvancedChoice) {
-                return false; // In Advanced mode, must have made the choice.
-            }
-            return true;
-        });
-
-        if (allReady) {
-            this._finalizeAndStartGame(room);
-        } else {
-            // Not everyone is ready, just send an update so UIs can refresh (e.g., to show who has picked).
-            this.emitGameState(room.id);
-        }
-    }
-
-    // REBUILT: Atomic setup function that runs ONCE after all choices are made.
-    _finalizeAndStartGame(room) {
-        // --- Part 1: Assign roles and turn order ---
-        const players = Object.values(room.players).filter(p => !p.isNpc);
-        if (players.length === 1) {
-            const player = players[0];
-            player.role = 'Explorer';
-            const dmNpc = this.createPlayerObject('npc-dm', 'Dungeon Master');
-            dmNpc.role = 'DM'; dmNpc.isNpc = true; room.players[dmNpc.id] = dmNpc;
-            const npcNames = ["Grok", "Lyra", "Finn"];
-            const explorerNpcs = [];
-            for (const name of npcNames) {
-                const npcId = `npc-${name.toLowerCase()}`;
-                const npc = this.createPlayerObject(npcId, name);
-                npc.isNpc = true; npc.role = 'Explorer'; room.players[npc.id] = npc;
-                explorerNpcs.push(npc);
-            }
-            const explorerIds = [player.id, ...explorerNpcs.map(n => n.id)];
-            shuffle(explorerIds);
-            room.gameState.turnOrder = [dmNpc.id, ...explorerIds];
-        } else {
-            const dm = players[Math.floor(Math.random() * players.length)];
-            dm.role = 'DM';
-            players.forEach(p => { if (p.id !== dm.id) p.role = 'Explorer'; });
-            const explorerIds = players.filter(p => p.id !== dm.id).map(p => p.id);
-            shuffle(explorerIds);
-            room.gameState.turnOrder = [dm.id, ...explorerIds];
-        }
-
+    // NEW: Atomic setup function that runs ONCE after the player chooses their class.
+    _completeSetupAndStartGame(room) {
+        // --- Part 1: Finalize turn order ---
+        const explorerIds = Object.values(room.players).filter(p => p.role === 'Explorer').map(p => p.id);
+        const dmId = Object.values(room.players).find(p => p.role === 'DM').id;
+        shuffle(explorerIds);
+        room.gameState.turnOrder = [dmId, ...explorerIds];
+    
         // --- Part 2: Build and shuffle all decks ---
         const createDeck = (cardArray) => cardArray.map(c => ({...c, id: this.generateUniqueCardId() }));
         Object.keys(room.gameState.decks).forEach(key => {
@@ -389,8 +340,8 @@ class GameManager {
             ...room.gameState.decks.item, ...room.gameState.decks.weapon, ...room.gameState.decks.armor
         ];
         shuffle(room.gameState.decks.treasure);
-
-
+    
+    
         // --- Part 3: Setup all players (human and NPC) ---
         Object.values(room.players).filter(p => p.role === 'Explorer').forEach(player => {
             if(player.isNpc && !player.class) {
@@ -407,6 +358,7 @@ class GameManager {
         this.startFirstTurn(room.id);
     }
 
+
     // NEW: Centralized hand/gear setup logic.
     _setupPlayerHandAndGear(room, player) {
         if (player.hand.length > 0 || player.equipment.weapon || player.equipment.armor) return;
@@ -419,7 +371,7 @@ class GameManager {
         } else if (gameMode === 'Custom') {
             if (settings.startWithWeapon) this.dealCard(room.id, player.id, 'weapon', 1);
             if (settings.startWithArmor) this.dealCard(room.id, player.id, 'armor', 1);
-        } else if (gameMode === 'Advanced' && player.madeAdvancedChoice === 'gear') {
+        } else if (gameMode === 'Advanced') { // Simplified advanced mode, default to gear
             this.dealCard(room.id, player.id, 'weapon', 1);
             this.dealCard(room.id, player.id, 'armor', 1);
         }
@@ -435,7 +387,7 @@ class GameManager {
         } else if (gameMode === 'Custom') {
             if (settings.startingItems > 0) this.dealCard(room.id, player.id, 'item', settings.startingItems);
             if (settings.startingSpells > 0) this.dealCard(room.id, player.id, 'spell', settings.startingSpells);
-        } else if (gameMode === 'Advanced' && player.madeAdvancedChoice === 'resources') {
+        } else if (gameMode === 'Advanced') { // Simplified advanced mode, default to resources
             this.dealCard(room.id, player.id, 'item', 2);
             this.dealCard(room.id, player.id, 'spell', 1);
         }
@@ -1263,9 +1215,7 @@ io.on('connection', (socket) => {
 
     socket.on('createRoom', (data) => gameManager.createRoom(socket, data));
     socket.on('joinRoom', (data) => gameManager.joinRoom(socket, data));
-    socket.on('startGame', () => gameManager.startGame(socket));
     socket.on('chooseClass', (data) => gameManager.chooseClass(socket, data));
-    socket.on('chooseAdvancedSetup', (data) => gameManager.chooseAdvancedSetup(socket, data));
     socket.on('equipItem', (data) => gameManager.equipItem(socket, data));
     socket.on('endTurn', () => gameManager.endTurn(socket));
     socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));

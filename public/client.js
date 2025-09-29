@@ -99,10 +99,8 @@ const customSettingsPanel = get('custom-settings-panel');
 
 // Main Game Area
 const gameArea = get('game-area');
-const startGameBtn = get('start-game-btn');
-const mobileStartGameBtn = get('mobile-start-game-btn');
 
-// Desktop Header Menu
+// Header Menu
 const menuToggleBtn = get('menu-toggle-btn');
 const menuDropdown = get('menu-dropdown');
 const chatToggleBtn = get('chat-toggle-btn');
@@ -130,8 +128,6 @@ const playerClassName = get('player-class-name');
 const playerStatsDiv = get('player-stats');
 const classAbilityCard = get('class-ability-card');
 const equippedItemsDiv = get('equipped-items');
-const advancedCardChoiceDiv = get('advanced-card-choice');
-const advancedChoiceButtonsDiv = get('advanced-choice-buttons');
 const playerHandDiv = get('player-hand');
 const gameBoardDiv = get('board-cards');
 const worldEventsContainer = get('world-events-container');
@@ -158,8 +154,6 @@ const mobilePlayerHand = get('mobile-player-hand');
 const mobileClassSelection = get('mobile-class-selection');
 const mobileClassCardsContainer = get('mobile-class-cards-container');
 const mobileConfirmClassBtn = get('mobile-confirm-class-btn');
-const mobileAdvancedCardChoiceDiv = get('mobile-advanced-card-choice');
-const mobileAdvancedChoiceButtonsDiv = get('mobile-advanced-choice-buttons');
 const mobilePlayerStats = get('mobile-player-stats');
 const mobilePlayerClassName = get('mobile-player-class-name');
 const mobileStatsDisplay = get('mobile-stats-display');
@@ -567,7 +561,6 @@ function renderSetupChoices(room) {
     }
 
     const hasChosenClass = !!myPlayerInfo.class;
-    const needsAdvancedChoice = gameState.gameMode === 'Advanced' && !myPlayerInfo.madeAdvancedChoice;
 
     // --- Part 1: Render Class Selection UI ---
     [classCardsContainer, mobileClassCardsContainer].forEach(container => {
@@ -607,24 +600,11 @@ function renderSetupChoices(room) {
        });
    });
 
-   // --- Part 2: Render Advanced Choice UI ---
-   [advancedChoiceButtonsDiv, mobileAdvancedChoiceButtonsDiv].forEach(container => {
-        container.innerHTML = `
-            <button id="adv-choice-gear" class="btn btn-primary">Start with Gear</button>
-            <p class="subtitle-font" style="text-align:center;">Draw 1 Weapon & 1 Armor.</p>
-            <button id="adv-choice-resources" class="btn btn-secondary">Start with Resources</button>
-            <p class="subtitle-font" style="text-align:center;">Draw 2 Items & 1 Spell.</p>
-        `;
-        container.querySelector('#adv-choice-gear').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'gear' });
-        container.querySelector('#adv-choice-resources').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'resources' });
-    });
-
-    // --- Part 3: Control Visibility ---
+   // --- Part 2: Control Visibility ---
     const showClassSelection = !hasChosenClass;
-    const showAdvancedSelection = hasChosenClass && needsAdvancedChoice;
     
     [classCardsContainer, mobileClassCardsContainer].forEach(el => el.style.display = showClassSelection ? 'flex' : 'none');
-    [advancedCardChoiceDiv, mobileAdvancedCardChoiceDiv].forEach(el => el.classList.toggle('hidden', !showAdvancedSelection));
+    
     [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => {
        btn.classList.toggle('hidden', !tempSelectedClassId || hasChosenClass);
        if (!hasChosenClass) {
@@ -796,7 +776,7 @@ function renderUIForPhase(room) {
         return;
     }
 
-    const { players, gameState, hostId } = room;
+    const { players, gameState } = room;
 
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
@@ -857,22 +837,14 @@ function renderUIForPhase(room) {
     [classSelectionDiv, playerStatsContainer, mobileClassSelection, mobilePlayerStats, gameBoardDiv, mobileBoardCards, playerHandDiv, mobilePlayerHand].forEach(el => el.classList.add('hidden'));
     fixedActionBar.classList.add('hidden');
     mobileActionBar.classList.add('hidden');
-    startGameBtn.classList.add('hidden');
-    mobileStartGameBtn.classList.add('hidden');
     
     // Show panels based on phase
     switch (gameState.phase) {
         case 'lobby':
-            turnIndicator.textContent = "Waiting for host to start...";
+            turnIndicator.textContent = "Waiting in lobby...";
             mobileTurnIndicator.textContent = "Lobby";
-            if (myId === hostId) {
-                startGameBtn.classList.remove('hidden');
-                mobileStartGameBtn.classList.remove('hidden');
-                turnIndicator.textContent = "You are the host. Start the game when ready.";
-            }
             break;
         case 'class_selection':
-            // REBUILT: This is now the single source of truth for rendering the class selection UI.
             [classSelectionDiv, mobileClassSelection].forEach(el => el.classList.remove('hidden'));
             if (myPlayerInfo.role === 'DM') {
                 playerStatsContainer.classList.remove('hidden');
@@ -1349,8 +1321,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (playerName && roomId) socket.emit('joinRoom', { roomId, playerName });
         else showInfoToast('Please enter a player name and a room code.', 'error');
     });
-
-    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('startGame')));
 
     [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
         if (tempSelectedClassId) {
