@@ -594,8 +594,16 @@ function renderSetupChoices(room) {
            card.classList.toggle('selected', classId === tempSelectedClassId);
            card.onclick = () => {
                if (hasChosenClass) return; // Don't allow changing class
+               
                tempSelectedClassId = classId;
-               renderUIForPhase(currentRoomState); // Re-render to show selection and confirm button
+               
+               // Update visuals directly instead of a full re-render
+               container.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
+               card.classList.add('selected');
+               
+               // Show confirm buttons
+               confirmClassBtn.classList.remove('hidden');
+               mobileConfirmClassBtn.classList.remove('hidden');
            };
        });
    });
