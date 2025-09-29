@@ -109,6 +109,14 @@ body {
     width: 100%;
 }
 
+#lobby-form-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    width: 100%;
+}
+
 .lobby-container .title-font {
     font-size: 3.5rem;
     color: var(--color-text-primary);
@@ -225,6 +233,65 @@ label {
 .toggle-switch::before { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: white; border-radius: 50%; transition: 0.2s; }
 .toggle-switch:checked { background: var(--color-primary); }
 .toggle-switch:checked::before { transform: translateX(20px); }
+
+/* --- LOBBY PLAYER VIEW (New) --- */
+.lobby-player-view {
+    width: 100%;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    flex-direction: column;
+}
+.lobby-room-code {
+    text-align: center;
+    padding: 1rem;
+    border-bottom: 1px solid var(--color-border);
+}
+.lobby-room-code span {
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+.lobby-room-code p {
+    font-family: var(--font-title);
+    font-size: 2.5rem;
+    letter-spacing: 4px;
+    color: var(--color-special);
+}
+.lobby-player-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    flex-grow: 1;
+}
+.lobby-player-list .player-list-item {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.lobby-player-list .player-list-item:last-child {
+    border-bottom: none;
+}
+.host-tag {
+    color: var(--color-special);
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+.lobby-actions {
+    padding: 1rem;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.lobby-actions .btn {
+    width: 100%;
+}
+
 
 /* --- BUTTONS --- */
 .btn {

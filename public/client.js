@@ -16,11 +16,11 @@
 // 3.  RENDERING LOGIC (REFACTORED)
 //     - 3.1. createCardElement()
 //     - 3.2. renderPlayerList()
-//     - 3.3. renderLobby()
+//     - 3.3. renderLobbyState() (New)
 //     - 3.4. renderClassSelection()
 //     - 3.5. renderAdvancedSetup()
 //     - 3.6. renderGameplayState()
-//     - 3.7. renderUIForPhase() (New main render router)
+//     - 3.7. renderUIForPhase() (Updated render router)
 // 4.  UI EVENT LISTENERS (ATTACHED VIA DOMContentLoaded)
 // 5.  SOCKET.IO EVENT HANDLERS
 // 6.  VOICE CHAT (WebRTC) LOGIC
@@ -93,6 +93,13 @@ const get = (id) => document.getElementById(id);
 
 // Lobby
 const lobbyScreen = get('lobby');
+const lobbyFormView = get('lobby-form-view');
+const lobbyPlayerView = get('lobby-player-view');
+const lobbyRoomCodeDisplay = get('lobby-room-code-display');
+const lobbySettingsDisplay = get('lobby-settings-display');
+const lobbyPlayerList = get('lobby-player-list');
+const lobbyStartGameBtn = get('lobby-start-game-btn');
+const lobbyLeaveRoomBtn = get('lobby-leave-room-btn');
 const playerNameInput = get('playerName');
 const createRoomBtn = get('createRoomBtn');
 const joinRoomBtn = get('joinRoomBtn');
@@ -118,11 +125,10 @@ const mobileHelpBtn = get('mobile-help-btn');
 const turnIndicator = get('turn-indicator');
 const turnCounter = get('turn-counter');
 const apCounterDesktop = get('ap-counter-desktop');
-const startGameBtn = get('startGameBtn');
 const dmControls = get('dm-controls');
 const dmPlayMonsterBtn = get('dm-play-monster-btn');
 const playerList = get('player-list');
-const lobbySettingsDisplay = get('lobby-settings-display');
+const gameLobbySettingsDisplay = get('game-lobby-settings-display');
 const roomCodeDisplay = get('room-code');
 const classSelectionDiv = get('class-selection');
 const classCardsContainer = get('class-cards-container');
@@ -155,7 +161,6 @@ const mobileTurnIndicator = get('mobile-turn-indicator');
 const mobileTurnCounter = get('mobile-turn-counter');
 const apCounterMobile = get('ap-counter-mobile');
 const mobileRoomCode = get('mobile-room-code');
-const mobileStartGameBtn = get('mobile-startGameBtn');
 const mobileBoardCards = get('mobile-board-cards');
 const mobilePlayerHand = get('mobile-player-hand');
 const mobileClassSelection = get('mobile-class-selection');
@@ -170,7 +175,7 @@ const mobileClassAbilityCard = get('mobile-class-ability-card');
 const mobilePlayerEquipment = get('mobile-player-equipment');
 const mobileEquippedItems = get('mobile-equipped-items');
 const mobilePlayerList = get('mobile-player-list');
-const mobileLobbySettingsDisplay = get('mobile-lobby-settings-display');
+const mobileGameLobbySettingsDisplay = get('mobile-game-lobby-settings-display');
 const mobileWorldEventsContainer = get('mobile-world-events-container');
 const mobilePartyEventContainer = get('mobile-party-event-container');
 const mobilePartyLootContainer = get('mobile-party-loot-container');
@@ -540,7 +545,7 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
         listElement.appendChild(li);
     });
 
-    if (gameState.phase === 'lobby' && gameState.gameMode === 'Custom') {
+    if (settingsDisplayElement && gameState.phase === 'lobby' && gameState.gameMode === 'Custom') {
         settingsDisplayElement.classList.remove('hidden');
         const s = gameState.customSettings;
         settingsDisplayElement.innerHTML = `
@@ -553,26 +558,57 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
                 <li><strong>Enemy Scaling:</strong> ${s.enemyScaling ? `Enabled (${s.scalingRate}%)` : 'Disabled'}</li>
             </ul>
         `;
-    } else {
+    } else if (settingsDisplayElement) {
         settingsDisplayElement.classList.add('hidden');
     }
 }
 
-// --- 3.3. renderLobby() ---
-function renderLobby(room) {
-    const { players, gameState, hostId } = room;
+
+// --- 3.3. renderLobbyState() (New) ---
+function renderLobbyState(room) {
+    const { players, gameState, hostId, id: roomId } = room;
     const isHost = myId === hostId;
 
+    // Show lobby, hide game area
     lobbyScreen.classList.remove('hidden');
     gameArea.classList.add('hidden');
 
-    // This function is for when we are sent back to the lobby,
-    // but for now, we just initialize it on page load.
-    // The main render function will take over once a room is joined.
-    renderPlayerList(players, gameState, playerList, lobbySettingsDisplay);
-    renderPlayerList(players, gameState, mobilePlayerList, mobileLobbySettingsDisplay);
+    // Switch from form view to player list view
+    lobbyFormView.classList.add('hidden');
+    lobbyPlayerView.classList.remove('hidden');
     
-    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.toggle('hidden', !isHost));
+    lobbyRoomCodeDisplay.textContent = roomId;
+    
+    // Render the list of players in the lobby
+    lobbyPlayerList.innerHTML = '';
+    Object.values(players).forEach(player => {
+        const li = document.createElement('li');
+        li.className = 'player-list-item';
+        const hostTag = player.id === hostId ? ' <span class="host-tag">(Host)</span>' : '';
+        li.innerHTML = `<span>${player.name}${hostTag}</span>`;
+        lobbyPlayerList.appendChild(li);
+    });
+
+    // Show custom settings if applicable
+    if (gameState.phase === 'lobby' && gameState.gameMode === 'Custom') {
+        lobbySettingsDisplay.classList.remove('hidden');
+        const s = gameState.customSettings;
+        lobbySettingsDisplay.innerHTML = `
+            <h4>Custom Game Settings</h4>
+            <ul>
+                <li><strong>Bag Size:</strong> ${s.maxHandSize}</li>
+                <li><strong>Start Gear:</strong> ${s.startWithWeapon ? 'Weapon' : 'None'} & ${s.startWithArmor ? 'Armor' : 'None'}</li>
+                <li><strong>Start Hand:</strong> ${s.startingItems} Items, ${s.startingSpells} Spells</li>
+                <li><strong>Loot Drop:</strong> ${s.lootDropRate}%</li>
+                <li><strong>Enemy Scaling:</strong> ${s.enemyScaling ? `Enabled (${s.scalingRate}%)` : 'Disabled'}</li>
+            </ul>
+        `;
+    } else {
+        lobbySettingsDisplay.classList.add('hidden');
+    }
+
+    // Show/hide start game button
+    lobbyStartGameBtn.classList.toggle('hidden', !isHost);
 }
 
 
@@ -836,42 +872,50 @@ function renderGameplayState(room) {
 }
 
 
-// --- 3.7. renderUIForPhase() (New main render router) ---
+// --- 3.7. renderUIForPhase() (Updated render router) ---
 function renderUIForPhase(room) {
     currentRoomState = room;
     myPlayerInfo = room.players[myId];
-    if (!myPlayerInfo) return console.warn("My player info not found. Aborting render.");
+    if (!myPlayerInfo) { 
+        // This can happen briefly on a late join, handle gracefully
+        console.warn("My player info not found, waiting for next update.");
+        return;
+    }
 
-    const { players, gameState, hostId } = room;
-    const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
-    const newLootCount = gameState.lootPool?.length || 0;
-    const isDM = myPlayerInfo.role === 'DM';
-    const isExplorer = myPlayerInfo.role === 'Explorer';
-    const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
-    const isMyTurn = currentTurnTakerId === myId;
-    const turnTaker = players[currentTurnTakerId];
+    const { players, gameState } = room;
 
-    // --- Always-on Renders ---
+    // --- Phase-Based Routing ---
+    // This is now the main switch that determines which major UI to show.
+    if (gameState.phase === 'lobby') {
+        renderLobbyState(room);
+        return; // Stop here for lobby
+    }
+
+    // --- If not in lobby, proceed to render the main game area ---
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
 
-    renderPlayerList(players, gameState, playerList, lobbySettingsDisplay);
-    renderPlayerList(players, gameState, mobilePlayerList, mobileLobbySettingsDisplay);
+    // --- Always-on Renders for In-Game state ---
+    renderPlayerList(players, gameState, playerList, gameLobbySettingsDisplay);
+    renderPlayerList(players, gameState, mobilePlayerList, mobileGameLobbySettingsDisplay);
     
     // Header & Turn Info
     roomCodeDisplay.textContent = room.id;
     mobileRoomCode.textContent = room.id;
     [turnCounter, mobileTurnCounter].forEach(el => el.textContent = gameState.turnCount);
-    if (gameState.phase !== 'lobby') {
-        let turnText = 'Waiting...';
-        if (turnTaker) {
-            if (turnTaker.role === 'DM') turnText = "Dungeon Master's Turn";
-            else turnText = `Turn: ${turnTaker.name}`;
-            if(isMyTurn) turnText += ' (Your Turn)';
-        }
-        turnIndicator.textContent = turnText;
-        mobileTurnIndicator.textContent = isMyTurn ? "Your Turn" : turnTaker?.name || "Waiting...";
+    
+    const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
+    const isMyTurn = currentTurnTakerId === myId;
+    const turnTaker = players[currentTurnTakerId];
+
+    let turnText = 'Waiting...';
+    if (turnTaker) {
+        if (turnTaker.role === 'DM') turnText = "Dungeon Master's Turn";
+        else turnText = `Turn: ${turnTaker.name}`;
+        if(isMyTurn) turnText += ' (Your Turn)';
     }
+    turnIndicator.textContent = turnText;
+    mobileTurnIndicator.textContent = isMyTurn ? "Your Turn" : turnTaker?.name || "Waiting...";
     
     [apCounterDesktop, apCounterMobile].forEach(el => {
         el.classList.toggle('hidden', !isMyTurn || gameState.phase !== 'started');
@@ -881,6 +925,8 @@ function renderUIForPhase(room) {
     });
 
     // Info Tabs
+    const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
+    const newLootCount = gameState.lootPool?.length || 0;
     [worldEventsContainer, mobileWorldEventsContainer].forEach(c => {
         c.innerHTML = gameState.worldEvents.currentEvent ? '' : '<p class="empty-pool-text">No active world event.</p>';
         if (gameState.worldEvents.currentEvent) c.appendChild(createCardElement(gameState.worldEvents.currentEvent));
@@ -905,11 +951,8 @@ function renderUIForPhase(room) {
     document.querySelector('[data-tab="party-events-tab"]').classList.toggle('highlight', !!gameState.currentPartyEvent);
     document.querySelector('[data-tab="party-loot-tab"]').classList.toggle('highlight', newLootCount > oldLootCount);
 
-    // --- Phase-Based Routing ---
+    // --- In-Game Phase Specific Renders ---
     switch (gameState.phase) {
-        case 'lobby':
-            renderLobby(room); // Should not happen often, but good to have
-            break;
         case 'class_selection':
             renderClassSelection(room);
             renderGameplayState(room); // Render gameplay elements in the background
@@ -930,11 +973,11 @@ function renderUIForPhase(room) {
             }
             break;
         default:
-            console.error("Unknown game phase:", gameState.phase);
+            console.error("Unknown in-game phase:", gameState.phase);
     }
     isMyTurnPreviously = isMyTurn;
 
-    // --- Modal Logic (runs regardless of phase) ---
+    // --- Modal Logic (runs regardless of phase, if in-game) ---
     if (isMyTurn && myPlayerInfo.pendingEventRoll) {
         addToModalQueue(() => {
             diceRollOverlay.classList.remove('hidden');
@@ -1388,7 +1431,9 @@ document.addEventListener('DOMContentLoaded', () => {
         else showInfoToast('Please enter a player name and a room code.', 'error');
     });
 
-    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('startGame')));
+    lobbyStartGameBtn.addEventListener('click', () => socket.emit('startGame'));
+    lobbyLeaveRoomBtn.addEventListener('click', () => window.location.reload());
+
     [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
         if (tempSelectedClassId) {
             socket.emit('chooseClass', { classId: tempSelectedClassId });

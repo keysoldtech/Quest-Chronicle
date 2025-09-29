@@ -2,13 +2,12 @@
   --- INDEX ---
   1.  METADATA & STYLESHEETS
   2.  LOBBY SCREEN (#lobby)
+      - 2.1. Initial Create/Join Form
+      - 2.2. Lobby Player View (New)
   3.  GAME AREA (#game-area)
-      - 3.1. DESKTOP LAYOUT (.game-area-desktop)
-        - Header, Player Panel, Character Panel, Board, Info Tabs, Hand, Action Bar
-      - 3.2. MOBILE LAYOUT (.game-area-mobile)
-        - Header, Main Content Screens, Action Bar, Bottom Navigation
+      - 3.1. DESKTOP LAYOUT
+      - 3.2. MOBILE LAYOUT
   4.  SHARED OVERLAYS & MODALS
-      - Chat, Narrative, Dice Roll, Events, Skill Challenge, Item Selection, etc.
   5.  SCRIPTS
 -->
 <!DOCTYPE html>
@@ -35,72 +34,90 @@
     <div class="background-animation"></div>
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
-        <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">v4.6.0 (Playtest-v2.0)</p>
-        
-        <div class="input-group">
-            <label for="playerName">Player Name</label>
-            <input type="text" id="playerName" class="input-field" placeholder="e.g., Elara the Brave">
-        </div>
-        
-        <div id="game-mode-selector" class="input-group">
-            <label>Game Mode</label>
-            <div class="radio-group">
-                <label class="radio-label">
-                    <input type="radio" name="gameMode" value="Beginner" class="sr-only" checked>
-                    <span>Beginner</span>
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="gameMode" value="Advanced" class="sr-only">
-                    <span>Advanced</span>
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="gameMode" value="Custom" class="sr-only">
-                    <span>Custom</span>
-                </label>
+        <!-- 2.1. Initial Create/Join Form -->
+        <div id="lobby-form-view">
+            <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
+            <p class="subtitle-font">v4.6.1 (Playtest-v2.1)</p>
+            
+            <div class="input-group">
+                <label for="playerName">Player Name</label>
+                <input type="text" id="playerName" class="input-field" placeholder="e.g., Elara the Brave">
             </div>
-        </div>
-        
-        <div id="custom-settings-panel" class="custom-settings-panel hidden">
-            <div class="slider-group">
-                <label for="max-hand-size">Bag Capacity: <span id="max-hand-size-value">5</span></label>
-                <input type="range" id="max-hand-size" min="3" max="7" value="5" class="slider">
+            
+            <div id="game-mode-selector" class="input-group">
+                <label>Game Mode</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="gameMode" value="Beginner" class="sr-only" checked>
+                        <span>Beginner</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="gameMode" value="Advanced" class="sr-only">
+                        <span>Advanced</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="gameMode" value="Custom" class="sr-only">
+                        <span>Custom</span>
+                    </label>
+                </div>
             </div>
-            <div class="toggle-group">
-                <label for="start-with-weapon">Start with Weapon?</label>
-                <input type="checkbox" id="start-with-weapon" class="toggle-switch" checked>
+            
+            <div id="custom-settings-panel" class="custom-settings-panel hidden">
+                <div class="slider-group">
+                    <label for="max-hand-size">Bag Capacity: <span id="max-hand-size-value">5</span></label>
+                    <input type="range" id="max-hand-size" min="3" max="7" value="5" class="slider">
+                </div>
+                <div class="toggle-group">
+                    <label for="start-with-weapon">Start with Weapon?</label>
+                    <input type="checkbox" id="start-with-weapon" class="toggle-switch" checked>
+                </div>
+                <div class="toggle-group">
+                    <label for="start-with-armor">Start with Armor?</label>
+                    <input type="checkbox" id="start-with-armor" class="toggle-switch" checked>
+                </div>
+                <div class="slider-group">
+                    <label for="starting-items">Starting Items: <span id="starting-items-value">2</span></label>
+                    <input type="range" id="starting-items" min="0" max="5" value="2" class="slider">
+                </div>
+                <div class="slider-group">
+                    <label for="starting-spells">Starting Spells: <span id="starting-spells-value">2</span></label>
+                    <input type="range" id="starting-spells" min="0" max="5" value="2" class="slider">
+                </div>
+                <div class="slider-group">
+                    <label for="loot-drop-rate">Loot Drop Rate: <span id="loot-drop-rate-value">25</span>%</label>
+                    <input type="range" id="loot-drop-rate" min="0" max="100" value="25" class="slider">
+                </div>
+                 <div class="toggle-group">
+                    <label for="enemy-scaling">Enable Enemy Power Scaling?</label>
+                    <input type="checkbox" id="enemy-scaling" class="toggle-switch">
+                </div>
+                 <div id="scaling-rate-group" class="slider-group hidden">
+                    <label for="scaling-rate">Scaling Rate: <span id="scaling-rate-value">50</span>%</label>
+                    <input type="range" id="scaling-rate" min="10" max="100" value="50" class="slider">
+                </div>
             </div>
-            <div class="toggle-group">
-                <label for="start-with-armor">Start with Armor?</label>
-                <input type="checkbox" id="start-with-armor" class="toggle-switch" checked>
-            </div>
-            <div class="slider-group">
-                <label for="starting-items">Starting Items: <span id="starting-items-value">2</span></label>
-                <input type="range" id="starting-items" min="0" max="5" value="2" class="slider">
-            </div>
-            <div class="slider-group">
-                <label for="starting-spells">Starting Spells: <span id="starting-spells-value">2</span></label>
-                <input type="range" id="starting-spells" min="0" max="5" value="2" class="slider">
-            </div>
-            <div class="slider-group">
-                <label for="loot-drop-rate">Loot Drop Rate: <span id="loot-drop-rate-value">25</span>%</label>
-                <input type="range" id="loot-drop-rate" min="0" max="100" value="25" class="slider">
-            </div>
-             <div class="toggle-group">
-                <label for="enemy-scaling">Enable Enemy Power Scaling?</label>
-                <input type="checkbox" id="enemy-scaling" class="toggle-switch">
-            </div>
-             <div id="scaling-rate-group" class="slider-group hidden">
-                <label for="scaling-rate">Scaling Rate: <span id="scaling-rate-value">50</span>%</label>
-                <input type="range" id="scaling-rate" min="10" max="100" value="50" class="slider">
+
+            <div class="button-group">
+                <button id="createRoomBtn" class="btn btn-primary">Create New Room</button>
+                <div class="join-group">
+                    <input type="text" id="roomIdInput" class="input-field" placeholder="Enter Room Code">
+                    <button id="joinRoomBtn" class="btn btn-secondary">Join Room</button>
+                </div>
             </div>
         </div>
 
-        <div class="button-group">
-            <button id="createRoomBtn" class="btn btn-primary">Create New Room</button>
-            <div class="join-group">
-                <input type="text" id="roomIdInput" class="input-field" placeholder="Enter Room Code">
-                <button id="joinRoomBtn" class="btn btn-secondary">Join Room</button>
+        <!-- 2.2. Lobby Player View (New) -->
+        <div id="lobby-player-view" class="lobby-player-view hidden">
+            <h2 class="panel-header">Lobby</h2>
+            <div class="lobby-room-code">
+                <span>Room Code</span>
+                <p id="lobby-room-code-display">----</p>
+            </div>
+            <div id="lobby-settings-display" class="lobby-settings-display hidden"></div>
+            <ul id="lobby-player-list" class="lobby-player-list"></ul>
+            <div class="lobby-actions">
+                <button id="lobby-start-game-btn" class="btn btn-primary hidden">Start Game</button>
+                <button id="lobby-leave-room-btn" class="btn btn-danger">Leave Room</button>
             </div>
         </div>
     </div>
@@ -117,12 +134,9 @@
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                 </div>
                  <div class="header-controls">
-                    <p class="build-number-font">v4.6.0 (Playtest-v2.0)</p>
+                    <p class="build-number-font">v4.6.1 (Playtest-v2.1)</p>
                     <div id="dm-controls" class="dm-controls hidden">
                          <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
-                    </div>
-                    <div id="header-action-buttons">
-                        <button id="startGameBtn" class="btn btn-primary hidden">Start Game</button>
                     </div>
                     <div class="room-code-display">
                         <span>Room Code</span>
@@ -136,7 +150,7 @@
                             <button id="join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Join Voice</button>
                             <button id="mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
                             <button id="disconnect-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave Voice</button>
-                            <button id="leave-game-btn" class="menu-item danger hidden"><span class="material-symbols-outlined">logout</span>Leave Game</button>
+                            <button id="leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
                         </div>
                     </div>
                 </div>
@@ -144,7 +158,7 @@
 
             <aside class="players-panel panel">
                  <h2 class="panel-header">Players</h2>
-                 <div id="lobby-settings-display" class="lobby-settings-display hidden"></div>
+                 <div id="game-lobby-settings-display" class="lobby-settings-display hidden"></div>
                  <ul id="player-list" class="player-list"></ul>
             </aside>
             
@@ -225,9 +239,6 @@
                      <p id="ap-counter-mobile" class="ap-counter hidden"></p>
                 </div>
                  <div class="mobile-header-controls">
-                    <div id="mobile-header-action-buttons">
-                        <button id="mobile-startGameBtn" class="btn btn-primary hidden">Start</button>
-                    </div>
                     <div class="room-code-display mobile">
                         <span>Code</span>
                         <p id="mobile-room-code">----</p>
@@ -239,7 +250,7 @@
                             <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span></button>
                             <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span></button>
                             <button id="mobile-disconnect-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span></button>
-                            <button id="mobile-leave-game-btn" class="menu-item danger hidden"><span class="material-symbols-outlined">logout</span></button>
+                            <button id="mobile-leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span></button>
                         </div>
                     </div>
                 </div>
@@ -289,7 +300,7 @@
                 <div id="mobile-screen-party" class="mobile-screen">
                      <div class="panel mobile-panel">
                         <h2 class="panel-header">Players</h2>
-                        <div id="mobile-lobby-settings-display" class="lobby-settings-display hidden"></div>
+                        <div id="mobile-game-lobby-settings-display" class="lobby-settings-display hidden"></div>
                         <ul id="mobile-player-list" class="player-list"></ul>
                     </div>
                 </div>
