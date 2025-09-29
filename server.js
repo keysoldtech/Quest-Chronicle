@@ -164,7 +164,7 @@ class GameManager {
         }
 
         // --- LATE JOIN LOGIC ---
-        if (room.gameState.phase !== 'lobby') {
+        if (room.gameState.phase !== 'lobby' && room.gameState.phase !== 'class_selection') {
             const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
             if (humanPlayers.length >= 5) {
                 socket.emit('actionError', 'This room is full of human players.');
@@ -238,7 +238,6 @@ class GameManager {
     }
 
     // --- 3.3. Game Lifecycle (Create, Join, Start) ---
-    // REMOVED: startGame is no longer needed as game setup starts on room creation.
     
     // --- 3.4. Player Setup (Class, Stats, Cards) ---
     assignClassToPlayer(roomId, player, classId) {
@@ -259,10 +258,16 @@ class GameManager {
         if (!player || player.class || player.role !== 'Explorer') return;
     
         this.assignClassToPlayer(room.id, player, classId);
-        this._completeSetupAndStartGame(room);
-    }
+        
+        const humanPlayers = Object.values(room.players).filter(p => !p.isNpc && p.role === 'Explorer');
+        const allHumansReady = humanPlayers.every(p => p.class);
 
-    // REMOVED: chooseAdvancedSetup is no longer needed.
+        if (allHumansReady) {
+            this._completeSetupAndStartGame(room);
+        } else {
+            this.emitGameState(room.id); // Update for everyone else to see the class choice
+        }
+    }
     
     calculatePlayerStats(player) {
         if (!player.class) {
@@ -309,10 +314,7 @@ class GameManager {
         
         return newStats;
     }
-    
-    // REMOVED: _checkAndFinalizeSetup and _finalizeAndStartGame are replaced by a single new function.
 
-    // NEW: Atomic setup function that runs ONCE after the player chooses their class.
     _completeSetupAndStartGame(room) {
         // --- Part 1: Finalize turn order ---
         const explorerIds = Object.values(room.players).filter(p => p.role === 'Explorer').map(p => p.id);
@@ -360,8 +362,6 @@ class GameManager {
         this.startFirstTurn(room.id);
     }
 
-
-    // NEW: Centralized hand/gear setup logic.
     _setupPlayerHandAndGear(room, player) {
         if (player.hand.length > 0 || player.equipment.weapon || player.equipment.armor) return;
         const gameMode = room.gameState.gameMode;
@@ -394,7 +394,6 @@ class GameManager {
             this.dealCard(room.id, player.id, 'spell', 1);
         }
     }
-
 
     dealCard(roomId, playerId, deckName, count) {
         const room = this.rooms[roomId];
@@ -909,9 +908,11 @@ class GameManager {
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
         const weapon = attacker.equipment.weapon;
 
-        if (!attacker || !target || !weapon || weapon.id !== weaponId) {
-             if (weaponId === 'unarmed') return this._resolveUnarmedAttack(room, { attackerId, targetId, narrative });
-             return;
+        if (!attacker || !target) return;
+        if (weaponId !== 'unarmed' && (!weapon || weapon.id !== weaponId)) return;
+        
+        if (weaponId === 'unarmed') {
+            return this._resolveUnarmedAttack(room, { attackerId, targetId, narrative });
         }
         
         const apCost = weapon.apCost || 2;
@@ -1086,4 +1087,220 @@ class GameManager {
             player.healthDice.current--;
             const healAmount = this.rollDice(`1d${player.healthDice.max}`);
             player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
-            this.sendMessageToRoom(room.id, { channel: 'game
+            // CRITICAL FIX: Corrected syntax error from incomplete object.
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> uses a Health Die and recovers <b>${healAmount}</b> HP.` });
+        } else {
+            const socket = io.sockets.sockets.get(player.id);
+            if (socket) {
+                socket.emit('actionError', `Not enough AP or Health Dice.`);
+            }
+        }
+    }
+    
+    _resolveFullRest(room, player) {
+        const apCost = gameData.actionCosts.fullRest;
+        if (player.currentAp >= apCost && player.healthDice.current >= 2) {
+            player.currentAp -= apCost;
+            player.healthDice.current -= 2;
+            const healAmount1 = this.rollDice(`1d${player.healthDice.max}`);
+            const healAmount2 = this.rollDice(`1d${player.healthDice.max}`);
+            const totalHeal = healAmount1 + healAmount2;
+            player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + totalHeal);
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> takes a full rest and recovers <b>${totalHeal}</b> HP.` });
+        } else {
+            const socket = io.sockets.sockets.get(player.id);
+            if (socket) {
+                socket.emit('actionError', `Not enough AP or Health Dice.`);
+            }
+        }
+    }
+
+    _resolveUseCard(room, player, { cardId, targetId }, narrative) {
+        const cardIndex = player.hand.findIndex(c => c.id === cardId);
+        if (cardIndex === -1) return;
+
+        const card = player.hand[cardIndex];
+        const apCost = card.apCost || 1;
+        if (player.currentAp < apCost) {
+            const socket = io.sockets.sockets.get(player.id);
+            if (socket) socket.emit('actionError', `Not enough AP. This card costs ${apCost}.`);
+            return;
+        }
+        player.currentAp -= apCost;
+        
+        const isConsumable = card.type === 'Consumable';
+
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'narrative', senderName: player.name, message: `uses ${card.name}! ${narrative}` });
+
+        const effect = card.effect;
+        if (effect.type === 'heal') {
+            const target = room.players[targetId || player.id];
+            if (!target) return;
+            const healAmount = this.rollDice(effect.dice);
+            target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healAmount);
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${card.name} heals <b>${target.name}</b> for <b>${healAmount}</b> HP.` });
+        } else if (effect.type === 'damage') {
+            const target = room.gameState.board.monsters.find(m => m.id === targetId);
+            if (target) {
+                const damageAmount = this.rollDice(effect.dice);
+                target.currentHp -= damageAmount;
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${card.name} deals <b>${damageAmount}</b> damage to <b>${target.name}</b>.` });
+                if (target.currentHp <= 0) {
+                    this._handleMonsterDefeat(room, target.id);
+                }
+            }
+        } else if (effect.type === 'buff') {
+            const target = room.players[targetId || player.id];
+            if(target) {
+                const newEffect = { ...effect, name: card.name, source: card.id };
+                target.statusEffects.push(newEffect);
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${target.name} is affected by ${card.name}!` });
+            }
+        }
+
+        if (isConsumable) {
+            player.hand.splice(cardIndex, 1);
+        }
+    }
+    
+    _resolveUseClassAbility(room, player, narrative) {
+        const ability = gameData.classes[player.class]?.ability;
+        if (!ability || player.currentAp < ability.apCost) return;
+        
+        // Handle ability costs
+        if (ability.cost?.type === 'discard' && ability.cost.cardType === 'Spell') {
+            const spellIndex = player.hand.findIndex(c => c.type === 'Spell');
+            if (spellIndex === -1) {
+                const socket = io.sockets.sockets.get(player.id);
+                if (socket) socket.emit('actionError', 'You need a Spell card to discard.');
+                return;
+            }
+            player.hand.splice(spellIndex, 1);
+        }
+        
+        player.currentAp -= ability.apCost;
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'narrative', senderName: player.name, message: `uses ${ability.name}! ${narrative || ''}`});
+
+        switch (player.class) {
+            case 'Mage':
+                this.dealCard(room.id, player.id, 'spell', 1);
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} draws a new spell.`});
+                break;
+            // Other class abilities would be implemented here
+        }
+    }
+    
+    _resolveContributeToSkillChallenge(room, player, itemId = null) {
+        // Basic implementation
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} contributes to the skill challenge.`});
+    }
+
+    // --- 3.8. Event & Challenge Handling ---
+    rollForEvent(socket) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!player || !player.pendingEventRoll) return;
+
+        player.pendingEventRoll = false;
+        const roll = this.rollDice('1d20');
+        let outcome = { type: 'none', message: 'The path is quiet. You continue your journey.' };
+
+        if (roll >= 15) {
+            const treasureDeck = room.gameState.decks.treasure;
+            if (treasureDeck.length > 0) {
+                const card = treasureDeck.pop();
+                outcome = { type: 'itemFound', message: `You stumble upon a hidden cache and find a ${card.name}!`, card };
+                this._addCardToPlayerHand(room, player, card);
+                socket.emit('eventItemFound', card);
+            }
+        } else if (roll >= 10) {
+             const eventDeck = room.gameState.decks.playerEvent;
+             if (eventDeck.length > 2) {
+                 const options = [eventDeck.pop(), eventDeck.pop(), eventDeck.pop()];
+                 outcome = { type: 'playerEvent', message: 'An event occurs that affects you personally. You must choose your path.', options };
+                 player.pendingEventChoice = { options };
+             }
+        }
+        
+        socket.emit('eventRollResult', { roll, outcome });
+        this.emitGameState(room.id);
+    }
+    
+    // --- 3.9. Voice Chat Relaying ---
+    handleVoiceJoin(socket) {
+        const room = this.findRoomBySocket(socket);
+        if (!room) return;
+        socket.emit('voice-peers', room.voiceChatPeers);
+        room.voiceChatPeers.push(socket.id);
+        socket.to(room.id).emit('voice-peer-join', { peerId: socket.id });
+    }
+    
+    handleVoiceLeave(socket) {
+        const room = this.findRoomBySocket(socket);
+        if (!room) return;
+        room.voiceChatPeers = room.voiceChatPeers.filter(id => id !== socket.id);
+        socket.to(room.id).emit('voice-peer-disconnect', { peerId: socket.id });
+    }
+
+    // --- 3.10. Disconnect Logic ---
+    handleDisconnect(socket) {
+        const roomId = this.socketToRoom[socket.id];
+        const room = this.rooms[roomId];
+        if (!room) return;
+
+        this.handleVoiceLeave(socket); // Also handle leaving voice chat
+
+        const player = room.players[socket.id];
+        if (player) {
+            this.sendMessageToRoom(roomId, {
+                channel: 'game', type: 'system',
+                message: `<b>${player.name}</b> has disconnected.`
+            });
+
+            // Replace with NPC
+            const npc = this.createPlayerObject(socket.id, player.name); // Re-use ID for simplicity
+            npc.isNpc = true;
+            Object.assign(npc, player); // Copy state
+            room.players[socket.id] = npc;
+
+            this.emitGameState(roomId);
+        }
+        
+        delete this.socketToRoom[socket.id];
+        // Don't delete the room if the host leaves, just replace them with an NPC.
+    }
+}
+
+// --- 4. SOCKET.IO CONNECTION HANDLING ---
+const gameManager = new GameManager();
+
+io.on('connection', (socket) => {
+    socket.on('createRoom', (data) => gameManager.createRoom(socket, data));
+    socket.on('joinRoom', (data) => gameManager.joinRoom(socket, data));
+    socket.on('chooseClass', (data) => gameManager.chooseClass(socket, data));
+    socket.on('equipItem', (data) => gameManager.equipItem(socket, data));
+    socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));
+    socket.on('endTurn', () => gameManager.endTurn(socket));
+    socket.on('sendMessage', (data) => {
+        const room = gameManager.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (room && player) {
+            gameManager.sendMessageToRoom(room.id, { ...data, senderName: player.name });
+        }
+    });
+    socket.on('rollForEvent', () => gameManager.rollForEvent(socket));
+    
+    // Voice Chat
+    socket.on('join-voice', () => gameManager.handleVoiceJoin(socket));
+    socket.on('leave-voice', () => gameManager.handleVoiceLeave(socket));
+    socket.on('voice-offer', (data) => socket.to(data.toId).emit('voice-offer', { offer: data.offer, fromId: socket.id }));
+    socket.on('voice-answer', (data) => socket.to(data.toId).emit('voice-answer', { answer: data.answer, fromId: socket.id }));
+    socket.on('voice-ice-candidate', (data) => socket.to(data.toId).emit('voice-ice-candidate', { candidate: data.candidate, fromId: socket.id }));
+    
+    // Disconnect
+    socket.on('disconnect', () => gameManager.handleDisconnect(socket));
+});
+
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
