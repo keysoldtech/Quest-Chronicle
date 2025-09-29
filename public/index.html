@@ -3,7 +3,6 @@
   1.  METADATA & STYLESHEETS
   2.  LOBBY SCREEN (#lobby)
       - 2.1. Initial Create/Join Form
-      - 2.2. Lobby Player View (New)
   3.  GAME AREA (#game-area)
       - 3.1. DESKTOP LAYOUT
       - 3.2. MOBILE LAYOUT
@@ -37,7 +36,7 @@
         <!-- 2.1. Initial Create/Join Form -->
         <div id="lobby-form-view">
             <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-            <p class="subtitle-font">v4.8.1 (Playtest-v4.1)</p>
+            <p class="subtitle-font">v4.8.2 (Playtest-v4.2)</p>
             
             <div class="input-group">
                 <label for="playerName">Player Name</label>
@@ -105,21 +104,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- 2.2. Lobby Player View (New) -->
-        <div id="lobby-player-view" class="lobby-player-view hidden">
-            <h2 class="panel-header">Lobby</h2>
-            <div class="lobby-room-code">
-                <span>Room Code</span>
-                <p id="lobby-room-code-display">----</p>
-            </div>
-            <div id="lobby-settings-display" class="lobby-settings-display hidden"></div>
-            <ul id="lobby-player-list" class="lobby-player-list"></ul>
-            <div class="lobby-actions">
-                <button id="lobby-start-game-btn" class="btn btn-primary hidden">Start Game</button>
-                <button id="lobby-leave-room-btn" class="btn btn-danger">Leave Room</button>
-            </div>
-        </div>
     </div>
 
     <!-- Game Area: Hidden until a room is joined -->
@@ -134,7 +118,8 @@
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                 </div>
                  <div class="header-controls">
-                    <p class="build-number-font">v4.8.1 (Playtest-v4.1)</p>
+                    <button id="start-game-btn" class="btn btn-primary hidden">Start Game</button>
+                    <p class="build-number-font">v4.8.2 (Playtest-v4.2)</p>
                     <div id="dm-controls" class="dm-controls hidden">
                          <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                     </div>
@@ -239,6 +224,7 @@
                      <p id="ap-counter-mobile" class="ap-counter hidden"></p>
                 </div>
                  <div class="mobile-header-controls">
+                    <button id="mobile-start-game-btn" class="btn btn-primary btn-sm hidden">Start Game</button>
                     <div class="room-code-display mobile">
                         <span>Code</span>
                         <p id="mobile-room-code">----</p>

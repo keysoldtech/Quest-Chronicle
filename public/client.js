@@ -16,10 +16,9 @@
 // 3.  RENDERING LOGIC (REFACTORED)
 //     - 3.1. createCardElement()
 //     - 3.2. renderPlayerList()
-//     - 3.3. renderLobbyState() (New)
-//     - 3.4. renderSetupChoices() (Updated)
-//     - 3.5. renderGameplayState()
-//     - 3.6. renderUIForPhase() (Updated render router)
+//     - 3.3. renderSetupChoices() (Updated)
+//     - 3.4. renderGameplayState()
+//     - 3.5. renderUIForPhase() (Rebuilt render router)
 // 4.  UI EVENT LISTENERS (ATTACHED VIA DOMContentLoaded)
 // 5.  SOCKET.IO EVENT HANDLERS
 // 6.  VOICE CHAT (WebRTC) LOGIC
@@ -91,13 +90,6 @@ const get = (id) => document.getElementById(id);
 
 // Lobby
 const lobbyScreen = get('lobby');
-const lobbyFormView = get('lobby-form-view');
-const lobbyPlayerView = get('lobby-player-view');
-const lobbyRoomCodeDisplay = get('lobby-room-code-display');
-const lobbySettingsDisplay = get('lobby-settings-display');
-const lobbyPlayerList = get('lobby-player-list');
-const lobbyStartGameBtn = get('lobby-start-game-btn');
-const lobbyLeaveRoomBtn = get('lobby-leave-room-btn');
 const playerNameInput = get('playerName');
 const createRoomBtn = get('createRoomBtn');
 const joinRoomBtn = get('joinRoomBtn');
@@ -107,6 +99,8 @@ const customSettingsPanel = get('custom-settings-panel');
 
 // Main Game Area
 const gameArea = get('game-area');
+const startGameBtn = get('start-game-btn');
+const mobileStartGameBtn = get('mobile-start-game-btn');
 
 // Desktop Header Menu
 const menuToggleBtn = get('menu-toggle-btn');
@@ -541,7 +535,7 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
         listElement.appendChild(li);
     });
 
-    if (settingsDisplayElement && gameState.phase === 'lobby' && gameState.gameMode === 'Custom') {
+    if (settingsDisplayElement && (gameState.phase === 'lobby' || gameState.phase === 'class_selection') && gameState.gameMode === 'Custom') {
         settingsDisplayElement.classList.remove('hidden');
         const s = gameState.customSettings;
         settingsDisplayElement.innerHTML = `
@@ -559,53 +553,8 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
     }
 }
 
-
-// --- 3.3. renderLobbyState() (New) ---
-function renderLobbyState(room) {
-    const { players, gameState, hostId, id: roomId } = room;
-    const isHost = myId === hostId;
-
-    lobbyScreen.classList.remove('hidden');
-    gameArea.classList.add('hidden');
-
-    lobbyFormView.classList.add('hidden');
-    lobbyPlayerView.classList.remove('hidden');
-    
-    lobbyRoomCodeDisplay.textContent = roomId;
-    
-    lobbyPlayerList.innerHTML = '';
-    Object.values(players).forEach(player => {
-        const li = document.createElement('li');
-        li.className = 'player-list-item';
-        const hostTag = player.id === hostId ? ' <span class="host-tag">(Host)</span>' : '';
-        li.innerHTML = `<span>${player.name}${hostTag}</span>`;
-        lobbyPlayerList.appendChild(li);
-    });
-
-    if (gameState.phase === 'lobby' && gameState.gameMode === 'Custom') {
-        lobbySettingsDisplay.classList.remove('hidden');
-        const s = gameState.customSettings;
-        lobbySettingsDisplay.innerHTML = `
-            <h4>Custom Game Settings</h4>
-            <ul>
-                <li><strong>Bag Size:</strong> ${s.maxHandSize}</li>
-                <li><strong>Start Gear:</strong> ${s.startWithWeapon ? 'Weapon' : 'None'} & ${s.startWithArmor ? 'Armor' : 'None'}</li>
-                <li><strong>Start Hand:</strong> ${s.startingItems} Items, ${s.startingSpells} Spells</li>
-                <li><strong>Loot Drop:</strong> ${s.lootDropRate}%</li>
-                <li><strong>Enemy Scaling:</strong> ${s.enemyScaling ? `Enabled (${s.scalingRate}%)` : 'Disabled'}</li>
-            </ul>
-        `;
-    } else {
-        lobbySettingsDisplay.classList.add('hidden');
-    }
-
-    lobbyStartGameBtn.classList.toggle('hidden', !isHost);
-}
-
-
 // REBUILT: This function is now only responsible for rendering the setup choices and is called by the main render router.
-function renderSetupChoices(room) {
-    const classData = room.gameState.classData;
+function renderSetupChoices(classData) {
     if (!myPlayerInfo || myPlayerInfo.role !== 'Explorer' || !classData) return;
 
     // Switch to character tab view on mobile if not already there
@@ -617,7 +566,7 @@ function renderSetupChoices(room) {
     }
 
     const hasChosenClass = !!myPlayerInfo.class;
-    const needsAdvancedChoice = room.gameState.gameMode === 'Advanced' && !myPlayerInfo.madeAdvancedChoice;
+    const needsAdvancedChoice = currentRoomState.gameState.gameMode === 'Advanced' && !myPlayerInfo.madeAdvancedChoice;
 
     // --- Part 1: Render Class Selection UI ---
     [classCardsContainer, mobileClassCardsContainer].forEach(container => {
@@ -684,7 +633,7 @@ function renderSetupChoices(room) {
 }
 
 
-// --- 3.5. renderGameplayState() ---
+// --- 3.4. renderGameplayState() ---
 function renderGameplayState(room) {
     const { players, gameState } = room;
     const isExplorer = myPlayerInfo.role === 'Explorer';
@@ -836,7 +785,7 @@ function renderGameplayState(room) {
 }
 
 
-// --- 3.6. renderUIForPhase() (Updated render router) ---
+// --- 3.5. renderUIForPhase() (Rebuilt render router) ---
 function renderUIForPhase(room) {
     currentRoomState = room;
     myPlayerInfo = room.players[myId];
@@ -845,12 +794,7 @@ function renderUIForPhase(room) {
         return;
     }
 
-    const { players, gameState } = room;
-
-    if (gameState.phase === 'lobby') {
-        renderLobbyState(room);
-        return;
-    }
+    const { players, gameState, hostId } = room;
 
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
@@ -907,26 +851,35 @@ function renderUIForPhase(room) {
     document.querySelector('[data-tab="party-events-tab"]').classList.toggle('highlight', !!gameState.currentPartyEvent);
     document.querySelector('[data-tab="party-loot-tab"]').classList.toggle('highlight', newLootCount > oldLootCount);
 
-    // Reset character panel views
-    [classSelectionDiv, playerStatsContainer, mobileClassSelection, mobilePlayerStats].forEach(el => el.classList.add('hidden'));
-
+    // Reset all major content panels
+    [classSelectionDiv, playerStatsContainer, mobileClassSelection, mobilePlayerStats, gameBoardDiv, mobileBoardCards, playerHandDiv, mobilePlayerHand].forEach(el => el.classList.add('hidden'));
+    fixedActionBar.classList.add('hidden');
+    mobileActionBar.classList.add('hidden');
+    startGameBtn.classList.add('hidden');
+    mobileStartGameBtn.classList.add('hidden');
+    
+    // Show panels based on phase
     switch (gameState.phase) {
-        case 'class_selection':
-            if (myPlayerInfo.role === 'DM') {
-                playerStatsContainer.classList.remove('hidden');
-                playerStatsContainer.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
-                mobilePlayerStats.classList.remove('hidden');
-                mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
-            } else {
-                classSelectionDiv.classList.remove('hidden');
-                mobileClassSelection.classList.remove('hidden');
-                // THIS IS THE FIX: The main renderer is now responsible for calling the setup UI renderer.
-                renderSetupChoices(room);
+        case 'lobby':
+            turnIndicator.textContent = "Waiting for host to start...";
+            mobileTurnIndicator.textContent = "Lobby";
+            if (myId === hostId) {
+                startGameBtn.classList.remove('hidden');
+                mobileStartGameBtn.classList.remove('hidden');
+                turnIndicator.textContent = "You are the host. Start the game when ready.";
             }
+            break;
+        case 'class_selection':
+            // Class selection is now handled by the beginClassSelection event, which calls renderSetupChoices directly.
+            // This case can be a fallback or show a waiting message.
             break;
         case 'started':
             playerStatsContainer.classList.remove('hidden');
             mobilePlayerStats.classList.remove('hidden');
+            gameBoardDiv.classList.remove('hidden');
+            mobileBoardCards.classList.remove('hidden');
+            playerHandDiv.classList.remove('hidden');
+            mobilePlayerHand.classList.remove('hidden');
             renderGameplayState(room);
             if (isMyTurn && !isMyTurnPreviously) {
                  addToModalQueue(() => {
@@ -997,6 +950,22 @@ socket.on('joinSuccess', (room) => {
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 
 socket.on('playerListUpdate', (room) => renderUIForPhase(room));
+
+// NEW HANDLER: This decouples class selection rendering from the main update loop.
+socket.on('beginClassSelection', ({ classData }) => {
+    // Show the appropriate containers
+    [classSelectionDiv, mobileClassSelection].forEach(el => el.classList.remove('hidden'));
+    
+    if (myPlayerInfo.role === 'DM') {
+        playerStatsContainer.classList.remove('hidden');
+        playerStatsContainer.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
+        mobilePlayerStats.classList.remove('hidden');
+        mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
+    } else {
+        renderSetupChoices(classData);
+    }
+});
+
 
 socket.on('gameStarted', (room) => {
     renderUIForPhase(room);
@@ -1387,8 +1356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else showInfoToast('Please enter a player name and a room code.', 'error');
     });
 
-    lobbyStartGameBtn.addEventListener('click', () => socket.emit('startGame'));
-    lobbyLeaveRoomBtn.addEventListener('click', () => window.location.reload());
+    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('startGame')));
 
     [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
         if (tempSelectedClassId) {
