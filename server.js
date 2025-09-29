@@ -186,7 +186,10 @@ class GameManager {
             
             socket.join(roomId);
             this.socketToRoom[socket.id] = roomId; // Map socket to room for efficiency
-            socket.emit('joinSuccess', { room, classData: gameData.classes });
+            
+            // ARCHITECTURAL FIX: Attach class data directly to the room object.
+            room.classData = gameData.classes;
+            socket.emit('joinSuccess', room);
             this.emitGameState(roomId);
             return;
         }
@@ -197,7 +200,7 @@ class GameManager {
         socket.join(roomId);
         this.socketToRoom[socket.id] = roomId; // Map socket to room for efficiency
         
-        socket.emit('joinSuccess', { room });
+        socket.emit('joinSuccess', room);
         this.emitPlayerListUpdate(roomId);
     }
     
@@ -302,7 +305,9 @@ class GameManager {
 
         room.gameState.phase = 'class_selection';
         
-        io.to(room.id).emit('gameStarted', { room, classData: gameData.classes });
+        // ARCHITECTURAL FIX: Attach class data directly to the room object and emit the room.
+        room.classData = gameData.classes;
+        io.to(room.id).emit('gameStarted', room);
     }
 
     // --- 3.4. Player Setup (Class, Stats, Cards) ---

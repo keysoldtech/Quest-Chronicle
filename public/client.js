@@ -54,7 +54,7 @@ const iceServers = {
         { urls: 'stun:stun1.l.google.com:19302' }
     ]
 };
-let authoritativeClassData = {}; // This will hold the single source of truth for class data from the server.
+// ARCHITECTURAL FIX: Removed unreliable global variable. Data will now come directly from the room object.
 
 // --- 1.2. Static Data (Visuals) ---
 const statVisuals = {
@@ -619,7 +619,11 @@ function renderClassSelection(room) {
 
     [classCardsContainer, mobileClassCardsContainer].forEach(container => {
         container.innerHTML = '';
-        for (const [classId, data] of Object.entries(authoritativeClassData)) {
+        if (!room.classData) {
+            container.innerHTML = `<p class="empty-pool-text">Loading classes...</p>`;
+            return;
+        }
+        for (const [classId, data] of Object.entries(room.classData)) {
            const card = document.createElement('div');
            card.className = 'class-card';
            card.dataset.classId = classId;
@@ -713,7 +717,7 @@ function renderGameplayState(room) {
         mobilePlayerClassName.textContent = `The ${myPlayerInfo.class}`;
         [playerClassName, mobilePlayerClassName].forEach(el => el.classList.remove('hidden'));
         
-        const ability = authoritativeClassData[myPlayerInfo.class]?.ability;
+        const ability = room.classData?.[myPlayerInfo.class]?.ability;
         if (ability) {
             let canUse = myPlayerInfo.currentAp >= ability.apCost;
             if (myPlayerInfo.class === 'Barbarian' || myPlayerInfo.class === 'Warrior') {
@@ -998,18 +1002,15 @@ socket.on('roomCreated', (room) => {
     document.body.classList.add('in-game');
     renderUIForPhase(room);
 });
-socket.on('joinSuccess', (data) => {
-    const room = data.room || data;
-    if (data.classData) authoritativeClassData = data.classData;
+socket.on('joinSuccess', (room) => {
     document.body.classList.add('in-game');
     renderUIForPhase(room);
 });
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 
 socket.on('playerListUpdate', (room) => renderUIForPhase(room));
-socket.on('gameStarted', (data) => {
-    authoritativeClassData = data.classData;
-    renderUIForPhase(data.room);
+socket.on('gameStarted', (room) => {
+    renderUIForPhase(room);
 });
 socket.on('gameStateUpdate', (room) => renderUIForPhase(room));
 socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
