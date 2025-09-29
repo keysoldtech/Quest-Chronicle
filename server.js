@@ -159,56 +159,27 @@ class GameManager {
             return;
         }
 
-        // --- LATE JOIN LOGIC ---
-        if (room.gameState.phase !== 'lobby' && room.gameState.phase !== 'class_selection') {
-            const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
-            if (humanPlayers.length >= 5) {
-                socket.emit('actionError', 'This room is full of human players.');
-                return;
-            }
+        // SIMPLIFIED LOGIC: Reject joins to games that are in-progress or already have a player.
+        if (room.gameState.phase !== 'class_selection') {
+            socket.emit('actionError', 'This game has already started.');
+            return;
+        }
 
-            const npcToReplace = 
-                Object.values(room.players).find(p => p.isNpc && p.role === 'Explorer') || 
-                Object.values(room.players).find(p => p.isNpc && p.role === 'DM');
-
-            if (!npcToReplace) {
-                socket.emit('actionError', 'This room is full and cannot be joined.');
-                return;
-            }
-
-            const newPlayer = this.createPlayerObject(socket.id, playerName);
-            newPlayer.role = npcToReplace.role;
-            
-            this.sendMessageToRoom(roomId, {
-                channel: 'game',
-                type: 'system',
-                message: `<b>${playerName}</b> has joined the game, taking over for the NPC <b>${npcToReplace.name}</b>!`
-            });
-            
-            delete room.players[npcToReplace.id];
-            room.players[socket.id] = newPlayer;
-
-            const turnIndex = room.gameState.turnOrder.indexOf(npcToReplace.id);
-            if (turnIndex > -1) {
-                room.gameState.turnOrder[turnIndex] = socket.id;
-            }
-            
-            socket.join(roomId);
-            this.socketToRoom[socket.id] = roomId; // Map socket to room for efficiency
-            
-            socket.emit('joinSuccess', room);
-            this.emitGameState(roomId);
+        const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
+        if (humanPlayers.length >= 1) {
+            socket.emit('actionError', 'This room is for a single player only.');
             return;
         }
         
-        // --- ORIGINAL LOBBY JOIN LOGIC ---
+        // --- Standard Join Logic ---
         const newPlayer = this.createPlayerObject(socket.id, playerName);
+        newPlayer.role = 'Explorer';
         room.players[socket.id] = newPlayer;
         socket.join(roomId);
-        this.socketToRoom[socket.id] = roomId; // Map socket to room for efficiency
+        this.socketToRoom[socket.id] = roomId;
         
         socket.emit('joinSuccess', room);
-        this.emitPlayerListUpdate(roomId);
+        this.emitGameState(roomId);
     }
     
     createPlayerObject(id, name) {
@@ -274,8 +245,6 @@ class GameManager {
     
         // Since this is single-player, start immediately after class selection
         this._completeSetupAndStartGame(room);
-        // Inform the room that a player has selected a class (for UI sync)
-        io.to(room.id).emit('roomUpdate', room);
     }
     
     calculatePlayerStats(player) {

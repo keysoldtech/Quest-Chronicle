@@ -5,7 +5,6 @@
 // and the spinner animation logic for dice rolls.
 
 const socket = io(); // Must be global
-let currentRoom = null;
 let selectedGameMode = null; // Keep mode selection global
 
 // --- INDEX ---
@@ -157,7 +156,7 @@ function main() {
 // --- 1.1. State Variables ---
 let myPlayerInfo = {};
 let myId = '';
-let currentRoomState = {};
+let currentRoomState = {}; // The single source of truth for game state
 let localStream;
 const peerConnections = {};
 let selectedTargetId = null;
@@ -260,7 +259,7 @@ function openNarrativeModal(actionData, cardName) {
 
 function closeNarrativeModal() {
     const narrativeModal = document.getElementById('narrative-modal');
-    pendingActionData = null; narrativeModal.classList.add('hidden'); selectedWeaponId = null; selectedTargetId = null; if (currentRoomState.id) { renderUIForPhase(currentRoomState); } finishModal();
+    pendingActionData = null; narrativeModal.classList.add('hidden'); selectedWeaponId = null; selectedTargetId = null; if (currentRoomState.id) { renderUIForPhase(); } finishModal();
 }
 
 // --- 3. RENDERING LOGIC ---
@@ -320,21 +319,30 @@ function renderGameplayState(room) {
     else { [playerClassName, mobilePlayerClassName, classAbilityCard, mobileClassAbilityCard].forEach(el => el.classList.add('hidden')); }
     const playerStatsDiv = get('player-stats'), mobileStatsDisplay = get('mobile-stats-display');
     if (myPlayerInfo.stats && myPlayerInfo.class) { const pStats = myPlayerInfo.stats; const statsOrder = ['hp', 'ap', 'damageBonus', 'shieldBonus', 'healthDice', 'lifeCount', 'shieldHp', 'str', 'dex', 'con', 'int', 'wis', 'cha']; const statsToDisplay = []; statsOrder.forEach(key => { const visual = statVisuals[key]; if (!visual) return; let label, value; switch(key) { case 'hp': label = "HP"; value = `${pStats.currentHp} / ${pStats.maxHp}`; break; case 'ap': label = "AP"; value = `${myPlayerInfo.currentAp} / ${pStats.ap}`; break; case 'damageBonus': label = "DMG Bonus"; value = pStats.damageBonus; break; case 'shieldBonus': label = "SHIELD Bonus"; value = pStats.shieldBonus; break; case 'healthDice': label = "Health Dice"; value = `${myPlayerInfo.healthDice.current}d${myPlayerInfo.healthDice.max}`; break; case 'lifeCount': label = "Lives"; value = myPlayerInfo.lifeCount; break; case 'shieldHp': if (pStats.shieldHp <= 0) return; label = "Shield HP"; value = pStats.shieldHp; break; default: label = key.toUpperCase(); value = pStats[key]; } statsToDisplay.push(`<div class="stat-line"><span class="material-symbols-outlined" style="color: ${visual.color};">${visual.icon}</span> <span class="stat-label">${label}:</span> <span class="stat-value">${value}</span></div>`); }); const statsHTML = statsToDisplay.join(''); [playerStatsDiv, mobileStatsDisplay].forEach(el => el.innerHTML = statsHTML); }
-    [get('equipped-items'), get('mobile-equipped-items')].forEach(container => { container.innerHTML = ''; const weapon = myPlayerInfo.equipment.weapon; if (weapon) { const cardEl = createCardElement(weapon, {}); if (isMyTurn) { cardEl.classList.add('attackable-weapon'); if (weapon.id === selectedWeaponId) cardEl.classList.add('selected-weapon'); cardEl.onclick = (e) => { e.stopPropagation(); selectedWeaponId = (selectedWeaponId === weapon.id) ? null : weapon.id; selectedTargetId = null; renderUIForPhase(currentRoomState); }; } container.appendChild(cardEl); } else { const fistsCard = document.createElement('div'); fistsCard.className = 'card'; fistsCard.dataset.cardId = 'unarmed'; fistsCard.innerHTML = `<div class="card-content"><h3 class="card-title">Fists</h3><p class="card-effect">A basic unarmed strike. Costs 1 AP. Damage is based on your Strength.</p></div><div class="card-footer"><p class="card-type">Unarmed</p></div>`; if (isMyTurn) { fistsCard.classList.add('attackable-weapon'); if ('unarmed' === selectedWeaponId) fistsCard.classList.add('selected-weapon'); fistsCard.onclick = (e) => { e.stopPropagation(); selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed'; selectedTargetId = null; renderUIForPhase(currentRoomState); }; } container.appendChild(fistsCard); } if (myPlayerInfo.equipment.armor) { container.appendChild(createCardElement(myPlayerInfo.equipment.armor, {})); } });
+    [get('equipped-items'), get('mobile-equipped-items')].forEach(container => { container.innerHTML = ''; const weapon = myPlayerInfo.equipment.weapon; if (weapon) { const cardEl = createCardElement(weapon, {}); if (isMyTurn) { cardEl.classList.add('attackable-weapon'); if (weapon.id === selectedWeaponId) cardEl.classList.add('selected-weapon'); cardEl.onclick = (e) => { e.stopPropagation(); selectedWeaponId = (selectedWeaponId === weapon.id) ? null : weapon.id; selectedTargetId = null; renderUIForPhase(); }; } container.appendChild(cardEl); } else { const fistsCard = document.createElement('div'); fistsCard.className = 'card'; fistsCard.dataset.cardId = 'unarmed'; fistsCard.innerHTML = `<div class="card-content"><h3 class="card-title">Fists</h3><p class="card-effect">A basic unarmed strike. Costs 1 AP. Damage is based on your Strength.</p></div><div class="card-footer"><p class="card-type">Unarmed</p></div>`; if (isMyTurn) { fistsCard.classList.add('attackable-weapon'); if ('unarmed' === selectedWeaponId) fistsCard.classList.add('selected-weapon'); fistsCard.onclick = (e) => { e.stopPropagation(); selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed'; selectedTargetId = null; renderUIForPhase(); }; } container.appendChild(fistsCard); } if (myPlayerInfo.equipment.armor) { container.appendChild(createCardElement(myPlayerInfo.equipment.armor, {})); } });
     [get('player-hand'), get('mobile-player-hand')].forEach(container => { container.innerHTML = ''; myPlayerInfo.hand.forEach(card => { const isEquippable = card.type === 'Weapon' || card.type === 'Armor'; const cardEl = createCardElement(card, { isPlayable: isMyTurn && !isEquippable, isEquippable }); container.appendChild(cardEl); }); });
     [get('board-cards'), get('mobile-board-cards')].forEach(container => { container.innerHTML = ''; if (gameState.board.monsters.length > 0) { gameState.board.monsters.forEach(monster => { const cardEl = createCardElement(monster, { isTargetable: isMyTurn }); cardEl.onclick = () => { if (!isMyTurn || isStunned) return; if (!selectedWeaponId) return showInfoToast("Select your weapon or fists first.", 'error'); selectedTargetId = monster.id; const weapon = myPlayerInfo.equipment.weapon; const isUnarmed = selectedWeaponId === 'unarmed'; const apCost = isUnarmed ? 1 : (weapon?.apCost || 2); if (myPlayerInfo.currentAp < apCost) return showInfoToast(`Not enough AP. Needs ${apCost}.`, 'error'); openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, isUnarmed ? 'Fists' : weapon.name); }; container.appendChild(cardEl); }); } else { container.innerHTML = '<p class="empty-pool-text">The board is clear of enemies.</p>'; } });
 }
 
-function renderUIForPhase(room) {
-    currentRoomState = room; myPlayerInfo = room.players[myId]; if (!myPlayerInfo) { console.warn("My player info not found, waiting for next update."); return; }
-    const { players, gameState } = room; 
+function renderUIForPhase() {
+    if (!currentRoomState || !currentRoomState.id) {
+        console.warn("RenderUI called without a valid room state.");
+        return;
+    }
+    myPlayerInfo = currentRoomState.players[myId]; 
+    if (!myPlayerInfo) { 
+        console.warn("My player info not found in current room state, waiting for next update."); 
+        return; 
+    }
+
+    const { players, gameState } = currentRoomState; 
     const get = id => document.getElementById(id);
 
+    // Always render common elements
     renderPlayerList(players, gameState, get('player-list'), get('game-lobby-settings-display')); 
     renderPlayerList(players, gameState, get('mobile-player-list'), get('mobile-game-lobby-settings-display'));
-    
-    get('room-code').textContent = room.id; 
-    get('mobile-room-code').textContent = room.id; 
+    get('room-code').textContent = currentRoomState.id; 
+    get('mobile-room-code').textContent = currentRoomState.id; 
     if (get('turn-counter')) get('turn-counter').textContent = gameState.turnCount; 
 
     const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex]; 
@@ -343,65 +351,86 @@ function renderUIForPhase(room) {
     
     let turnText = 'Waiting...'; 
     if (turnTaker) { 
-        if (turnTaker.role === 'DM') turnText = "Dungeon Master's Turn"; 
-        else turnText = `Turn: ${turnTaker.name}`; 
+        turnText = turnTaker.role === 'DM' ? "Dungeon Master's Turn" : `Turn: ${turnTaker.name}`; 
         if(isMyTurn) turnText += ' (Your Turn)'; 
     } else if (gameState.phase === 'class_selection') { 
-        turnText = "Waiting for players..."; 
+        turnText = "Waiting for players to choose a class..."; 
     }
     
     get('turn-indicator').textContent = turnText; 
     get('mobile-turn-indicator').textContent = isMyTurn ? "Your Turn" : turnTaker?.name || "Waiting...";
-    
     [get('ap-counter-desktop'), get('ap-counter-mobile')].forEach(el => { el.classList.toggle('hidden', !isMyTurn || gameState.phase !== 'started'); if (isMyTurn && myPlayerInfo.stats.ap) { el.innerHTML = `<span class="material-symbols-outlined">bolt</span> AP: ${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}`; } });
     
     [get('world-events-container'), get('mobile-world-events-container')].forEach(c => { c.innerHTML = gameState.worldEvents.currentEvent ? '' : '<p class="empty-pool-text">No active world event.</p>'; if (gameState.worldEvents.currentEvent) c.appendChild(createCardElement(gameState.worldEvents.currentEvent)); });
     [get('party-event-container'), get('mobile-party-event-container')].forEach(c => { c.innerHTML = gameState.currentPartyEvent ? '' : '<p class="empty-pool-text">No active party event.</p>'; if (gameState.currentPartyEvent) c.appendChild(createCardElement(gameState.currentPartyEvent)); });
     [get('party-loot-container'), get('mobile-party-loot-container')].forEach(c => { c.innerHTML = ''; if (gameState.lootPool && gameState.lootPool.length > 0) { gameState.lootPool.forEach(card => c.appendChild(createCardElement(card, {}))); } else { c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>'; } });
     
-    const elementsToHide = [get('class-selection'), get('player-stats-container'), get('mobile-class-selection'), get('mobile-player-stats'), get('board-cards'), get('mobile-board-cards'), get('player-hand'), get('mobile-player-hand'), get('fixed-action-bar'), get('mobile-action-bar')];
+    // Phase-specific rendering logic
+    const desktopPanels = {
+        class: get('class-selection'),
+        stats: get('player-stats-container'),
+    };
+    const mobileScreens = {
+        game: get('mobile-screen-game'),
+        character: get('mobile-screen-character'),
+        party: get('mobile-screen-party'),
+        info: get('mobile-screen-info'),
+        log: get('mobile-screen-log'),
+    };
+    const mobileNavs = {
+        game: get('mobile-bottom-nav').querySelector('[data-screen="game"]'),
+        character: get('mobile-bottom-nav').querySelector('[data-screen="character"]'),
+        party: get('mobile-bottom-nav').querySelector('[data-screen="party"]'),
+        info: get('mobile-bottom-nav').querySelector('[data-screen="info"]'),
+        log: get('mobile-bottom-nav').querySelector('[data-screen="log"]'),
+    };
 
     switch (gameState.phase) {
-        case 'lobby': 
-            get('turn-indicator').textContent = "Waiting in lobby..."; 
-            get('mobile-turn-indicator').textContent = "Lobby"; 
-            elementsToHide.forEach(el => el.classList.add('hidden')); 
+        case 'class_selection':
+            desktopPanels.stats.classList.add('hidden');
+            desktopPanels.class.classList.remove('hidden');
+            if (myPlayerInfo.class) { // If I have chosen a class, show waiting message
+                desktopPanels.class.innerHTML = `<h2 class="panel-header">Class Chosen!</h2><p style="padding: 1rem; text-align: center;">Waiting for game to start...</p>`;
+            } else {
+                showClassSelectionUI(gameState.classData);
+            }
+            // Force mobile view to character screen
+            Object.values(mobileScreens).forEach(s => s.classList.remove('active'));
+            Object.values(mobileNavs).forEach(n => n.classList.remove('active'));
+            mobileScreens.character.classList.add('active');
+            mobileNavs.character.classList.add('active');
             break;
-        case 'class_selection': 
-            elementsToHide.forEach(el => el.classList.add('hidden')); 
-            if (myPlayerInfo.role === 'DM') { 
-                get('class-selection').classList.add('hidden'); 
-                get('player-stats-container').classList.remove('hidden'); 
-                get('player-stats-container').innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`; 
-                get('mobile-class-selection').classList.add('hidden'); 
-                get('mobile-player-stats').classList.remove('hidden'); 
-                get('mobile-player-stats').innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`; 
-            } else { 
-                showClassSelectionUI(room.gameState.classData); 
-            } 
+            
+        case 'started':
+            desktopPanels.class.classList.add('hidden');
+            desktopPanels.stats.classList.remove('hidden');
+            renderGameplayState(currentRoomState);
+            // On game start, ensure mobile view defaults to game screen
+            if (isMyTurnPreviously === false) { // only do this once on transition to 'started'
+                Object.values(mobileScreens).forEach(s => s.classList.remove('active'));
+                Object.values(mobileNavs).forEach(n => n.classList.remove('active'));
+                mobileScreens.game.classList.add('active');
+                mobileNavs.game.classList.add('active');
+                switchTab('game-log-tab');
+            }
             break;
-        case 'started': 
-            get('board-cards').classList.remove('hidden'); 
-            get('mobile-board-cards').classList.remove('hidden'); 
-            get('player-hand').classList.remove('hidden'); 
-            get('mobile-player-hand').classList.remove('hidden'); 
-            get('class-selection').classList.add('hidden'); 
-            get('mobile-class-selection').classList.add('hidden'); 
-            get('player-stats-container').classList.remove('hidden'); 
-            get('mobile-player-stats').classList.remove('hidden'); 
-            renderGameplayState(room); 
-            if (isMyTurn && !isMyTurnPreviously) { 
-                addToModalQueue(() => { 
-                    const yourTurnPopup = get('your-turn-popup');
-                    yourTurnPopup.classList.remove('hidden'); 
-                    const timeoutId = setTimeout(() => { yourTurnPopup.classList.add('hidden'); finishModal(); }, 2500); 
-                    currentSkipHandler = () => { clearTimeout(timeoutId); yourTurnPopup.classList.add('hidden'); finishModal(); }; 
-                }, 'your-turn-popup'); 
-            } 
-            break;
-        default: console.error("Unknown in-game phase:", gameState.phase);
+
+        default: 
+            console.error("Unknown game phase:", gameState.phase);
     }
+    
+    // Your Turn popup logic
+    if (gameState.phase === 'started' && isMyTurn && !isMyTurnPreviously) { 
+        addToModalQueue(() => { 
+            const yourTurnPopup = get('your-turn-popup');
+            yourTurnPopup.classList.remove('hidden'); 
+            const timeoutId = setTimeout(() => { yourTurnPopup.classList.add('hidden'); finishModal(); }, 2500); 
+            currentSkipHandler = () => { clearTimeout(timeoutId); yourTurnPopup.classList.add('hidden'); finishModal(); }; 
+        }, 'your-turn-popup'); 
+    } 
     isMyTurnPreviously = isMyTurn;
+
+    // Event roll logic
     if (isMyTurn && myPlayerInfo.pendingEventRoll) { 
         addToModalQueue(() => { 
             const diceRollOverlay = get('dice-roll-overlay');
@@ -476,12 +505,15 @@ function selectClass(classId) {
     });
 }
 
+function updateAndRender(roomData) {
+    currentRoomState = roomData;
+    renderUIForPhase();
+}
 
 socket.on('connect', () => { myId = socket.id; });
 
 socket.on('roomCreated', (roomData) => {
     console.log('Room created:', roomData);
-    currentRoom = roomData;
     showInfoToast(`Room created! Code: ${roomData.id}`, 'success');
 
     const menuScreen = document.getElementById('menu-screen');
@@ -489,44 +521,24 @@ socket.on('roomCreated', (roomData) => {
     menuScreen.classList.remove('active');
     gameScreen.classList.add('active');
     
-    // CRITICAL FIX: Initialize all game UI listeners for tabs/buttons
     initializeGameUIListeners(); 
-
-    // CHECK STATE: If the server confirms we are in class selection, switch the UI
-    if (roomData.gameState.phase === 'class_selection' && roomData.availableClasses) {
-        
-        // 1. Force the UI to switch to the Character tab/screen
-        const get = id => document.getElementById(id);
-        // Deactivate all buttons and screens first
-        get('mobile-bottom-nav').querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active'));
-        // Activate the target button and screen
-        const navBtn = get('mobile-bottom-nav').querySelector(`.nav-btn[data-screen="character"]`);
-        if (navBtn) navBtn.classList.add('active');
-        const screenEl = get(`mobile-screen-character`);
-        if (screenEl) screenEl.classList.add('active');
-        
-        // 2. RENDER the class cards
-        showClassSelectionUI(roomData.availableClasses); 
-        
-    } else {
-        // Default to game content if the phase is anything else
-        const get = id => document.getElementById(id);
-        get('mobile-bottom-nav').querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-        get('mobile-bottom-nav').querySelector('.nav-btn[data-screen="game"]').classList.add('active');
-        document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active'));
-        get('mobile-screen-game').classList.add('active');
-        switchTab('game-log-tab');
-    }
-
-    renderUIForPhase(roomData);
+    updateAndRender(roomData);
 });
 
-socket.on('joinSuccess', (roomData) => { console.log('Joined room:', roomData); currentRoom = roomData; const menuScreen = document.getElementById('menu-screen'); const gameScreen = document.getElementById('game-screen'); menuScreen.classList.remove('active'); gameScreen.classList.add('active'); initializeGameUIListeners(); renderUIForPhase(roomData); });
+socket.on('joinSuccess', (roomData) => { 
+    console.log('Joined room:', roomData); 
+    const menuScreen = document.getElementById('menu-screen'); 
+    const gameScreen = document.getElementById('game-screen'); 
+    menuScreen.classList.remove('active'); 
+    gameScreen.classList.add('active'); 
+    initializeGameUIListeners(); 
+    updateAndRender(roomData);
+});
+
+socket.on('gameStarted', updateAndRender);
+socket.on('gameStateUpdate', updateAndRender);
+
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
-socket.on('playerListUpdate', (room) => renderUIForPhase(room));
-socket.on('gameStarted', (roomData) => { console.log('Game started!', roomData); currentRoom = roomData; renderUIForPhase(roomData); });
-socket.on('gameStateUpdate', (room) => renderUIForPhase(room));
 socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
 socket.on('actionError', (message) => { console.error('Action error:', message); showInfoToast(message, 'error'); });
 socket.on('attackAnimation', (data) => {
