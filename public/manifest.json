@@ -1,0 +1,26 @@
+{
+  "name": "Quest & Chronicle",
+  "short_name": "Q&C",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#12181b",
+  "theme_color": "#1a2226",
+  "description": "A multiplayer digital prototype for the Quest & Chronicle card game.",
+  "icons": [
+    {
+      "src": "/dragon-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
