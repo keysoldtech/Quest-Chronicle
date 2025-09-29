@@ -30,6 +30,18 @@ let selectedGameMode = null; // Keep mode selection global
 // 8.  MENU & CLASS SELECTION (Handled in main())
 // 9.  INITIALIZATION (main())
 
+function switchTab(targetId) {
+    const desktopTabContainer = document.querySelector('.info-tabs-panel');
+    if (!desktopTabContainer) return;
+
+    desktopTabContainer.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === targetId);
+    });
+    desktopTabContainer.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === targetId);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', main);
 
 function main() {
@@ -131,6 +143,17 @@ function main() {
 
     // --- Attach all other non-menu event listeners ---
     attachGlobalEventListeners();
+    
+    // --- FINAL UI LISTENERS: TAB SWITCHING ---
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const targetId = e.currentTarget.getAttribute('data-tab');
+            if (targetId) {
+                switchTab(targetId); 
+            }
+        });
+    });
 }
 
 // --- 1. CLIENT STATE & SETUP ---
@@ -458,7 +481,21 @@ function selectClass(classId) {
 
 
 socket.on('connect', () => { myId = socket.id; });
-socket.on('roomCreated', (roomData) => { console.log('Room created:', roomData); currentRoom = roomData; alert(`Room created! Code: ${roomData.id}`); const menuScreen = document.getElementById('menu-screen'); const gameScreen = document.getElementById('game-screen'); menuScreen.classList.remove('active'); gameScreen.classList.add('active'); if (roomData.gameState.phase === 'class_selection') { renderUIForPhase(roomData); } });
+socket.on('roomCreated', (roomData) => {
+    console.log('Room created:', roomData);
+    currentRoom = roomData;
+    showInfoToast(`Room created! Code: ${roomData.id}`, 'success');
+
+    const menuScreen = document.getElementById('menu-screen');
+    const gameScreen = document.getElementById('game-screen');
+    menuScreen.classList.remove('active');
+    gameScreen.classList.add('active');
+    
+    if (roomData.gameState.phase === 'class_selection') {
+        showClassSelectionUI(roomData.gameState.classData);
+    }
+    renderUIForPhase(roomData);
+});
 socket.on('joinSuccess', (roomData) => { console.log('Joined room:', roomData); currentRoom = roomData; const menuScreen = document.getElementById('menu-screen'); const gameScreen = document.getElementById('game-screen'); menuScreen.classList.remove('active'); gameScreen.classList.add('active'); renderUIForPhase(roomData); });
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 socket.on('playerListUpdate', (room) => renderUIForPhase(room));
@@ -502,8 +539,7 @@ function attachGlobalEventListeners() {
     get('dm-play-monster-btn').addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
 
     get('mobile-bottom-nav').addEventListener('click', (e) => { const navBtn = e.target.closest('.nav-btn'); if (!navBtn || !navBtn.dataset.screen) return; get('mobile-bottom-nav').querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active')); navBtn.classList.add('active'); navBtn.classList.remove('highlight'); const screenId = `mobile-screen-${navBtn.dataset.screen}`; document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active')); get(screenId).classList.add('active'); });
-    document.querySelectorAll('.game-area-desktop .tab-btn').forEach(button => { button.addEventListener('click', () => { document.querySelectorAll('.game-area-desktop .tab-btn').forEach(btn => btn.classList.remove('active')); button.classList.add('active'); button.classList.remove('highlight'); document.querySelectorAll('.game-area-desktop .tab-content').forEach(content => content.classList.remove('active')); get(button.dataset.tab).classList.add('active'); }); });
-
+    
     get('chat-toggle-btn').addEventListener('click', () => { get('chat-overlay').classList.toggle('hidden'); get('menu-dropdown').classList.add('hidden'); get('menu-toggle-btn').innerHTML = `<span class="material-symbols-outlined">menu</span>`; });
     get('chat-close-btn').addEventListener('click', () => get('chat-overlay').classList.add('hidden'));
     get('chat-form').addEventListener('submit', (e) => { e.preventDefault(); const message = get('chat-input').value.trim(); if (message) { socket.emit('sendMessage', { channel: get('chat-channel').value, message }); get('chat-input').value = ''; } });
