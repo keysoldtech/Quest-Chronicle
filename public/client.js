@@ -13,11 +13,14 @@
 //     - 2.1. Toast Notifications
 //     - 2.2. Modal & Queue Management
 //     - 2.3. Logging
-// 3.  RENDERING LOGIC
+// 3.  RENDERING LOGIC (REFACTORED)
 //     - 3.1. createCardElement()
 //     - 3.2. renderPlayerList()
-//     - 3.3. renderClassAbilityCard()
-//     - 3.4. renderGameState() (Main render function)
+//     - 3.3. renderLobby()
+//     - 3.4. renderClassSelection()
+//     - 3.5. renderAdvancedSetup()
+//     - 3.6. renderGameplayState()
+//     - 3.7. renderUIForPhase() (New main render router)
 // 4.  UI EVENT LISTENERS (ATTACHED VIA DOMContentLoaded)
 // 5.  SOCKET.IO EVENT HANDLERS
 // 6.  VOICE CHAT (WebRTC) LOGIC
@@ -31,7 +34,6 @@ const socket = io();
 let myPlayerInfo = {};
 let myId = '';
 let currentRoomState = {};
-let previousGamePhase = 'lobby'; // BUG FIX: Track previous phase to detect when setup finishes.
 let localStream;
 const peerConnections = {};
 let selectedTargetId = null; // For combat targeting
@@ -52,7 +54,7 @@ const iceServers = {
         { urls: 'stun:stun1.l.google.com:19302' }
     ]
 };
-let authoritativeClassData = {}; // BUG FIX: This will hold the single source of truth for class data from the server.
+let authoritativeClassData = {}; // This will hold the single source of truth for class data from the server.
 
 // --- 1.2. Static Data (Visuals) ---
 const statVisuals = {
@@ -312,7 +314,6 @@ function generate_random_attack_description() {
 
 // --- 2.2. Modal & Queue Management ---
 function processModalQueue() {
-    // BUG FIX: Prevent new modals from appearing while another action/animation is in progress.
     if (isModalActive || modalQueue.length === 0 || isPerformingAction) {
         return;
     }
@@ -390,13 +391,13 @@ function closeNarrativeModal() {
     selectedWeaponId = null;
     selectedTargetId = null;
     if (currentRoomState.id) {
-        renderGameState(currentRoomState);
+        renderUIForPhase(currentRoomState);
     }
     
     finishModal();
 }
 
-// --- 3. RENDERING LOGIC ---
+// --- 3. RENDERING LOGIC (REFACTORED) ---
 
 // --- 3.1. createCardElement() ---
 function createCardElement(card, actions = {}) {
@@ -428,7 +429,6 @@ function createCardElement(card, actions = {}) {
     else if (card.type === 'World Event' && card.tags) typeInfo = card.tags;
     
     let bonusesHTML = '';
-    // BUG FIX: Add optional chaining to prevent crash if a card has no effect or bonuses property.
     if (card.effect?.bonuses) {
         bonusesHTML = Object.entries(card.effect.bonuses).map(([key, value]) => {
             const visual = statVisuals[key];
@@ -525,7 +525,6 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
             })
             .join('');
         
-        // BUG FIX: Display "-- / --" for HP in lobby instead of "? / ?"
         const hpDisplay = gameState.phase === 'lobby'
             ? 'HP: -- / --'
             : `HP: ${player.stats.currentHp || '?'} / ${player.stats.maxHp || '?'}`;
@@ -559,142 +558,140 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
     }
 }
 
-// --- 3.3. renderClassAbilityCard() ---
-function renderClassAbilityCard(player, container) {
-    if (!player || !player.class) {
-        container.classList.add('hidden');
-        return;
-    }
-    // BUG FIX: Use the single source of truth for class data.
-    const ability = authoritativeClassData[player.class]?.ability;
-    if (!ability) {
-        container.classList.add('hidden');
-        return;
-    }
+// --- 3.3. renderLobby() ---
+function renderLobby(room) {
+    const { players, gameState, hostId } = room;
+    const isHost = myId === hostId;
 
-    let canUse = player.currentAp >= ability.apCost;
+    lobbyScreen.classList.remove('hidden');
+    gameArea.classList.add('hidden');
 
-    // POLISH: Add client-side check for Warrior/Barbarian ability requirements.
-    if (player.class === 'Barbarian' || player.class === 'Warrior') {
-        const hasSpellCard = player.hand.some(card => card.type === 'Spell');
-        if (!hasSpellCard) {
-            canUse = false;
-        }
-    }
+    // This function is for when we are sent back to the lobby,
+    // but for now, we just initialize it on page load.
+    // The main render function will take over once a room is joined.
+    renderPlayerList(players, gameState, playerList, lobbySettingsDisplay);
+    renderPlayerList(players, gameState, mobilePlayerList, mobileLobbySettingsDisplay);
     
-    container.innerHTML = `
-        <h3 class="sub-header-font">Class Ability</h3>
-        <p class="ability-title">${ability.name} (-${ability.apCost} AP)</p>
-        <p class="ability-desc">${ability.description}</p>
-        <button id="use-ability-btn" class="btn btn-special btn-sm" ${canUse ? '' : 'disabled'}>Use Ability</button>
-    `;
-    container.classList.remove('hidden');
-
-    get('use-ability-btn').onclick = () => {
-        socket.emit('playerAction', { action: 'useClassAbility' });
-    };
+    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.toggle('hidden', !isHost));
 }
 
-// --- 3.4. renderGameState() (Main render function) ---
-function renderGameState(room) {
-    // --- 3.4.1. State Update & Variable Setup ---
-    const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
-    const newGamePhase = room.gameState.phase;
-    currentRoomState = room;
-    const { players, gameState, hostId } = room;
-    myPlayerInfo = players[myId];
-    
-    if (!myPlayerInfo) {
-        console.warn("My player info not found in game state update. Aborting render.");
-        return;
+
+// --- 3.4. renderClassSelection() ---
+function renderClassSelection(room) {
+    const isExplorer = myPlayerInfo.role === 'Explorer';
+    if (!isExplorer || myPlayerInfo.class) return;
+
+    // Show relevant desktop panels
+    classSelectionDiv.classList.remove('hidden');
+    advancedCardChoiceDiv.classList.add('hidden');
+    playerStatsContainer.classList.add('hidden');
+
+    // Show relevant mobile panels
+    mobileClassSelection.classList.remove('hidden');
+    mobileAdvancedCardChoiceDiv.classList.add('hidden');
+    mobilePlayerStats.classList.add('hidden');
+
+    // Force mobile view to character screen
+    if (!get('mobile-screen-character').classList.contains('active')) {
+        document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+        get('mobile-screen-character').classList.add('active');
+        mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
     }
 
-    // BUG FIX: Detect when the setup phase ends and force the UI to the main game screen.
-    const setupPhases = ['class_selection', 'advanced_setup_choice', 'item_swap_resolution'];
-    if (setupPhases.includes(previousGamePhase) && newGamePhase === 'started') {
-        // Force the mobile view to the "Game" screen
-        document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
-        get('mobile-screen-game').classList.add('active');
-        mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        document.querySelector('.nav-btn[data-screen="game"]').classList.add('active');
-    }
-    previousGamePhase = newGamePhase;
-    
-    const newLootCount = gameState.lootPool?.length || 0;
-    
-    const isHost = myId === hostId;
-    const isDM = myPlayerInfo.role === 'DM';
+    [classCardsContainer, mobileClassCardsContainer].forEach(container => {
+        container.innerHTML = '';
+        for (const [classId, data] of Object.entries(authoritativeClassData)) {
+           const card = document.createElement('div');
+           card.className = 'class-card';
+           card.dataset.classId = classId;
+           card.innerHTML = `
+               <h3 class="class-card-title">${classId}</h3>
+               <p class="class-card-desc">${data.ability.description}</p>
+               <div class="class-card-stats">
+                   <span>STR:</span><span>${data.stats.str}</span>
+                   <span>DEX:</span><span>${data.stats.dex}</span>
+                   <span>CON:</span><span>${data.stats.con}</span>
+                   <span>INT:</span><span>${data.stats.int}</span>
+                   <span>WIS:</span><span>${data.stats.wis}</span>
+                   <span>CHA:</span><span>${data.stats.cha}</span>
+               </div>
+           `;
+           container.appendChild(card);
+       }
+       
+       container.querySelectorAll('.class-card').forEach(card => {
+           const classId = card.dataset.classId;
+           card.classList.toggle('selected', classId === tempSelectedClassId);
+           card.onclick = () => {
+               tempSelectedClassId = classId;
+               renderUIForPhase(currentRoomState);
+           };
+       });
+   });
+  [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => {
+       btn.classList.toggle('hidden', !tempSelectedClassId);
+       btn.disabled = false;
+       btn.textContent = 'Confirm Class';
+  });
+}
+
+// --- 3.5. renderAdvancedSetup() ---
+function renderAdvancedSetup(room) {
     const isExplorer = myPlayerInfo.role === 'Explorer';
-    const hasConfirmedClass = !!myPlayerInfo.class;
+    if (!isExplorer || myPlayerInfo.madeAdvancedChoice) return;
+
+    // Show relevant desktop panels
+    classSelectionDiv.classList.add('hidden');
+    advancedCardChoiceDiv.classList.remove('hidden');
+    playerStatsContainer.classList.add('hidden');
+    
+    // Show relevant mobile panels
+    mobileClassSelection.classList.add('hidden');
+    mobileAdvancedCardChoiceDiv.classList.remove('hidden');
+    mobilePlayerStats.classList.add('hidden');
+
+    // Force mobile view to character screen
+    if (!get('mobile-screen-character').classList.contains('active')) {
+        document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+        get('mobile-screen-character').classList.add('active');
+        mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
+    }
+
+    [advancedChoiceButtonsDiv, mobileAdvancedChoiceButtonsDiv].forEach(container => {
+        container.innerHTML = `
+            <button id="adv-choice-gear" class="btn btn-primary">Start with Gear</button>
+            <p class="subtitle-font" style="text-align:center;">Draw 1 Weapon & 1 Armor. Automatically equip the best ones.</p>
+            <button id="adv-choice-resources" class="btn btn-secondary">Start with Resources</button>
+            <p class="subtitle-font" style="text-align:center;">Draw 2 Items & 1 Spell.</p>
+        `;
+        container.querySelector('#adv-choice-gear').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'gear' });
+        container.querySelector('#adv-choice-resources').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'resources' });
+    });
+}
+
+
+// --- 3.6. renderGameplayState() ---
+function renderGameplayState(room) {
+    const { players, gameState } = room;
+    const isExplorer = myPlayerInfo.role === 'Explorer';
     const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
     const isMyTurn = currentTurnTakerId === myId;
     const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
     const challenge = gameState.skillChallenge;
-    const isDuringSetup = setupPhases.includes(gameState.phase);
 
-    // --- 3.4.2. Highlight Tabs & Player List ---
-    const worldEventTab = document.querySelector('[data-tab="world-events-tab"]');
-    if (myPlayerInfo.pendingWorldEventSave) worldEventTab.classList.add('highlight');
-    const partyEventTab = document.querySelector('[data-tab="party-events-tab"]');
-    if(gameState.currentPartyEvent) partyEventTab.classList.add('highlight');
-    const partyLootTab = document.querySelector('[data-tab="party-loot-tab"]');
-    if (newLootCount > oldLootCount) partyLootTab.classList.add('highlight');
-    const mobileInfoTab = document.querySelector('.nav-btn[data-screen="info"]');
-    if (myPlayerInfo.pendingWorldEventSave || newLootCount > oldLootCount || gameState.currentPartyEvent) {
-        mobileInfoTab.classList.add('highlight');
-    }
-
-    renderPlayerList(players, gameState, playerList, lobbySettingsDisplay);
-    renderPlayerList(players, gameState, mobilePlayerList, mobileLobbySettingsDisplay);
+    // Hide all setup panels
+    [classSelectionDiv, advancedCardChoiceDiv, mobileClassSelection, mobileAdvancedCardChoiceDiv].forEach(el => el.classList.add('hidden'));
     
-    // --- 3.4.3. Phase-Specific UI Toggling (Lobby, Class Selection, etc.) ---
-    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.toggle('hidden', !isHost || gameState.phase !== 'lobby'));
-    [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.classList.toggle('hidden', gameState.phase === 'lobby'));
-    
-    classSelectionDiv.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || !isExplorer);
-    advancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice || !isExplorer);
-    playerStatsContainer.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
-    dmControls.classList.toggle('hidden', !isDM || !isMyTurn);
-    customSettingsPanel.classList.toggle('hidden', !(gameState.phase === 'lobby' && document.querySelector('input[name="gameMode"]:checked').value === 'Custom'));
+    // Show gameplay panels
+    playerStatsContainer.classList.toggle('hidden', !isExplorer);
+    mobilePlayerStats.classList.toggle('hidden', !isExplorer);
 
-    // --- Mobile: Handle Character Screen visibility during setup ---
-    const inMobileSetupPhase = (gameState.phase === 'class_selection' || gameState.phase === 'advanced_setup_choice') && isExplorer;
-    if (inMobileSetupPhase && !myPlayerInfo.madeAdvancedChoice && !myPlayerInfo.class) {
-        if (!get('mobile-screen-character').classList.contains('active')) {
-             document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
-             get('mobile-screen-character').classList.add('active');
-             mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-             document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
-        }
-    }
-    mobileClassSelection.classList.toggle('hidden', gameState.phase !== 'class_selection' || hasConfirmedClass || !isExplorer);
-    mobileAdvancedCardChoiceDiv.classList.toggle('hidden', gameState.phase !== 'advanced_setup_choice' || myPlayerInfo.madeAdvancedChoice || !isExplorer);
-    mobilePlayerStats.classList.toggle('hidden', !hasConfirmedClass || !isExplorer);
-    
-    if (gameState.phase === 'advanced_setup_choice' && !myPlayerInfo.madeAdvancedChoice) {
-        [advancedChoiceButtonsDiv, mobileAdvancedChoiceButtonsDiv].forEach(container => {
-            container.innerHTML = `
-                <button id="adv-choice-gear" class="btn btn-primary">Start with Gear</button>
-                <p class="subtitle-font" style="text-align:center;">Draw 1 Weapon & 1 Armor. Automatically equip the best ones.</p>
-                <button id="adv-choice-resources" class="btn btn-secondary">Start with Resources</button>
-                <p class="subtitle-font" style="text-align:center;">Draw 2 Items & 1 Spell.</p>
-            `;
-            container.querySelector('#adv-choice-gear').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'gear' });
-            container.querySelector('#adv-choice-resources').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'resources' });
-        });
-    }
-
-    // --- 3.4.4. Action Bar & Turn Indicators ---
-    const showActionBar = isMyTurn && isExplorer && !isStunned && !isDuringSetup;
+    // Render action bars
+    const showActionBar = isMyTurn && isExplorer && !isStunned;
     fixedActionBar.classList.toggle('hidden', !showActionBar);
     mobileActionBar.classList.toggle('hidden', !showActionBar);
-    [apCounterDesktop, apCounterMobile].forEach(el => {
-        el.classList.toggle('hidden', !isMyTurn || isDuringSetup);
-        if (isMyTurn && myPlayerInfo.stats.ap) {
-            el.innerHTML = `<span class="material-symbols-outlined">bolt</span> AP: ${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}`;
-        }
-    });
-
     if (showActionBar) {
         const canGuard = myPlayerInfo.currentAp >= 1;
         const canBriefRespite = myPlayerInfo.currentAp >= 1 && myPlayerInfo.healthDice.current > 0;
@@ -712,28 +709,232 @@ function renderGameState(room) {
         mobileActionFullRestBtn.disabled = !canFullRest;
     }
 
-    // --- 3.4.5. Pending Action Modals & Popups ---
-    if (isMyTurn && !isMyTurnPreviously && !isPerformingAction) {
-        pendingAbilityConfirmation = null;
-        selectedWeaponId = null;
-        selectedTargetId = null;
-        pendingActionData = null;
-        addToModalQueue(() => {
-            yourTurnPopup.classList.remove('hidden');
-            const timeoutId = setTimeout(() => {
-                yourTurnPopup.classList.add('hidden');
-                finishModal();
-            }, 2500);
+    // Render Character Sheet
+    if (myPlayerInfo.class && isExplorer) {
+        playerClassName.textContent = `The ${myPlayerInfo.class}`;
+        mobilePlayerClassName.textContent = `The ${myPlayerInfo.class}`;
+        [playerClassName, mobilePlayerClassName].forEach(el => el.classList.remove('hidden'));
+        
+        const ability = authoritativeClassData[myPlayerInfo.class]?.ability;
+        if (ability) {
+            let canUse = myPlayerInfo.currentAp >= ability.apCost;
+            if (myPlayerInfo.class === 'Barbarian' || myPlayerInfo.class === 'Warrior') {
+                if (!myPlayerInfo.hand.some(card => card.type === 'Spell')) canUse = false;
+            }
+            const abilityHTML = `
+                <h3 class="sub-header-font">Class Ability</h3>
+                <p class="ability-title">${ability.name} (-${ability.apCost} AP)</p>
+                <p class="ability-desc">${ability.description}</p>
+                <button id="use-ability-btn" class="btn btn-special btn-sm" ${canUse ? '' : 'disabled'}>Use Ability</button>
+            `;
+            [classAbilityCard, mobileClassAbilityCard].forEach(c => {
+                c.innerHTML = abilityHTML;
+                c.classList.remove('hidden');
+                c.querySelector('#use-ability-btn').onclick = () => socket.emit('playerAction', { action: 'useClassAbility' });
+            });
+        }
+    } else {
+        [playerClassName, mobilePlayerClassName, classAbilityCard, mobileClassAbilityCard].forEach(el => el.classList.add('hidden'));
+    }
 
-            currentSkipHandler = () => {
-                clearTimeout(timeoutId);
-                yourTurnPopup.classList.add('hidden');
-                finishModal();
-            };
-        }, 'your-turn-popup');
+    // Render Stats
+    if (myPlayerInfo.stats && myPlayerInfo.class) {
+        const pStats = myPlayerInfo.stats;
+        const statsOrder = ['hp', 'ap', 'damageBonus', 'shieldBonus', 'healthDice', 'lifeCount', 'shieldHp', 'str', 'dex', 'con', 'int', 'wis', 'cha'];
+        const statsToDisplay = [];
+
+        statsOrder.forEach(key => {
+            const visual = statVisuals[key];
+            if (!visual) return;
+            let label, value;
+            switch(key) {
+                case 'hp': label = "HP"; value = `${pStats.currentHp} / ${pStats.maxHp}`; break;
+                case 'ap': label = "AP"; value = `${myPlayerInfo.currentAp} / ${pStats.ap}`; break;
+                case 'damageBonus': label = "DMG Bonus"; value = pStats.damageBonus; break;
+                case 'shieldBonus': label = "SHIELD Bonus"; value = pStats.shieldBonus; break;
+                case 'healthDice': label = "Health Dice"; value = `${myPlayerInfo.healthDice.current}d${myPlayerInfo.healthDice.max}`; break;
+                case 'lifeCount': label = "Lives"; value = myPlayerInfo.lifeCount; break;
+                case 'shieldHp': if (pStats.shieldHp <= 0) return; label = "Shield HP"; value = pStats.shieldHp; break;
+                default: label = key.toUpperCase(); value = pStats[key];
+            }
+            statsToDisplay.push(`<div class="stat-line"><span class="material-symbols-outlined" style="color: ${visual.color};">${visual.icon}</span> <span class="stat-label">${label}:</span> <span class="stat-value">${value}</span></div>`);
+        });
+        const statsHTML = statsToDisplay.join('');
+        [playerStatsDiv, mobileStatsDisplay].forEach(el => el.innerHTML = statsHTML);
+    }
+
+    // Render Hand & Equipment
+    [equippedItemsDiv, mobileEquippedItems].forEach(container => {
+        container.innerHTML = '';
+        const weapon = myPlayerInfo.equipment.weapon;
+        if (weapon) {
+            const cardEl = createCardElement(weapon, {});
+            if (isMyTurn) {
+                cardEl.classList.add('attackable-weapon');
+                if (weapon.id === selectedWeaponId) cardEl.classList.add('selected-weapon');
+                cardEl.onclick = (e) => {
+                    e.stopPropagation();
+                    selectedWeaponId = (selectedWeaponId === weapon.id) ? null : weapon.id;
+                    selectedTargetId = null;
+                    renderUIForPhase(currentRoomState);
+                };
+            }
+            container.appendChild(cardEl);
+        } else {
+             const fistsCard = document.createElement('div');
+            fistsCard.className = 'card';
+            fistsCard.dataset.cardId = 'unarmed';
+            fistsCard.innerHTML = `<div class="card-content"><h3 class="card-title">Fists</h3><p class="card-effect">A basic unarmed strike. Costs 1 AP. Damage is based on your Strength.</p></div><div class="card-footer"><p class="card-type">Unarmed</p></div>`;
+            if (isMyTurn) {
+                fistsCard.classList.add('attackable-weapon');
+                if ('unarmed' === selectedWeaponId) fistsCard.classList.add('selected-weapon');
+                fistsCard.onclick = (e) => {
+                    e.stopPropagation();
+                    selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
+                    selectedTargetId = null;
+                    renderUIForPhase(currentRoomState);
+                };
+            }
+            container.appendChild(fistsCard);
+        }
+        if (myPlayerInfo.equipment.armor) {
+            container.appendChild(createCardElement(myPlayerInfo.equipment.armor, {}));
+        }
+    });
+
+    [playerHandDiv, mobilePlayerHand].forEach(container => {
+        container.innerHTML = '';
+        myPlayerInfo.hand.forEach(card => {
+            const isEquippable = card.type === 'Weapon' || card.type === 'Armor';
+            const cardEl = createCardElement(card, { isPlayable: isMyTurn && !isEquippable, isEquippable });
+            container.appendChild(cardEl);
+        });
+    });
+
+    // Render Board
+    [gameBoardDiv, mobileBoardCards].forEach(container => {
+        container.innerHTML = '';
+        if (gameState.board.monsters.length > 0) {
+            gameState.board.monsters.forEach(monster => {
+                const cardEl = createCardElement(monster, { isTargetable: isMyTurn });
+                cardEl.onclick = () => {
+                    if (!isMyTurn || isStunned) return;
+                    if (!selectedWeaponId) return showInfoToast("Select your weapon or fists first.", 'error');
+                    selectedTargetId = monster.id;
+                    const weapon = myPlayerInfo.equipment.weapon;
+                    const isUnarmed = selectedWeaponId === 'unarmed';
+                    const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
+                    if (myPlayerInfo.currentAp < apCost) return showInfoToast(`Not enough AP. Needs ${apCost}.`, 'error');
+                    openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId }, isUnarmed ? 'Fists' : weapon.name);
+                };
+                container.appendChild(cardEl);
+            });
+        } else {
+            container.innerHTML = '<p class="empty-pool-text">The board is clear of enemies.</p>';
+        }
+    });
+}
+
+
+// --- 3.7. renderUIForPhase() (New main render router) ---
+function renderUIForPhase(room) {
+    currentRoomState = room;
+    myPlayerInfo = room.players[myId];
+    if (!myPlayerInfo) return console.warn("My player info not found. Aborting render.");
+
+    const { players, gameState, hostId } = room;
+    const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
+    const newLootCount = gameState.lootPool?.length || 0;
+    const isDM = myPlayerInfo.role === 'DM';
+    const isExplorer = myPlayerInfo.role === 'Explorer';
+    const currentTurnTakerId = gameState.turnOrder[gameState.currentPlayerIndex];
+    const isMyTurn = currentTurnTakerId === myId;
+    const turnTaker = players[currentTurnTakerId];
+
+    // --- Always-on Renders ---
+    lobbyScreen.classList.add('hidden');
+    gameArea.classList.remove('hidden');
+
+    renderPlayerList(players, gameState, playerList, lobbySettingsDisplay);
+    renderPlayerList(players, gameState, mobilePlayerList, mobileLobbySettingsDisplay);
+    
+    // Header & Turn Info
+    roomCodeDisplay.textContent = room.id;
+    mobileRoomCode.textContent = room.id;
+    [turnCounter, mobileTurnCounter].forEach(el => el.textContent = gameState.turnCount);
+    if (gameState.phase !== 'lobby') {
+        let turnText = 'Waiting...';
+        if (turnTaker) {
+            if (turnTaker.role === 'DM') turnText = "Dungeon Master's Turn";
+            else turnText = `Turn: ${turnTaker.name}`;
+            if(isMyTurn) turnText += ' (Your Turn)';
+        }
+        turnIndicator.textContent = turnText;
+        mobileTurnIndicator.textContent = isMyTurn ? "Your Turn" : turnTaker?.name || "Waiting...";
+    }
+    
+    [apCounterDesktop, apCounterMobile].forEach(el => {
+        el.classList.toggle('hidden', !isMyTurn || gameState.phase !== 'started');
+        if (isMyTurn && myPlayerInfo.stats.ap) {
+            el.innerHTML = `<span class="material-symbols-outlined">bolt</span> AP: ${myPlayerInfo.currentAp} / ${myPlayerInfo.stats.ap}`;
+        }
+    });
+
+    // Info Tabs
+    [worldEventsContainer, mobileWorldEventsContainer].forEach(c => {
+        c.innerHTML = gameState.worldEvents.currentEvent ? '' : '<p class="empty-pool-text">No active world event.</p>';
+        if (gameState.worldEvents.currentEvent) c.appendChild(createCardElement(gameState.worldEvents.currentEvent));
+    });
+    [partyEventContainer, mobilePartyEventContainer].forEach(c => {
+        c.innerHTML = gameState.currentPartyEvent ? '' : '<p class="empty-pool-text">No active party event.</p>';
+        if (gameState.currentPartyEvent) c.appendChild(createCardElement(gameState.currentPartyEvent));
+    });
+    [partyLootContainer, mobilePartyLootContainer].forEach(c => {
+        c.innerHTML = '';
+        if (gameState.lootPool && gameState.lootPool.length > 0) {
+            gameState.lootPool.forEach(card => c.appendChild(createCardElement(card, {})));
+        } else {
+            c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>';
+        }
+    });
+
+    // Tab Highlights
+    const mobileInfoTab = document.querySelector('.nav-btn[data-screen="info"]');
+    mobileInfoTab.classList.toggle('highlight', myPlayerInfo.pendingWorldEventSave || newLootCount > oldLootCount || gameState.currentPartyEvent);
+    document.querySelector('[data-tab="world-events-tab"]').classList.toggle('highlight', myPlayerInfo.pendingWorldEventSave);
+    document.querySelector('[data-tab="party-events-tab"]').classList.toggle('highlight', !!gameState.currentPartyEvent);
+    document.querySelector('[data-tab="party-loot-tab"]').classList.toggle('highlight', newLootCount > oldLootCount);
+
+    // --- Phase-Based Routing ---
+    switch (gameState.phase) {
+        case 'lobby':
+            renderLobby(room); // Should not happen often, but good to have
+            break;
+        case 'class_selection':
+            renderClassSelection(room);
+            renderGameplayState(room); // Render gameplay elements in the background
+            break;
+        case 'advanced_setup_choice':
+            renderAdvancedSetup(room);
+            renderGameplayState(room); // Render gameplay elements in the background
+            break;
+        case 'item_swap_resolution':
+        case 'started':
+            renderGameplayState(room);
+            if (gameState.phase === 'started' && isMyTurn && !isMyTurnPreviously) {
+                 addToModalQueue(() => {
+                    yourTurnPopup.classList.remove('hidden');
+                    const timeoutId = setTimeout(() => { yourTurnPopup.classList.add('hidden'); finishModal(); }, 2500);
+                    currentSkipHandler = () => { clearTimeout(timeoutId); yourTurnPopup.classList.add('hidden'); finishModal(); };
+                }, 'your-turn-popup');
+            }
+            break;
+        default:
+            console.error("Unknown game phase:", gameState.phase);
     }
     isMyTurnPreviously = isMyTurn;
-    
+
+    // --- Modal Logic (runs regardless of phase) ---
     if (isMyTurn && myPlayerInfo.pendingEventRoll) {
         addToModalQueue(() => {
             diceRollOverlay.classList.remove('hidden');
@@ -745,10 +946,7 @@ function renderGameState(room) {
             diceRollActionBtn.classList.remove('hidden');
             diceRollActionBtn.textContent = "Roll d20";
             diceRollActionBtn.disabled = false;
-            diceRollActionBtn.onclick = () => {
-                socket.emit('rollForEvent');
-                diceRollActionBtn.disabled = true;
-            };
+            diceRollActionBtn.onclick = () => { socket.emit('rollForEvent'); diceRollActionBtn.disabled = true; };
         }, 'event-roll');
     } else if (!myPlayerInfo.pendingEventChoice) {
         eventOverlay.classList.add('hidden');
@@ -760,7 +958,6 @@ function renderGameState(room) {
             swapNewItemDisplay.innerHTML = '';
             swapHandDisplay.innerHTML = '';
             itemSwapPrompt.textContent = `Your hand is full (${gameState.customSettings.maxHandSize} cards max). To keep the new item, you must choose one from your hand to discard.`;
-            
             swapNewItemDisplay.appendChild(createCardElement(newCard));
             myPlayerInfo.hand.forEach(card => {
                 const cardEl = createCardElement(card);
@@ -777,318 +974,6 @@ function renderGameState(room) {
     } else {
         itemSwapModal.classList.add('hidden');
     }
-    
-    if (isMyTurn && myPlayerInfo.pendingEquipmentChoice) {
-        addToModalQueue(() => {
-            const { newCard, type } = myPlayerInfo.pendingEquipmentChoice;
-            const currentItem = myPlayerInfo.equipment[type];
-            equippedItemDisplay.innerHTML = currentItem ? '' : '<p>Nothing equipped.</p>';
-            newItemDisplay.innerHTML = '';
-            if (currentItem) equippedItemDisplay.appendChild(createCardElement(currentItem));
-            if (newCard) newItemDisplay.appendChild(createCardElement(newCard));
-            equipmentChoiceModal.classList.remove('hidden');
-        }, `equipment-choice-${myPlayerInfo.pendingEquipmentChoice.newCard.id}`);
-    } else {
-        equipmentChoiceModal.classList.add('hidden');
-    }
-
-    if (myPlayerInfo.pendingWorldEventSave) {
-        addToModalQueue(() => {
-            worldEventSaveModal.classList.remove('hidden');
-            const { dc, save, eventName } = myPlayerInfo.pendingWorldEventSave;
-            worldEventSaveTitle.textContent = eventName;
-            worldEventSavePrompt.textContent = `You must make a DC ${dc} ${save} save!`;
-            worldEventSaveRollBtn.classList.remove('hidden');
-        }, 'world-event-save');
-    } else {
-        worldEventSaveModal.classList.add('hidden');
-    }
-
-    if (challenge && challenge.isActive) {
-        skillChallengeOverlay.classList.remove('hidden');
-        skillChallengeTitle.textContent = challenge.name;
-        skillChallengeDesc.textContent = challenge.description;
-        skillChallengeInfo.innerHTML = `Roll against <b>DC ${challenge.dc}</b> using <b>${challenge.skill.toUpperCase()}</b>.`;
-        skillChallengeProgress.innerHTML = `
-            <div class="progress-bar-container">
-                <label>Successes (${challenge.successes} / ${challenge.successThreshold})</label>
-                <div class="progress-bar success">
-                    <div style="width: ${(challenge.successes / challenge.successThreshold) * 100}%"></div>
-                </div>
-            </div>
-            <div class="progress-bar-container">
-                <label>Failures (${challenge.failures} / ${challenge.failureThreshold})</label>
-                <div class="progress-bar danger">
-                    <div style="width: ${(challenge.failures / challenge.failureThreshold) * 100}%"></div>
-                </div>
-            </div>
-        `;
-        skillChallengeLog.innerHTML = '';
-        challenge.log.forEach(entry => {
-            const p = document.createElement('p');
-            p.innerHTML = entry;
-            skillChallengeLog.appendChild(p);
-        });
-        skillChallengeLog.scrollTop = skillChallengeLog.scrollHeight;
-    } else {
-        skillChallengeOverlay.classList.add('hidden');
-    }
-    
-    // --- 3.4.6. Class Selection Rendering ---
-    if (!hasConfirmedClass && isExplorer && gameState.phase === 'class_selection') {
-        [classCardsContainer, mobileClassCardsContainer].forEach(container => {
-             // BUG FIX: Always re-render class cards from authoritative data to prevent stale UI.
-             container.innerHTML = '';
-             for (const [classId, data] of Object.entries(authoritativeClassData)) {
-                const card = document.createElement('div');
-                card.className = 'class-card';
-                card.dataset.classId = classId;
-                card.innerHTML = `
-                    <h3 class="class-card-title">${classId}</h3>
-                    <p class="class-card-desc">${data.ability.description}</p>
-                    <div class="class-card-stats">
-                        <span>STR:</span><span>${data.stats.str}</span>
-                        <span>DEX:</span><span>${data.stats.dex}</span>
-                        <span>CON:</span><span>${data.stats.con}</span>
-                        <span>INT:</span><span>${data.stats.int}</span>
-                        <span>WIS:</span><span>${data.stats.wis}</span>
-                        <span>CHA:</span><span>${data.stats.cha}</span>
-                    </div>
-                `;
-                container.appendChild(card);
-            }
-            
-            container.querySelectorAll('.class-card').forEach(card => {
-                const classId = card.dataset.classId;
-                card.classList.toggle('selected', classId === tempSelectedClassId);
-                card.onclick = () => {
-                    tempSelectedClassId = classId;
-                    renderGameState(currentRoomState);
-                };
-            });
-        });
-       [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => {
-            btn.classList.toggle('hidden', !tempSelectedClassId);
-            btn.disabled = false;
-            btn.textContent = 'Confirm Class';
-       });
-    } else if (hasConfirmedClass) {
-        tempSelectedClassId = null;
-    }
-    
-    // --- 3.4.7. General UI Text & Info ---
-    [turnCounter, mobileTurnCounter].forEach(el => el.textContent = gameState.turnCount);
-    if (gameState.phase !== 'lobby') {
-        const turnTaker = players[currentTurnTakerId];
-        let turnText = 'Waiting...';
-        if (turnTaker) {
-            if (turnTaker.role === 'DM') turnText = "Dungeon Master's Turn";
-            else turnText = `Turn: ${turnTaker.name}`;
-            if(isMyTurn) turnText += ' (Your Turn)';
-        }
-        turnIndicator.textContent = turnText;
-        mobileTurnIndicator.textContent = isMyTurn ? "Your Turn" : turnTaker?.name || "Waiting...";
-    }
-    
-    // --- 3.4.8. Player-Specific Character Panel & Stats ---
-    if (myPlayerInfo.class && isExplorer) {
-        const className = myPlayerInfo.class;
-        playerClassName.textContent = `The ${className}`;
-        mobilePlayerClassName.textContent = `The ${className}`;
-        playerClassName.classList.remove('hidden');
-        mobilePlayerClassName.classList.remove('hidden');
-        renderClassAbilityCard(myPlayerInfo, classAbilityCard);
-        renderClassAbilityCard(myPlayerInfo, mobileClassAbilityCard);
-    } else {
-        playerClassName.classList.add('hidden');
-        mobilePlayerClassName.classList.add('hidden');
-        classAbilityCard.classList.add('hidden');
-        mobileClassAbilityCard.classList.add('hidden');
-    }
-
-    if (myPlayerInfo.stats && myPlayerInfo.class) {
-        const pStats = myPlayerInfo.stats;
-        const statsOrder = ['hp', 'ap', 'damageBonus', 'shieldBonus', 'healthDice', 'lifeCount', 'shieldHp', 'str', 'dex', 'con', 'int', 'wis', 'cha'];
-        const statsToDisplay = [];
-
-        statsOrder.forEach(key => {
-            const visual = statVisuals[key];
-            if (!visual) return;
-            
-            let label, value;
-            switch(key) {
-                case 'hp':
-                    label = "HP"; value = `${pStats.currentHp} / ${pStats.maxHp}`;
-                    break;
-                case 'ap':
-                    label = "AP"; value = `${myPlayerInfo.currentAp} / ${pStats.ap}`;
-                    break;
-                case 'damageBonus':
-                    label = "DMG Bonus"; value = pStats.damageBonus;
-                    break;
-                case 'shieldBonus':
-                    label = "SHIELD Bonus"; value = pStats.shieldBonus;
-                    break;
-                case 'healthDice':
-                    label = "Health Dice"; value = `${myPlayerInfo.healthDice.current}d${myPlayerInfo.healthDice.max}`;
-                    break;
-                case 'lifeCount':
-                    label = "Lives"; value = myPlayerInfo.lifeCount;
-                    break;
-                case 'shieldHp':
-                    if (pStats.shieldHp <= 0) return;
-                    label = "Shield HP"; value = pStats.shieldHp;
-                    break;
-                default:
-                    label = key.toUpperCase(); value = pStats[key];
-            }
-            statsToDisplay.push(`<div class="stat-line"><span class="material-symbols-outlined" style="color: ${visual.color};">${visual.icon}</span> <span class="stat-label">${label}:</span> <span class="stat-value">${value}</span></div>`);
-        });
-
-        const statsHTML = statsToDisplay.join('');
-        playerStatsDiv.innerHTML = statsHTML;
-        mobileStatsDisplay.innerHTML = statsHTML;
-    }
-
-    // --- 3.4.9. Player Hand & Equipment ---
-    [equippedItemsDiv, mobileEquippedItems].forEach(container => {
-        container.innerHTML = '';
-        const weapon = myPlayerInfo.equipment.weapon;
-        if (weapon) {
-            const cardEl = createCardElement(weapon, {});
-            if (isMyTurn) {
-                cardEl.classList.add('attackable-weapon');
-                if (weapon.id === selectedWeaponId) cardEl.classList.add('selected-weapon');
-                cardEl.onclick = (e) => {
-                    e.stopPropagation();
-                    selectedWeaponId = (selectedWeaponId === weapon.id) ? null : weapon.id;
-                    selectedTargetId = null;
-                    document.querySelectorAll('.attackable-weapon').forEach(el => el.classList.remove('selected-weapon'));
-                    if (selectedWeaponId) {
-                        cardEl.classList.add('selected-weapon');
-                    }
-                };
-            }
-            container.appendChild(cardEl);
-        } else {
-            const fistsCard = document.createElement('div');
-            fistsCard.className = 'card';
-            fistsCard.dataset.cardId = 'unarmed';
-            fistsCard.innerHTML = `
-                <div class="card-content">
-                    <h3 class="card-title">Fists</h3>
-                    <p class="card-effect">A basic unarmed strike. Costs 1 AP. Damage is based on your Strength.</p>
-                </div>
-                <div class="card-footer">
-                    <p class="card-type">Unarmed</p>
-                </div>
-            `;
-            if (isMyTurn) {
-                fistsCard.classList.add('attackable-weapon');
-                if ('unarmed' === selectedWeaponId) fistsCard.classList.add('selected-weapon');
-                fistsCard.onclick = (e) => {
-                    e.stopPropagation();
-                    selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
-                    selectedTargetId = null;
-                    document.querySelectorAll('.attackable-weapon').forEach(el => el.classList.remove('selected-weapon'));
-                    if (selectedWeaponId) {
-                        fistsCard.classList.add('selected-weapon');
-                    }
-                };
-            }
-            container.appendChild(fistsCard);
-        }
-
-        const armor = myPlayerInfo.equipment.armor;
-        if (armor) {
-            const cardEl = createCardElement(armor, {});
-            container.appendChild(cardEl);
-        }
-    });
-
-    [playerHandDiv, mobilePlayerHand].forEach(container => {
-        container.innerHTML = '';
-        myPlayerInfo.hand.forEach(card => {
-            const isEquippable = card.type === 'Weapon' || card.type === 'Armor';
-            const isPlayable = isMyTurn && !isEquippable;
-            const cardEl = createCardElement(card, { isPlayable, isEquippable });
-            container.appendChild(cardEl);
-        });
-    });
-
-    // --- 3.4.10. Board, Events, & Loot ---
-    // BUG FIX: Refactored logic to be clearer and more robust.
-    // The board and other central panels are now always rendered. During setup, they show a "waiting" message.
-    [worldEventsContainer, mobileWorldEventsContainer, partyLootContainer, mobilePartyLootContainer, partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '');
-    
-    // Always render central info panels
-    if (gameState.worldEvents.currentEvent) {
-        [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.appendChild(createCardElement(gameState.worldEvents.currentEvent)));
-    } else {
-        [worldEventsContainer, mobileWorldEventsContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No active world event.</p>');
-    }
-    if (gameState.currentPartyEvent) {
-        [partyEventContainer, mobilePartyEventContainer].forEach(c => c.appendChild(createCardElement(gameState.currentPartyEvent)));
-    } else {
-        [partyEventContainer, mobilePartyEventContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No active party event.</p>');
-    }
-    if (gameState.lootPool && gameState.lootPool.length > 0) {
-        gameState.lootPool.forEach(card => {
-            [partyLootContainer, mobilePartyLootContainer].forEach(c => c.appendChild(createCardElement(card, {})));
-        });
-    } else {
-        [partyLootContainer, mobilePartyLootContainer].forEach(c => c.innerHTML = '<p class="empty-pool-text">No discoveries yet...</p>');
-    }
-
-    // Conditionally render the main game board content
-    if (isDuringSetup) {
-        const waitingMessage = '<p class="empty-pool-text">Waiting for other players to set up...</p>';
-        gameBoardDiv.innerHTML = waitingMessage;
-        mobileBoardCards.innerHTML = waitingMessage;
-    } else {
-        gameBoardDiv.innerHTML = '';
-        mobileBoardCards.innerHTML = '';
-        gameState.board.monsters.forEach(monster => {
-            const clickHandler = () => {
-                if (!isMyTurn || isStunned) return;
-
-                if (!selectedWeaponId) {
-                    showInfoToast("Select your equipped weapon or fists before choosing a target.", 'error');
-                    const equippedContainer = get('equipped-items-container');
-                    equippedContainer.classList.add('pulse-highlight');
-                    setTimeout(() => equippedContainer.classList.remove('pulse-highlight'), 1500);
-                    return;
-                }
-                
-                selectedTargetId = monster.id;
-                const weapon = myPlayerInfo.equipment.weapon;
-                
-                if ((weapon && weapon.id === selectedWeaponId) || selectedWeaponId === 'unarmed') {
-                    const isUnarmed = selectedWeaponId === 'unarmed';
-                    const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
-                    if (myPlayerInfo.currentAp < apCost) {
-                        showInfoToast(`Not enough Action Points. Needs ${apCost} AP.`, 'error');
-                        return;
-                    }
-                    const cardName = isUnarmed ? 'Fists' : weapon.name;
-                    openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, cardName);
-                }
-            };
-
-            const desktopCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
-            desktopCardEl.addEventListener('click', clickHandler);
-            gameBoardDiv.appendChild(desktopCardEl);
-            
-            const mobileCardEl = createCardElement({ ...monster }, { isTargetable: isMyTurn });
-            mobileCardEl.addEventListener('click', clickHandler);
-            mobileBoardCards.appendChild(mobileCardEl);
-        });
-        if (gameState.board.monsters.length === 0) {
-            const noMonstersMessage = '<p class="empty-pool-text">The board is clear of enemies.</p>';
-            gameBoardDiv.innerHTML = noMonstersMessage;
-            mobileBoardCards.innerHTML = noMonstersMessage;
-        }
-    }
 }
 
 
@@ -1098,39 +983,23 @@ function renderGameState(room) {
 socket.on('connect', () => { myId = socket.id; });
 socket.on('roomCreated', (room) => {
     document.body.classList.add('in-game');
-    lobbyScreen.classList.add('hidden');
-    gameArea.classList.remove('hidden');
-    roomCodeDisplay.textContent = room.id;
-    mobileRoomCode.textContent = room.id;
-    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.remove('hidden'));
-    renderGameState(room);
+    renderUIForPhase(room);
 });
 socket.on('joinSuccess', (data) => {
-    // BUG FIX: Handle both new and late join data structures.
     const room = data.room || data;
-    if (data.classData) {
-        authoritativeClassData = data.classData;
-    }
+    if (data.classData) authoritativeClassData = data.classData;
     document.body.classList.add('in-game');
-    lobbyScreen.classList.add('hidden');
-    gameArea.classList.remove('hidden');
-    roomCodeDisplay.textContent = room.id;
-    mobileRoomCode.textContent = room.id;
-    renderGameState(room);
+    renderUIForPhase(room);
 });
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 
 // --- 5.2. Game State & Info ---
-socket.on('playerListUpdate', (room) => renderGameState(room));
+socket.on('playerListUpdate', (room) => renderUIForPhase(room));
 socket.on('gameStarted', (data) => {
-    // BUG FIX: Receive room state and authoritative class data from the server.
-    const { room, classData } = data;
-    authoritativeClassData = classData;
-    
-    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.add('hidden'));
-    renderGameState(room);
+    authoritativeClassData = data.classData;
+    renderUIForPhase(data.room);
 });
-socket.on('gameStateUpdate', (room) => renderGameState(room));
+socket.on('gameStateUpdate', (room) => renderUIForPhase(room));
 socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
 socket.on('actionError', (errorMessage) => {
     showInfoToast(errorMessage, 'error');
@@ -1147,14 +1016,8 @@ socket.on('attackAnimation', (data) => {
     const { attackerId, targetId, d20Roll, isCrit, isFumble, totalRollToHit, requiredRoll, hit, damageDice, rawDamageRoll, damageBonus, totalDamage } = data;
     const isMyAttack = attackerId === myId;
     
-    // --- Create result HTMLs ---
-    const toHitResultHTML = `
-        ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
-        <p class="roll-details">Roll: ${d20Roll} + ${damageBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
-    `;
-    const damageResultHTML = damageDice === 'unarmed'
-            ? `<p class="result-line">DAMAGE!</p><p class="roll-details">Dealt <strong>${totalDamage}</strong> damage.</p>`
-            : `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>`;
+    const toHitResultHTML = `${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}<p class="roll-details">Roll: ${d20Roll} + ${damageBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>`;
+    const damageResultHTML = damageDice === 'unarmed' ? `<p class="result-line">DAMAGE!</p><p class="roll-details">Dealt <strong>${totalDamage}</strong> damage.</p>` : `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) + ${damageBonus} (Bonus) = <strong>${totalDamage}</strong></p>`;
 
     const attacker = currentRoomState.players[attackerId];
     const toHitTitle = isMyAttack ? 'You Attack!' : `${attacker?.name || 'Ally'} Attacks!`;
@@ -1163,73 +1026,16 @@ socket.on('attackAnimation', (data) => {
     const targetEl = document.querySelector(`.card[data-monster-id="${targetId}"]`);
     playEffectAnimation(targetEl, hit ? 'hit' : 'miss');
 
-    // --- Define the sequence ---
-    const finalCallback = () => {
-        diceRollOverlay.classList.add('hidden');
-        isPerformingAction = false;
-        finishModal(); // This correctly sets isModalActive=false and processes any pending modals.
-    };
-    
-    const showRoll = (rollOptions) => {
-        addToModalQueue(() => {
-            const { dieType, roll, title, resultHTML, onContinue } = rollOptions;
+    const finalCallback = () => { diceRollOverlay.classList.add('hidden'); isPerformingAction = false; finishModal(); };
+    const damageStep = () => showDiceRoll({ dieType: `d${(damageDice || 'd6').split('d')[1] || 6}`, roll: rawDamageRoll, title: damageTitle, resultHTML: damageResultHTML, continueCallback: finalCallback });
+    const toHitStep = () => showDiceRoll({ dieType: 'd20', roll: d20Roll, title: toHitTitle, resultHTML: toHitResultHTML, continueCallback: hit ? damageStep : finalCallback });
 
-            diceRollOverlay.classList.remove('hidden');
-            diceRollTitle.textContent = title;
-            diceRollResult.classList.add('hidden');
-            diceRollContinueBtn.classList.add('hidden');
-            diceAnimationContainer.style.height = '200px';
-            diceSpinner.classList.remove('hidden');
-            
-            const spinnerValue = diceSpinner.querySelector('.spinner-value');
-            const max = parseInt(dieType.slice(1), 10);
-            let counter = 0;
-            const interval = setInterval(() => {
-                spinnerValue.textContent = Math.floor(Math.random() * max) + 1;
-                counter += 50;
-                if (counter >= 1500) {
-                    clearInterval(interval);
-                    spinnerValue.textContent = roll;
-                    setTimeout(() => {
-                        diceSpinner.classList.add('hidden');
-                        diceAnimationContainer.style.height = '0px';
-
-                        diceRollResult.innerHTML = resultHTML;
-                        diceRollResult.classList.remove('hidden');
-                        diceRollContinueBtn.classList.remove('hidden');
-                        diceRollContinueBtn.onclick = onContinue;
-                    }, 500);
-                }
-            }, 50);
-        });
-    };
-
-    const damageStep = () => showRoll({
-        dieType: `d${(damageDice || 'd6').split('d')[1] || 6}`,
-        roll: rawDamageRoll,
-        title: damageTitle,
-        resultHTML: damageResultHTML,
-        onContinue: finalCallback,
-    });
-    
-    const toHitStep = () => showRoll({
-        dieType: 'd20',
-        roll: d20Roll,
-        title: toHitTitle,
-        resultHTML: toHitResultHTML,
-        onContinue: hit ? damageStep : finalCallback,
-    });
-
-    // --- Execute sequence ---
     if (isMyAttack) {
         isPerformingAction = true;
         toHitStep();
     } else {
-        // Non-attacker just sees toasts. This is non-blocking.
         showNonBlockingRollToast({ title: toHitTitle, resultHTML: toHitResultHTML });
-        if (hit) {
-            setTimeout(() => showNonBlockingRollToast({ title: damageTitle, resultHTML: damageResultHTML }), 2000);
-        }
+        if (hit) setTimeout(() => showNonBlockingRollToast({ title: damageTitle, resultHTML: damageResultHTML }), 2000);
     }
 });
 
@@ -1242,17 +1048,12 @@ socket.on('monsterAttackAnimation', (data) => {
     const monster = currentRoomState.gameState.board.monsters.find(m => m.id === monsterId);
     const monsterName = monster?.name || 'Monster';
 
-    const toHitResultHTML = `
-        ${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}
-        <p class="roll-details">Roll: ${d20Roll} + ${attackBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>
-    `;
+    const toHitResultHTML = `${isCrit ? `<p class="result-line hit">CRITICAL HIT!</p>` : isFumble ? `<p class="result-line miss">FUMBLE!</p>` : hit ? `<p class="result-line hit">HIT!</p>` : `<p class="result-line miss">MISS!</p>`}<p class="roll-details">Roll: ${d20Roll} + ${attackBonus} (Bonus) = <strong>${totalRollToHit}</strong> vs DC ${requiredRoll}</p>`;
     showNonBlockingRollToast({ title: `${monsterName} Attacks!`, resultHTML: toHitResultHTML });
     
     if (hit) {
         const damageResultHTML = `<p class="result-line">DAMAGE!</p><p class="roll-details">Roll: ${rawDamageRoll} (Dice) = <strong>${totalDamage}</strong></p>`;
-        setTimeout(() => {
-            showNonBlockingRollToast({ title: 'Damage Roll', resultHTML: damageResultHTML });
-        }, 2000);
+        setTimeout(() => showNonBlockingRollToast({ title: 'Damage Roll', resultHTML: damageResultHTML }), 2000);
     }
 });
 
@@ -1261,7 +1062,7 @@ socket.on('eventRollResult', ({ roll, outcome }) => {
 
     const continueCallback = () => {
         diceRollOverlay.classList.add('hidden');
-        finishModal(); // Finish the dice roll modal
+        finishModal(); 
 
         if (outcome.type === 'playerEvent') {
             addToModalQueue(() => {
@@ -1284,7 +1085,6 @@ socket.on('eventRollResult', ({ roll, outcome }) => {
         }
     };
     
-    // Animate the result in the already-open dice modal
     const spinnerValue = diceSpinner.querySelector('.spinner-value');
     diceAnimationContainer.style.height = '200px';
     diceSpinner.classList.remove('hidden');
@@ -1299,7 +1099,6 @@ socket.on('eventRollResult', ({ roll, outcome }) => {
             setTimeout(() => {
                 diceSpinner.classList.add('hidden');
                 diceAnimationContainer.style.height = '0px';
-
                 diceRollResult.innerHTML = resultHTML;
                 diceRollResult.classList.remove('hidden');
                 diceRollContinueBtn.classList.remove('hidden');
@@ -1318,31 +1117,15 @@ socket.on('eventItemFound', (card) => {
 });
 
 socket.on('skillChallengeRollResult', ({ d20Roll, bonus, itemBonus, totalRoll, dc, success }) => {
-     const resultHTML = `
-        ${success ? `<p class="result-line hit">SUCCESS!</p>` : `<p class="result-line miss">FAILURE!</p>`}
-        <p class="roll-details">Roll: ${d20Roll} + ${bonus}(stat) ${itemBonus > 0 ? `+ ${itemBonus}(item)` : ''} = <strong>${totalRoll}</strong> vs DC ${dc}</p>
-    `;
-    showDiceRoll({
-        dieType: 'd20',
-        roll: d20Roll,
-        title: 'Skill Challenge',
-        resultHTML,
-    });
+     const resultHTML = `${success ? `<p class="result-line hit">SUCCESS!</p>` : `<p class="result-line miss">FAILURE!</p>`}<p class="roll-details">Roll: ${d20Roll} + ${bonus}(stat) ${itemBonus > 0 ? `+ ${itemBonus}(item)` : ''} = <strong>${totalRoll}</strong> vs DC ${dc}</p>`;
+    showDiceRoll({ dieType: 'd20', roll: d20Roll, title: 'Skill Challenge', resultHTML });
 });
 
 socket.on('worldEventSaveResult', ({ d20Roll, bonus, totalRoll, dc, success }) => {
     worldEventSaveModal.classList.add('hidden');
     finishModal();
-    const resultHTML = `
-        ${success ? `<p class="result-line hit">Success!</p>` : `<p class="result-line miss">Failure!</p>`}
-        <p class="roll-details">Roll: ${d20Roll} + ${bonus} = <strong>${totalRoll}</strong> vs DC ${dc}</p>
-    `;
-    showDiceRoll({
-        dieType: 'd20',
-        roll: d20Roll,
-        title: 'World Event Save',
-        resultHTML,
-    });
+    const resultHTML = `${success ? `<p class="result-line hit">Success!</p>` : `<p class="result-line miss">Failure!</p>`}<p class="roll-details">Roll: ${d20Roll} + ${bonus} = <strong>${totalRoll}</strong> vs DC ${dc}</p>`;
+    showDiceRoll({ dieType: 'd20', roll: d20Roll, title: 'World Event Save', resultHTML });
 });
 
 
@@ -1489,17 +1272,14 @@ function toggleMenu(menu, button) {
 }
 
 function initializeLobby() {
-    // Programmatically set the default radio button to ensure state consistency
     const beginnerRadio = document.querySelector('input[name="gameMode"][value="Beginner"]');
     if (beginnerRadio) {
         beginnerRadio.checked = true;
-        // Dispatch a change event to trigger the visual update and custom panel logic
         beginnerRadio.dispatchEvent(new Event('change', { bubbles: true }));
     }
 }
 
 function showNonBlockingRollToast(data) {
-    // A new roll toast replaces any existing one.
     toastContainer.innerHTML = '';
 
     const toast = document.createElement('div');
@@ -1514,26 +1294,14 @@ function showNonBlockingRollToast(data) {
         setTimeout(() => toast.remove(), 300);
     };
 
-    toast.innerHTML = `
-        <div class="toast-roll-content">
-            <h2 class="panel-header">${data.title}</h2>
-            <div class="dice-roll-result-container">${data.resultHTML}</div>
-        </div>
-    `;
+    toast.innerHTML = `<div class="toast-roll-content"><h2 class="panel-header">${data.title}</h2><div class="dice-roll-result-container">${data.resultHTML}</div></div>`;
     toast.querySelector('.toast-roll-content').prepend(closeBtn);
     
     toastContainer.appendChild(toast);
 
-    requestAnimationFrame(() => {
-        toast.classList.add('visible');
-    });
+    requestAnimationFrame(() => toast.classList.add('visible'));
 
-    setTimeout(() => {
-        if (toast.parentElement) {
-            toast.classList.remove('visible');
-            setTimeout(() => toast.remove(), 300);
-        }
-    }, 7000);
+    setTimeout(() => { if (toast.parentElement) { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); } }, 7000);
 }
 
 function showDiceRoll(options) {
@@ -1559,7 +1327,6 @@ function showDiceRoll(options) {
                 setTimeout(() => {
                     diceSpinner.classList.add('hidden');
                     diceAnimationContainer.style.height = '0px';
-
                     diceRollResult.innerHTML = resultHTML;
                     diceRollResult.classList.remove('hidden');
                     diceRollContinueBtn.classList.remove('hidden');
@@ -1586,9 +1353,7 @@ function playEffectAnimation(targetElement, effectType) {
 
     animationOverlay.appendChild(effectEl);
 
-    setTimeout(() => {
-        effectEl.remove();
-    }, 1000); 
+    setTimeout(() => effectEl.remove(), 1000); 
 }
 
 // --- 8. INITIALIZATION & PWA SERVICE WORKER ---
@@ -1598,52 +1363,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 4.1. Lobby & Game Setup ---
     createRoomBtn.addEventListener('click', () => {
         const playerName = playerNameInput.value.trim();
-        if (!playerName) {
-            return showInfoToast('Please enter a player name.', 'error');
-        }
-        
+        if (!playerName) return showInfoToast('Please enter a player name.', 'error');
         const checkedRadio = document.querySelector('input[name="gameMode"]:checked');
-        if (!checkedRadio) {
-            return showInfoToast('Please select a game mode.', 'error');
-        }
+        if (!checkedRadio) return showInfoToast('Please select a game mode.', 'error');
         const gameMode = checkedRadio.value;
-        
         let customSettings = {};
         if (gameMode === 'Beginner') {
             customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50, startWithWeapon: true, startWithArmor: true, startingItems: 2, startingSpells: 2 };
         } else if (gameMode === 'Advanced') {
             customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60, startWithWeapon: false, startWithArmor: false, startingItems: 0, startingSpells: 0 };
-        } else { // Custom
+        } else {
             customSettings = {
-                maxHandSize: parseInt(get('max-hand-size').value, 10),
-                startWithWeapon: get('start-with-weapon').checked,
-                startWithArmor: get('start-with-armor').checked,
-                startingItems: parseInt(get('starting-items').value, 10),
-                startingSpells: parseInt(get('starting-spells').value, 10),
-                lootDropRate: parseInt(get('loot-drop-rate').value, 10),
-                enemyScaling: get('enemy-scaling').checked,
-                scalingRate: parseInt(get('scaling-rate').value, 10),
-                dungeonPressure: 25, // Placeholder, not implemented
-                magicalItemChance: 20 // Placeholder, not implemented
+                maxHandSize: parseInt(get('max-hand-size').value, 10), startWithWeapon: get('start-with-weapon').checked, startWithArmor: get('start-with-armor').checked, startingItems: parseInt(get('starting-items').value, 10),
+                startingSpells: parseInt(get('starting-spells').value, 10), lootDropRate: parseInt(get('loot-drop-rate').value, 10), enemyScaling: get('enemy-scaling').checked, scalingRate: parseInt(get('scaling-rate').value, 10),
+                dungeonPressure: 25, magicalItemChance: 20
             };
         }
-
         socket.emit('createRoom', { playerName, gameMode, customSettings });
     });
     joinRoomBtn.addEventListener('click', () => {
         const playerName = playerNameInput.value.trim();
         const roomId = roomIdInput.value.trim().toUpperCase();
-        if (playerName && roomId) {
-            socket.emit('joinRoom', { roomId, playerName });
-        } else {
-            showInfoToast('Please enter a player name and a room code.', 'error');
-        }
+        if (playerName && roomId) socket.emit('joinRoom', { roomId, playerName });
+        else showInfoToast('Please enter a player name and a room code.', 'error');
     });
 
-    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => {
-        socket.emit('startGame');
-    }));
-
+    [startGameBtn, mobileStartGameBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('startGame')));
     [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
         if (tempSelectedClassId) {
             socket.emit('chooseClass', { classId: tempSelectedClassId });
@@ -1653,29 +1398,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
 
     // --- 4.2. Turn & Action Controls ---
-    [actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => {
-        addToModalQueue(() => {
-            endTurnConfirmModal.classList.remove('hidden');
-        }, 'end-turn-confirm');
-    }));
-
+    [actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => addToModalQueue(() => endTurnConfirmModal.classList.remove('hidden'), 'end-turn-confirm')));
     [actionGuardBtn, mobileActionGuardBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'guard' })));
-    actionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
-    actionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
-    mobileActionBriefRespiteBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' }));
-    mobileActionFullRestBtn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' }));
-
+    [actionBriefRespiteBtn, mobileActionBriefRespiteBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'briefRespite' })));
+    [actionFullRestBtn, mobileActionFullRestBtn].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' })));
     dmPlayMonsterBtn.addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
 
     // --- 4.3. Navigation (Mobile & Desktop) ---
     mobileBottomNav.addEventListener('click', (e) => {
         const navBtn = e.target.closest('.nav-btn');
         if (!navBtn || !navBtn.dataset.screen) return;
-
         mobileBottomNav.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
         navBtn.classList.add('active');
         navBtn.classList.remove('highlight');
-
         const screenId = `mobile-screen-${navBtn.dataset.screen}`;
         document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active'));
         get(screenId).classList.add('active');
@@ -1686,10 +1421,7 @@ document.addEventListener('DOMContentLoaded', () => {
             desktopTabButtons.forEach(btn => btn.classList.remove('active'));
             button.classList.add('active');
             button.classList.remove('highlight');
-
-            document.querySelectorAll('.game-area-desktop .tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
+            document.querySelectorAll('.game-area-desktop .tab-content').forEach(content => content.classList.remove('active'));
             get(button.dataset.tab).classList.add('active');
         });
     });
@@ -1704,156 +1436,60 @@ document.addEventListener('DOMContentLoaded', () => {
     chatForm.addEventListener('submit', (e) => { 
         e.preventDefault();
         const message = chatInput.value.trim();
-        const channel = chatChannel.value;
-        if (message) {
-            socket.emit('sendMessage', { channel, message });
-            chatInput.value = '';
-        }
+        if (message) { socket.emit('sendMessage', { channel: chatChannel.value, message }); chatInput.value = ''; }
     });
     mobileChatForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const message = mobileChatInput.value.trim();
-        const channel = mobileChatChannel.value;
-        if (message) {
-            socket.emit('sendMessage', { channel, message });
-            mobileChatInput.value = '';
-        }
+        if (message) { socket.emit('sendMessage', { channel: mobileChatChannel.value, message }); mobileChatInput.value = ''; }
     });
-    [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.addEventListener('click', () => {
-        if (confirm("Are you sure you want to leave? Your character will be controlled by an NPC.")) {
-            window.location.reload();
-        }
-    }));
-    endTurnConfirmBtn.addEventListener('click', () => {
-        socket.emit('endTurn');
-        endTurnConfirmModal.classList.add('hidden');
-        finishModal();
-    });
-    endTurnCancelBtn.addEventListener('click', () => {
-        endTurnConfirmModal.classList.add('hidden');
-        finishModal();
-    });
-
+    [leaveGameBtn, mobileLeaveGameBtn].forEach(btn => btn.addEventListener('click', () => { if (confirm("Are you sure?")) window.location.reload(); }));
+    endTurnConfirmBtn.addEventListener('click', () => { socket.emit('endTurn'); endTurnConfirmModal.classList.add('hidden'); finishModal(); });
+    endTurnCancelBtn.addEventListener('click', () => { endTurnConfirmModal.classList.add('hidden'); finishModal(); });
     narrativeConfirmBtn.addEventListener('click', () => {
         let narrativeText = narrativeInput.value.trim();
-        
-        if (narrativeText === "") {
-            narrativeText = generate_random_attack_description();
-        }
-
-        if (pendingActionData) {
-            socket.emit('playerAction', { ...pendingActionData, narrative: narrativeText });
-            closeNarrativeModal();
-        }
+        if (narrativeText === "") narrativeText = generate_random_attack_description();
+        if (pendingActionData) { socket.emit('playerAction', { ...pendingActionData, narrative: narrativeText }); closeNarrativeModal(); }
     });
-
     narrativeCancelBtn.addEventListener('click', closeNarrativeModal);
+    eventRollBtn.onclick = () => { socket.emit('rollForEvent'); eventPrompt.textContent = "Rolling..."; eventRollBtn.disabled = true; };
+    worldEventSaveRollBtn.addEventListener('click', () => { socket.emit('rollForWorldEventSave'); worldEventSaveRollBtn.classList.add('hidden'); });
+    skipPopupBtn.addEventListener('click', (e) => { e.stopPropagation(); if (currentSkipHandler) currentSkipHandler(); });
+    skillChallengeCloseBtn.addEventListener('click', () => skillChallengeOverlay.classList.add('hidden'));
 
-    eventRollBtn.onclick = () => {
-        socket.emit('rollForEvent');
-        eventPrompt.textContent = "Rolling...";
-        eventRollBtn.disabled = true;
-    };
-    worldEventSaveRollBtn.addEventListener('click', () => {
-        socket.emit('rollForWorldEventSave');
-        worldEventSaveRollBtn.classList.add('hidden');
-    });
-
-    document.body.addEventListener('click', (e) => {
-        if (currentSkipHandler && !e.target.closest('#skip-popup-btn')) {
-            skipPopupBtn.classList.remove('hidden');
-        }
-    });
-    skipPopupBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (currentSkipHandler) {
-            currentSkipHandler();
-        }
-    });
-
-    // SKILL CHALLENGE LISTENERS
-    skillChallengeCloseBtn.addEventListener('click', () => {
-        skillChallengeOverlay.classList.add('hidden');
-    });
-
-    function openItemSelectModal() {
+    [actionSkillChallengeBtn, mobileActionSkillChallengeBtn].forEach(btn => btn.addEventListener('click', () => {
         selectedItemIdForChallenge = null;
         itemSelectContainer.innerHTML = '';
         const allItems = [...myPlayerInfo.hand, ...Object.values(myPlayerInfo.equipment).filter(i => i)];
-        if (allItems.length === 0) {
-            itemSelectContainer.innerHTML = `<p class="empty-pool-text">You have no items to use.</p>`;
-        } else {
+        if (allItems.length === 0) itemSelectContainer.innerHTML = `<p class="empty-pool-text">You have no items.</p>`;
+        else {
             allItems.forEach(item => {
                 const cardEl = createCardElement(item);
                 cardEl.onclick = () => {
                     selectedItemIdForChallenge = (selectedItemIdForChallenge === item.id) ? null : item.id;
                     itemSelectContainer.querySelectorAll('.card').forEach(c => c.classList.remove('selected-item'));
-                    if (selectedItemIdForChallenge === item.id) {
-                        cardEl.classList.add('selected-item');
-                    }
+                    if (selectedItemIdForChallenge === item.id) cardEl.classList.add('selected-item');
                 };
                 itemSelectContainer.appendChild(cardEl);
             });
         }
         itemSelectModal.classList.remove('hidden');
-    }
-
-    [actionSkillChallengeBtn, mobileActionSkillChallengeBtn].forEach(btn => {
-        btn.addEventListener('click', openItemSelectModal);
-    });
-
-    itemSelectCancelBtn.addEventListener('click', () => {
-        itemSelectModal.classList.add('hidden');
-        selectedItemIdForChallenge = null;
-    });
-
+    }));
+    itemSelectCancelBtn.addEventListener('click', () => { itemSelectModal.classList.add('hidden'); selectedItemIdForChallenge = null; });
     itemSelectConfirmBtn.addEventListener('click', () => {
-        socket.emit('playerAction', {
-            action: 'contributeToSkillChallenge',
-            itemId: selectedItemIdForChallenge
-        });
+        socket.emit('playerAction', { action: 'contributeToSkillChallenge', itemId: selectedItemIdForChallenge });
         itemSelectModal.classList.add('hidden');
         selectedItemIdForChallenge = null;
     });
 
-    // Equipment & Item Modals
-    keepCurrentBtn.addEventListener('click', () => {
-        if (myPlayerInfo.pendingEquipmentChoice) {
-            socket.emit('resolveEquipmentChoice', { choice: 'keep', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id });
-            equipmentChoiceModal.classList.add('hidden');
-            finishModal();
-        }
-    });
-    equipNewBtn.addEventListener('click', () => {
-        if (myPlayerInfo.pendingEquipmentChoice) {
-            socket.emit('resolveEquipmentChoice', { choice: 'swap', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id });
-            equipmentChoiceModal.classList.add('hidden');
-            finishModal();
-        }
-    });
-    discardNewItemBtn.addEventListener('click', () => {
-        socket.emit('resolveItemSwap', { cardToDiscardId: null });
-        itemSwapModal.classList.add('hidden');
-        finishModal();
-    });
-    itemFoundCloseBtn.addEventListener('click', () => {
-        itemFoundModal.classList.add('hidden');
-        finishModal();
-    });
+    keepCurrentBtn.addEventListener('click', () => { if (myPlayerInfo.pendingEquipmentChoice) { socket.emit('resolveEquipmentChoice', { choice: 'keep', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id }); equipmentChoiceModal.classList.add('hidden'); finishModal(); } });
+    equipNewBtn.addEventListener('click', () => { if (myPlayerInfo.pendingEquipmentChoice) { socket.emit('resolveEquipmentChoice', { choice: 'swap', newCardId: myPlayerInfo.pendingEquipmentChoice.newCard.id }); equipmentChoiceModal.classList.add('hidden'); finishModal(); } });
+    discardNewItemBtn.addEventListener('click', () => { socket.emit('resolveItemSwap', { cardToDiscardId: null }); itemSwapModal.classList.add('hidden'); finishModal(); });
+    itemFoundCloseBtn.addEventListener('click', () => { itemFoundModal.classList.add('hidden'); finishModal(); });
 
     // --- 4.5. Menu & Custom Settings ---
-    document.querySelectorAll('.slider').forEach(slider => {
-        const valueSpan = get(`${slider.id}-value`);
-        if (valueSpan) {
-            slider.addEventListener('input', () => {
-                valueSpan.textContent = slider.value;
-            });
-        }
-    });
-
-    get('enemy-scaling').addEventListener('change', (e) => {
-        get('scaling-rate-group').classList.toggle('hidden', !e.target.checked);
-    });
+    document.querySelectorAll('.slider').forEach(slider => { const valueSpan = get(`${slider.id}-value`); if (valueSpan) slider.addEventListener('input', () => valueSpan.textContent = slider.value); });
+    get('enemy-scaling').addEventListener('change', (e) => get('scaling-rate-group').classList.toggle('hidden', !e.target.checked));
 
     // --- 4.6. Help & Tutorial ---
     const tutorialContent = [
@@ -1863,11 +1499,6 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, spells, and items. Click an equippable item in your hand to equip it. If your hand is full when you find a new item, you'll be asked to swap something out.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
     ];
     let currentTutorialPage = 0;
-
-    function showTutorial() {
-        tutorialModal.classList.remove('hidden');
-        renderTutorialPage();
-    }
     function renderTutorialPage() {
         const page = tutorialContent[currentTutorialPage];
         get('tutorial-page-content').innerHTML = `<h2 class="panel-header">${page.title}</h2><div class="tutorial-page-body">${page.content}</div>`;
@@ -1875,74 +1506,21 @@ document.addEventListener('DOMContentLoaded', () => {
         get('tutorial-prev-btn').disabled = currentTutorialPage === 0;
         get('tutorial-next-btn').textContent = currentTutorialPage === tutorialContent.length - 1 ? "Finish" : "Next";
     }
-    function closeTutorial() {
-        tutorialModal.classList.add('hidden');
-        localStorage.setItem('tutorialCompleted', 'true');
-    }
-    get('tutorial-next-btn').addEventListener('click', () => {
-        if (currentTutorialPage < tutorialContent.length - 1) {
-            currentTutorialPage++;
-            renderTutorialPage();
-        } else {
-            closeTutorial();
-        }
-    });
-    get('tutorial-prev-btn').addEventListener('click', () => {
-        if (currentTutorialPage > 0) {
-            currentTutorialPage--;
-            renderTutorialPage();
-        }
-    });
+    function closeTutorial() { tutorialModal.classList.add('hidden'); localStorage.setItem('tutorialCompleted', 'true'); }
+    get('tutorial-next-btn').addEventListener('click', () => { if (currentTutorialPage < tutorialContent.length - 1) { currentTutorialPage++; renderTutorialPage(); } else closeTutorial(); });
+    get('tutorial-prev-btn').addEventListener('click', () => { if (currentTutorialPage > 0) { currentTutorialPage--; renderTutorialPage(); } });
     get('tutorial-close-btn').addEventListener('click', closeTutorial);
 
-    const helpContentHTML = `
-        <h3>Core Mechanics</h3>
-        <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or using abilities, cost AP. Your total AP is determined by your class and equipment, and it refills at the start of your turn.</p>
-        <p><strong>Health (HP):</strong> Your life force. If it reaches 0, you fall but can get back up by spending a Life. If you're out of Lives, you're out of the game!</p>
-        <p><strong>Dice Rolls:</strong> Most actions are resolved with a d20 roll. To succeed, you usually need to roll a number that meets or exceeds a target's Defense Class (DC) or Armor Class (AC).</p>
-        <p><strong>Bag Capacity:</strong> You have a limited number of cards you can hold (your hand size). If you draw a card while your hand is full, you'll be prompted to discard one to make room.</p>
-        
-        <hr>
-
-        <h3>Player Stats</h3>
-        <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit an enemy.</p>
-        <p><strong>Shield Bonus:</strong> Your defense against attacks. An enemy must roll a d20 + their attack bonus that is higher than 10 + your shield bonus to hit you.</p>
-        <p><strong>Health Dice:</strong> A resource used for healing during a Respite or Rest action. You have a limited number per adventure, determined by your class.</p>
-        <p><strong>Lives:</strong> If your HP drops to 0, you spend a Life to get back up at half HP. Run out, and you're defeated!</p>
-        <p><strong>Shield HP:</strong> Temporary HP gained from actions like Guard. This is depleted before your normal HP but disappears at the end of your turn.</p>
-        <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes that influence rolls and certain abilities. For example, STR is often used for melee attacks, while DEX can be used for ranged attacks or dodging traps.</p>
-        
-        <hr>
-
-        <h3>Actions (Your Turn)</h3>
-        <p><strong>Attack (-1 or -2 AP):</strong> Use your equipped weapon or fists to attack a monster. Click your weapon card first, then click the monster you want to target.</p>
-        <p><strong>Use Item/Cast Spell (-1 AP):</strong> Use a card from your hand. Some cards may require you to select a target before using them.</p>
-        <p><strong>Use Class Ability (Varies):</strong> Perform your unique class ability. You can find this on your Character screen. Click the 'Use Ability' button to activate it.</p>
-        <p><strong>Guard (-1 AP):</strong> Add a temporary Shield HP bonus for one round, making you harder to damage. The amount is usually 2, but can be improved by armor.</p>
-        <p><strong>Brief Respite (-1 AP):</strong> Spend one Health Die to recover a rolled amount of HP (e.g., 1d4, 1d6, etc. depending on your class).</p>
-        <p><strong>Full Rest (-2 AP):</strong> Spend two Health Dice to recover a larger, rolled amount of HP.</p>
-        <p><strong>Contribute to Challenge (-1 AP):</strong> If a Skill Challenge is active, spend AP to make a roll and contribute to the party's success.</p>
-    `;
-    [helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => {
-        get('help-content').innerHTML = helpContentHTML;
-        helpModal.classList.remove('hidden');
-    }));
+    const helpContentHTML = `<h3>Core Mechanics</h3><p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Refills at the start of your turn.</p><p><strong>Health (HP):</strong> Your life force. If it reaches 0, you spend a Life to get back up.</p><h3>Player Stats</h3><p><strong>Damage Bonus:</strong> Added to weapon damage rolls and your d20 roll to hit an enemy.</p><p><strong>Shield Bonus:</strong> Your defense against attacks. An enemy must roll a d20 + their attack bonus higher than 10 + your shield bonus to hit you.</p><h3>Actions (Your Turn)</h3><p><strong>Attack (-1 or -2 AP):</strong> Click your equipped weapon, then a monster.</p><p><strong>Use Item/Cast Spell (-1 AP):</strong> Use a card from your hand.</p><p><strong>Guard (-1 AP):</strong> Add temporary Shield HP.</p><p><strong>Brief Respite (-1 AP):</strong> Spend one Health Die to heal.</p><p><strong>Full Rest (-2 AP):</strong> Spend two Health Dice to heal more.</p>`;
+    [helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => { get('help-content').innerHTML = helpContentHTML; helpModal.classList.remove('hidden'); }));
     get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
 
-    if (!localStorage.getItem('tutorialCompleted')) {
-        showTutorial();
-    }
+    if (!localStorage.getItem('tutorialCompleted')) { renderTutorialPage(); tutorialModal.classList.remove('hidden'); }
 
     // --- 4.7. Voice Chat ---
     [joinVoiceBtn, mobileJoinVoiceBtn].forEach(btn => btn.addEventListener('click', joinVoice));
     [disconnectVoiceBtn, mobileDisconnectVoiceBtn].forEach(btn => btn.addEventListener('click', disconnectVoice));
-    [muteVoiceBtn, mobileMuteVoiceBtn].forEach(btn => btn.addEventListener('click', () => {
-        if (localStream) {
-            const audioTrack = localStream.getAudioTracks()[0];
-            audioTrack.enabled = !audioTrack.enabled;
-            updateVoiceButtons();
-        }
-    }));
+    [muteVoiceBtn, mobileMuteVoiceBtn].forEach(btn => btn.addEventListener('click', () => { if (localStream) { const a = localStream.getAudioTracks()[0]; a.enabled = !a.enabled; updateVoiceButtons(); } }));
     
     // --- 4.8. Menu Toggles ---
     menuToggleBtn.addEventListener('click', () => toggleMenu(menuDropdown, menuToggleBtn));
@@ -1957,18 +1535,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // --- 4.9. Lobby Settings ---
-    document.querySelectorAll('input[name="gameMode"]').forEach(radio => {
-        radio.addEventListener('change', () => {
-            const isCustom = document.querySelector('input[name="gameMode"]:checked').value === 'Custom';
-            customSettingsPanel.classList.toggle('hidden', !isCustom);
-        });
-    });
+    document.querySelectorAll('input[name="gameMode"]').forEach(radio => radio.addEventListener('change', () => customSettingsPanel.classList.toggle('hidden', document.querySelector('input[name="gameMode"]:checked').value !== 'Custom')));
 
     initializeLobby();
 });
 
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
-        .then(reg => console.log('Service worker registered successfully', reg))
-        .catch(err => console.error('Service worker registration failed:', err));
+        .then(reg => console.log('SW registered', reg))
+        .catch(err => console.error('SW registration failed:', err));
 }
