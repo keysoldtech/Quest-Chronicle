@@ -54,7 +54,6 @@ const iceServers = {
         { urls: 'stun:stun1.l.google.com:19302' }
     ]
 };
-// ARCHITECTURAL FIX: Removed unreliable global variable. Data will now come directly from the room object.
 
 // --- 1.2. Static Data (Visuals) ---
 const statVisuals = {
@@ -625,11 +624,12 @@ function renderSetupChoices(room) {
     // --- Part 1: Render Class Selection UI ---
     [classCardsContainer, mobileClassCardsContainer].forEach(container => {
         container.innerHTML = '';
-        if (!room.classData) {
+        // ARCHITECTURAL FIX: Read class data from the permanent gameState location.
+        if (!room.gameState.classData) {
             container.innerHTML = `<p class="empty-pool-text">Loading classes...</p>`;
             return;
         }
-        for (const [classId, data] of Object.entries(room.classData)) {
+        for (const [classId, data] of Object.entries(room.gameState.classData)) {
            const card = document.createElement('div');
            card.className = 'class-card';
            card.dataset.classId = classId;
@@ -721,7 +721,8 @@ function renderGameplayState(room) {
         mobilePlayerClassName.textContent = `The ${myPlayerInfo.class}`;
         [playerClassName, mobilePlayerClassName].forEach(el => el.classList.remove('hidden'));
         
-        const ability = room.classData?.[myPlayerInfo.class]?.ability;
+        // ARCHITECTURAL FIX: Read class data from the permanent gameState location.
+        const ability = room.gameState.classData?.[myPlayerInfo.class]?.ability;
         if (ability) {
             let canUse = myPlayerInfo.currentAp >= ability.apCost;
             if (myPlayerInfo.class === 'Barbarian' || myPlayerInfo.class === 'Warrior') {

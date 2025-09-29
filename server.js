@@ -133,6 +133,8 @@ class GameManager {
                 },
                 currentPartyEvent: null,
                 skillChallenge: { isActive: false },
+                // ARCHITECTURAL FIX: Class data is now a permanent part of the game state from the beginning.
+                classData: gameData.classes, 
             },
             chatLog: []
         };
@@ -187,8 +189,6 @@ class GameManager {
             socket.join(roomId);
             this.socketToRoom[socket.id] = roomId; // Map socket to room for efficiency
             
-            // ARCHITECTURAL FIX: Attach class data directly to the room object.
-            room.classData = gameData.classes;
             socket.emit('joinSuccess', room);
             this.emitGameState(roomId);
             return;
@@ -299,8 +299,6 @@ class GameManager {
 
         room.gameState.phase = 'class_selection';
         
-        // ARCHITECTURAL FIX: Attach class data directly to the room object and emit the room.
-        room.classData = gameData.classes;
         io.to(room.id).emit('gameStarted', room);
     }
 
@@ -323,7 +321,7 @@ class GameManager {
         if (!player || player.class || player.role !== 'Explorer') return;
     
         this.assignClassToPlayer(room.id, player, classId);
-        this._attemptToFinalizeSetup(room);
+        this._checkAndFinalizeSetup(room);
     }
 
     chooseAdvancedSetup(socket, { choice }) {
@@ -334,7 +332,7 @@ class GameManager {
         }
 
         player.madeAdvancedChoice = choice; // Store the choice ('gear' or 'resources')
-        this._attemptToFinalizeSetup(room);
+        this._checkAndFinalizeSetup(room);
     }
     
     calculatePlayerStats(player) {
@@ -384,7 +382,7 @@ class GameManager {
     }
     
     // REFACTORED: Unified "gatekeeper" function.
-    _attemptToFinalizeSetup(room) {
+    _checkAndFinalizeSetup(room) {
         const humanExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
         if (humanExplorers.length === 0) return; // No one to set up
 
