@@ -950,20 +950,8 @@ function renderUIForPhase(room) {
 socket.on('connect', () => { myId = socket.id; });
 
 socket.on('roomCreated', (room) => {
-    currentRoomState = room; // User requested state update
     document.body.classList.add('in-game');
-    
-    // Keep existing render logic, as it sets up other parts of the UI
     renderUIForPhase(room);
-
-    // NEW LOGIC: If phase is class_selection, override the class UI with the new, simpler version
-    if (room.gameState.phase === 'class_selection' && room.availableClasses) {
-        // This check prevents the DM from seeing the class selection screen
-        const myPlayer = room.players[myId];
-        if (myPlayer && myPlayer.role === 'Explorer') {
-            showClassSelectionUI(room.availableClasses);
-        }
-    }
 });
 
 socket.on('joinSuccess', (room) => {
@@ -1518,54 +1506,4 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
         .then(reg => console.log('SW registered', reg))
         .catch(err => console.error('SW registration failed:', err));
-}
-
-// Function to show the class selection UI on the Character Tab
-function showClassSelectionUI(classes) {
-    const containers = [
-        document.querySelector('#class-cards-container'),
-        document.querySelector('#mobile-class-cards-container')
-    ];
-
-    containers.forEach(container => {
-        if (!container) return;
-        
-        // Make sure parent is visible and stats are hidden
-        const classSelectionView = container.closest('#class-selection, #mobile-class-selection');
-        if (classSelectionView) classSelectionView.classList.remove('hidden');
-        
-        const statsView = classSelectionView?.parentElement.querySelector('#player-stats-container, #mobile-player-stats');
-        if (statsView) statsView.classList.add('hidden');
-
-        container.innerHTML = ''; // Clear previous content
-
-        Object.entries(classes).forEach(([classId, classData]) => {
-            const classCard = document.createElement('div');
-            classCard.className = 'class-card';
-            classCard.innerHTML = `
-                <h3>${classId}</h3>
-                <p>HP: ${classData.baseHp}</p>
-                <p>Damage: +${classData.baseDamageBonus}</p>
-                <p>Shield: +${classData.baseShieldBonus}</p>
-                <p>AP: ${classData.baseAp}</p>
-                <p><strong>Ability:</strong> ${classData.ability.name}</p>
-                <p>${classData.ability.description}</p>
-                <button onclick="selectClass('${classId}')">Select ${classId}</button>
-            `;
-            container.appendChild(classCard);
-        });
-    });
-}
-
-// Function to emit the class selection choice to the server
-function selectClass(classId) {
-    socket.emit('chooseClass', { classId });
-
-    // Provide immediate feedback to the user
-    document.querySelectorAll('.class-card button').forEach(button => {
-        button.disabled = true;
-        if (button.getAttribute('onclick') === `selectClass('${classId}')`) {
-            button.textContent = 'Selected!';
-        }
-    });
 }
