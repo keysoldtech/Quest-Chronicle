@@ -614,18 +614,10 @@ function renderLobbyState(room) {
 
 // --- 3.4. renderClassSelection() ---
 function renderClassSelection(room) {
+    // This function is now only responsible for populating the class selection content.
+    // The decision to show/hide its container is handled by the main render router.
     const isExplorer = myPlayerInfo.role === 'Explorer';
     if (!isExplorer || myPlayerInfo.class) return;
-
-    // Show relevant desktop panels
-    classSelectionDiv.classList.remove('hidden');
-    advancedCardChoiceDiv.classList.add('hidden');
-    playerStatsContainer.classList.add('hidden');
-
-    // Show relevant mobile panels
-    mobileClassSelection.classList.remove('hidden');
-    mobileAdvancedCardChoiceDiv.classList.add('hidden');
-    mobilePlayerStats.classList.add('hidden');
 
     // Force mobile view to character screen
     if (!get('mobile-screen-character').classList.contains('active')) {
@@ -677,16 +669,6 @@ function renderAdvancedSetup(room) {
     const isExplorer = myPlayerInfo.role === 'Explorer';
     if (!isExplorer || myPlayerInfo.madeAdvancedChoice) return;
 
-    // Show relevant desktop panels
-    classSelectionDiv.classList.add('hidden');
-    advancedCardChoiceDiv.classList.remove('hidden');
-    playerStatsContainer.classList.add('hidden');
-    
-    // Show relevant mobile panels
-    mobileClassSelection.classList.add('hidden');
-    mobileAdvancedCardChoiceDiv.classList.remove('hidden');
-    mobilePlayerStats.classList.add('hidden');
-
     // Force mobile view to character screen
     if (!get('mobile-screen-character').classList.contains('active')) {
         document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
@@ -716,10 +698,6 @@ function renderGameplayState(room) {
     const isMyTurn = currentTurnTakerId === myId;
     const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
     const challenge = gameState.skillChallenge;
-
-    // Show gameplay panels
-    playerStatsContainer.classList.toggle('hidden', !isExplorer);
-    mobilePlayerStats.classList.toggle('hidden', !isExplorer);
 
     // Render action bars
     const showActionBar = isMyTurn && isExplorer && !isStunned;
@@ -881,11 +859,7 @@ function renderUIForPhase(room) {
     const { players, gameState } = room;
 
     // --- Phase-Based Routing ---
-    // This is now the main switch that determines which major UI to show.
-    // It is the sole authority for hiding/showing top-level containers.
     if (gameState.phase === 'lobby') {
-        lobbyScreen.classList.remove('hidden');
-        gameArea.classList.add('hidden');
         renderLobbyState(room);
         return; // Stop here for lobby
     }
@@ -951,18 +925,44 @@ function renderUIForPhase(room) {
     document.querySelector('[data-tab="party-loot-tab"]').classList.toggle('highlight', newLootCount > oldLootCount);
 
     // --- In-Game Phase Specific Renders ---
-    // The router now hides all panels first, then calls the specific function to show the correct one.
-    [classSelectionDiv, advancedCardChoiceDiv, playerStatsContainer].forEach(el => el.classList.add('hidden'));
+    // BUG FIX: Comprehensively hide ALL interchangeable panels for both desktop and mobile
+    // before showing the correct one for the current phase. This prevents state conflicts.
+    [
+        classSelectionDiv, advancedCardChoiceDiv, playerStatsContainer,
+        mobileClassSelection, mobileAdvancedCardChoiceDiv, mobilePlayerStats
+    ].forEach(el => el.classList.add('hidden'));
+
 
     switch (gameState.phase) {
         case 'class_selection':
-            renderClassSelection(room);
+            // BUG FIX: Add a specific view for the DM during this phase.
+            if (myPlayerInfo.role === 'DM') {
+                playerStatsContainer.classList.remove('hidden');
+                playerStatsContainer.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
+                mobilePlayerStats.classList.remove('hidden');
+                mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
+                // Force mobile view to character screen
+                if (!get('mobile-screen-character').classList.contains('active')) {
+                    document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+                    get('mobile-screen-character').classList.add('active');
+                    mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
+                }
+            } else {
+                classSelectionDiv.classList.remove('hidden');
+                mobileClassSelection.classList.remove('hidden');
+                renderClassSelection(room);
+            }
             break;
         case 'advanced_setup_choice':
+            advancedCardChoiceDiv.classList.remove('hidden');
+            mobileAdvancedCardChoiceDiv.classList.remove('hidden');
             renderAdvancedSetup(room);
             break;
         case 'item_swap_resolution':
         case 'started':
+            playerStatsContainer.classList.remove('hidden');
+            mobilePlayerStats.classList.remove('hidden');
             renderGameplayState(room);
             if (gameState.phase === 'started' && isMyTurn && !isMyTurnPreviously) {
                  addToModalQueue(() => {
