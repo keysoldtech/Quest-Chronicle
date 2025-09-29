@@ -514,7 +514,7 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
             })
             .join('');
         
-        const hpDisplay = gameState.phase === 'lobby'
+        const hpDisplay = gameState.phase === 'lobby' || gameState.phase === 'class_selection'
             ? 'HP: -- / --'
             : `HP: ${player.stats.currentHp || '?'} / ${player.stats.maxHp || '?'}`;
 
@@ -764,7 +764,8 @@ function renderGameplayState(room) {
                     const isUnarmed = selectedWeaponId === 'unarmed';
                     const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
                     if (myPlayerInfo.currentAp < apCost) return showInfoToast(`Not enough AP. Needs ${apCost}.`, 'error');
-                    openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId }, isUnarmed ? 'Fists' : weapon.name);
+                    // CRITICAL FIX: The 'targetId' variable was undefined. It is now correctly passed using 'selectedTargetId'.
+                    openNarrativeModal({ action: 'attack', cardId: selectedWeaponId, targetId: selectedTargetId }, isUnarmed ? 'Fists' : weapon.name);
                 };
                 container.appendChild(cardEl);
             });
@@ -805,6 +806,8 @@ function renderUIForPhase(room) {
         if (turnTaker.role === 'DM') turnText = "Dungeon Master's Turn";
         else turnText = `Turn: ${turnTaker.name}`;
         if(isMyTurn) turnText += ' (Your Turn)';
+    } else if (gameState.phase === 'class_selection') {
+        turnText = "Waiting for players...";
     }
     turnIndicator.textContent = turnText;
     mobileTurnIndicator.textContent = isMyTurn ? "Your Turn" : turnTaker?.name || "Waiting...";
@@ -860,6 +863,7 @@ function renderUIForPhase(room) {
                 mobilePlayerStats.classList.remove('hidden');
                 mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
             } else {
+                [playerStatsContainer, mobilePlayerStats].forEach(el => el.classList.remove('hidden'));
                 renderSetupChoices(room);
             }
             break;
@@ -870,6 +874,7 @@ function renderUIForPhase(room) {
             mobileBoardCards.classList.remove('hidden');
             playerHandDiv.classList.remove('hidden');
             mobilePlayerHand.classList.remove('hidden');
+            [classSelectionDiv, mobileClassSelection].forEach(el => el.classList.add('hidden')); // Explicitly hide class selection
             renderGameplayState(room);
             if (isMyTurn && !isMyTurnPreviously) {
                  addToModalQueue(() => {
