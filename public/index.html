@@ -36,7 +36,7 @@
     <div id="menu-screen" class="screen active">
         <div class="menu-container">
             <h1 class="game-title">Quest & Chronicle</h1>
-            <p class="game-subtitle">v5.0.13 (Playtest-v5.0.13)</p>
+            <p class="game-subtitle">v5.0.14 (Playtest-v5.0.14)</p>
             
             <!-- Player Name Input -->
             <div class="menu-section">
@@ -121,7 +121,7 @@
                          <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v5.0.13 (Playtest-v5.0.13)</p>
+                        <p class="build-number-font">v5.0.14 (Playtest-v5.0.14)</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -151,12 +151,8 @@
                 
                 <aside class="character-panel panel">
                     <!-- This panel contains multiple states -->
-                    <div id="class-selection" class="panel-content">
-                        <h2 class="panel-header">Choose Your Class</h2>
-                        <div id="class-cards-container" class="class-cards-container"></div>
-                        <div class="class-confirm-container">
-                             <button id="confirm-class-btn" class="btn btn-primary hidden">Confirm Class</button>
-                        </div>
+                    <div id="class-selection-container" class="panel-content">
+                        <!-- Content rendered by JS -->
                     </div>
                     <div id="player-stats-container" class="panel-content hidden">
                          <h2 id="player-class-name" class="panel-header player-class-header hidden">Your Class</h2>
@@ -259,18 +255,7 @@
     
                     <!-- Mobile Screen 2: Character (Stats, Class Selection) -->
                     <div id="mobile-screen-character" class="mobile-screen">
-                        <div id="mobile-class-selection" class="panel mobile-panel">
-                            <h2 class="panel-header">Choose Your Class</h2>
-                            <div id="mobile-class-cards-container" class="class-cards-container"></div>
-                            <div class="class-confirm-container">
-                                 <button id="mobile-confirm-class-btn" class="btn btn-primary hidden">Confirm Class</button>
-                            </div>
-                        </div>
-                        <div id="mobile-player-stats" class="panel mobile-panel">
-                             <h2 id="mobile-player-class-name" class="panel-header player-class-header hidden">Your Class</h2>
-                             <div id="mobile-stats-display" class="player-stats"></div>
-                             <div id="mobile-class-ability-card" class="class-ability-card hidden"></div>
-                        </div>
+                        <!-- Content rendered by JS -->
                     </div>
     
                     <!-- Mobile Screen 3: Party (Player List) -->
@@ -378,30 +363,9 @@
     
         <div id="your-turn-popup" class="your-turn-popup hidden">YOUR TURN</div>
     
-        <div id="dice-roll-overlay" class="modal-overlay hidden">
-            <div class="modal-content dice-roll-content">
-                <h2 id="dice-roll-title" class="panel-header">Rolling...</h2>
-                <div id="dice-animation-container" class="dice-animation-container">
-                    <div id="dice-spinner" class="dice-spinner hidden">
-                        <div class="spinner-wheel"></div>
-                        <div class="spinner-value">?</div>
-                    </div>
-                </div>
-                <button id="dice-roll-action-btn" class="btn btn-special hidden">Roll</button>
-                <div id="dice-roll-result" class="dice-roll-result-container hidden"></div>
-                <button id="dice-roll-continue-btn" class="btn btn-primary hidden">Continue</button>
-            </div>
-        </div>
-    
-        <div id="event-overlay" class="modal-overlay hidden">
-            <div class="modal-content" style="text-align: center;">
-                 <h2 id="event-title" class="panel-header">An Event is Triggered!</h2>
-                 <p id="event-prompt">Roll the dice to see what happens.</p>
-                 <button id="event-roll-btn" class="btn btn-special">Roll d20</button>
-                 <div id="event-card-selection" class="card-container-row hidden" style="justify-content: center;"></div>
-            </div>
-        </div>
     </div>
+    <div id="toast-container"></div>
+    <div id="animation-overlay"></div>
     
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>
