@@ -1,8 +1,1 @@
-{
-  "_comment": "This file is used by the hosting platform to configure application settings and permissions, such as requesting microphone access for voice chat.",
-  "requestFramePermissions": [
-    "microphone"
-  ],
-  "name": "Quest & Chronicle: Digital Prototype",
-  "description": "https://quest-chronicle.onrender.com/"
-}
+
