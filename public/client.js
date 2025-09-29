@@ -554,8 +554,9 @@ function renderPlayerList(players, gameState, listElement, settingsDisplayElemen
 }
 
 // REBUILT: This function is now only responsible for rendering the setup choices and is called by the main render router.
-function renderSetupChoices(classData) {
-    if (!myPlayerInfo || myPlayerInfo.role !== 'Explorer' || !classData) return;
+function renderSetupChoices(room) {
+    if (!myPlayerInfo || myPlayerInfo.role !== 'Explorer' || !room.gameState.classData) return;
+    const { gameState } = room;
 
     // Switch to character tab view on mobile if not already there
     if (!get('mobile-screen-character').classList.contains('active')) {
@@ -566,11 +567,12 @@ function renderSetupChoices(classData) {
     }
 
     const hasChosenClass = !!myPlayerInfo.class;
-    const needsAdvancedChoice = currentRoomState.gameState.gameMode === 'Advanced' && !myPlayerInfo.madeAdvancedChoice;
+    const needsAdvancedChoice = gameState.gameMode === 'Advanced' && !myPlayerInfo.madeAdvancedChoice;
 
     // --- Part 1: Render Class Selection UI ---
     [classCardsContainer, mobileClassCardsContainer].forEach(container => {
         container.innerHTML = '';
+        const classData = gameState.classData;
         if (!classData) {
             container.innerHTML = `<p class="empty-pool-text">Loading classes...</p>`;
             return;
@@ -870,8 +872,16 @@ function renderUIForPhase(room) {
             }
             break;
         case 'class_selection':
-            // Class selection is now handled by the beginClassSelection event, which calls renderSetupChoices directly.
-            // This case can be a fallback or show a waiting message.
+            // REBUILT: This is now the single source of truth for rendering the class selection UI.
+            [classSelectionDiv, mobileClassSelection].forEach(el => el.classList.remove('hidden'));
+            if (myPlayerInfo.role === 'DM') {
+                playerStatsContainer.classList.remove('hidden');
+                playerStatsContainer.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
+                mobilePlayerStats.classList.remove('hidden');
+                mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
+            } else {
+                renderSetupChoices(room);
+            }
             break;
         case 'started':
             playerStatsContainer.classList.remove('hidden');
@@ -950,22 +960,6 @@ socket.on('joinSuccess', (room) => {
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 
 socket.on('playerListUpdate', (room) => renderUIForPhase(room));
-
-// NEW HANDLER: This decouples class selection rendering from the main update loop.
-socket.on('beginClassSelection', ({ classData }) => {
-    // Show the appropriate containers
-    [classSelectionDiv, mobileClassSelection].forEach(el => el.classList.remove('hidden'));
-    
-    if (myPlayerInfo.role === 'DM') {
-        playerStatsContainer.classList.remove('hidden');
-        playerStatsContainer.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
-        mobilePlayerStats.classList.remove('hidden');
-        mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
-    } else {
-        renderSetupChoices(classData);
-    }
-});
-
 
 socket.on('gameStarted', (room) => {
     renderUIForPhase(room);

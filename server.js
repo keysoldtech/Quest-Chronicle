@@ -228,16 +228,15 @@ class GameManager {
     }
 
     // --- 3.3. Game Lifecycle (Create, Join, Start) ---
-    // REBUILT: This function is now simple and only starts the class selection process.
+    // REBUILT & SIMPLIFIED: This function now sets the phase and sends a single, authoritative update.
     startGame(socket) {
         const room = this.findRoomBySocket(socket);
         if (!room || room.hostId !== socket.id || room.gameState.phase !== 'lobby') return;
 
         room.gameState.phase = 'class_selection';
         
-        // NEW: Send a dedicated event with the class data. This decouples the initial render
-        // from the main gameStateUpdate loop, fixing the race condition.
-        io.to(room.id).emit('beginClassSelection', { classData: gameData.classes });
+        // The single update now contains all data the client needs to render the class selection screen.
+        this.emitGameState(room.id);
     }
 
     // --- 3.4. Player Setup (Class, Stats, Cards) ---
