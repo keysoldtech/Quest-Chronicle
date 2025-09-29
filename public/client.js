@@ -605,11 +605,12 @@ function renderLobbyState(room) {
 }
 
 
-// --- 3.4. renderClassSelection() ---
-function renderClassSelection(room) {
+// REFACTORED: Simplified logic for rendering setup choices.
+function renderSetupChoices(room) {
     const isExplorer = myPlayerInfo.role === 'Explorer';
-    if (!isExplorer || myPlayerInfo.class) return;
+    if (!isExplorer) return;
 
+    // Switch to character tab view on mobile if not already there
     if (!get('mobile-screen-character').classList.contains('active')) {
         document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
         get('mobile-screen-character').classList.add('active');
@@ -617,6 +618,11 @@ function renderClassSelection(room) {
         document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
     }
 
+    // Determine what to show based on player state, not game phase
+    const hasChosenClass = !!myPlayerInfo.class;
+    const needsAdvancedChoice = room.gameState.gameMode === 'Advanced' && !myPlayerInfo.madeAdvancedChoice;
+
+    // --- Part 1: Render Class Selection UI ---
     [classCardsContainer, mobileClassCardsContainer].forEach(container => {
         container.innerHTML = '';
         if (!room.classData) {
@@ -646,39 +652,37 @@ function renderClassSelection(room) {
            const classId = card.dataset.classId;
            card.classList.toggle('selected', classId === tempSelectedClassId);
            card.onclick = () => {
+               if (hasChosenClass) return; // Don't allow changing class
                tempSelectedClassId = classId;
                renderUIForPhase(currentRoomState);
            };
        });
    });
-  [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => {
-       btn.classList.toggle('hidden', !tempSelectedClassId);
-       btn.disabled = false;
-       btn.textContent = 'Confirm Class';
-  });
-}
 
-// --- 3.5. renderAdvancedSetup() ---
-function renderAdvancedSetup(room) {
-    const isExplorer = myPlayerInfo.role === 'Explorer';
-    if (!isExplorer || myPlayerInfo.madeAdvancedChoice) return;
-
-    if (!get('mobile-screen-character').classList.contains('active')) {
-        document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
-        get('mobile-screen-character').classList.add('active');
-        mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
-    }
-
-    [advancedChoiceButtonsDiv, mobileAdvancedChoiceButtonsDiv].forEach(container => {
+   // --- Part 2: Render Advanced Choice UI ---
+   [advancedChoiceButtonsDiv, mobileAdvancedChoiceButtonsDiv].forEach(container => {
         container.innerHTML = `
             <button id="adv-choice-gear" class="btn btn-primary">Start with Gear</button>
-            <p class="subtitle-font" style="text-align:center;">Draw 1 Weapon & 1 Armor. Automatically equip the best ones.</p>
+            <p class="subtitle-font" style="text-align:center;">Draw 1 Weapon & 1 Armor.</p>
             <button id="adv-choice-resources" class="btn btn-secondary">Start with Resources</button>
             <p class="subtitle-font" style="text-align:center;">Draw 2 Items & 1 Spell.</p>
         `;
         container.querySelector('#adv-choice-gear').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'gear' });
         container.querySelector('#adv-choice-resources').onclick = () => socket.emit('chooseAdvancedSetup', { choice: 'resources' });
+    });
+
+    // --- Part 3: Control Visibility ---
+    const showClassSelection = !hasChosenClass;
+    const showAdvancedSelection = hasChosenClass && needsAdvancedChoice;
+    
+    [classCardsContainer, mobileClassCardsContainer].forEach(el => el.style.display = showClassSelection ? 'flex' : 'none');
+    [advancedCardChoiceDiv, mobileAdvancedCardChoiceDiv].forEach(el => el.classList.toggle('hidden', !showAdvancedSelection));
+    [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => {
+       btn.classList.toggle('hidden', !tempSelectedClassId || hasChosenClass);
+       if (!hasChosenClass) {
+           btn.disabled = false;
+           btn.textContent = 'Confirm Class';
+       }
     });
 }
 
@@ -906,11 +910,8 @@ function renderUIForPhase(room) {
     document.querySelector('[data-tab="party-events-tab"]').classList.toggle('highlight', !!gameState.currentPartyEvent);
     document.querySelector('[data-tab="party-loot-tab"]').classList.toggle('highlight', newLootCount > oldLootCount);
 
-    [
-        classSelectionDiv, advancedCardChoiceDiv, playerStatsContainer,
-        mobileClassSelection, mobileAdvancedCardChoiceDiv, mobilePlayerStats
-    ].forEach(el => el.classList.add('hidden'));
-
+    // Reset character panel views
+    [classSelectionDiv, playerStatsContainer, mobileClassSelection, mobilePlayerStats].forEach(el => el.classList.add('hidden'));
 
     switch (gameState.phase) {
         case 'class_selection':
@@ -919,22 +920,11 @@ function renderUIForPhase(room) {
                 playerStatsContainer.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
                 mobilePlayerStats.classList.remove('hidden');
                 mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
-                if (!get('mobile-screen-character').classList.contains('active')) {
-                    document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
-                    get('mobile-screen-character').classList.add('active');
-                    mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-                    document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
-                }
             } else {
                 classSelectionDiv.classList.remove('hidden');
                 mobileClassSelection.classList.remove('hidden');
-                renderClassSelection(room);
+                renderSetupChoices(room); // Use the new unified setup renderer
             }
-            break;
-        case 'advanced_setup_choice':
-            advancedCardChoiceDiv.classList.remove('hidden');
-            mobileAdvancedCardChoiceDiv.classList.remove('hidden');
-            renderAdvancedSetup(room);
             break;
         case 'started':
             playerStatsContainer.classList.remove('hidden');

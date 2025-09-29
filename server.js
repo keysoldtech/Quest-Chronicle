@@ -245,7 +245,6 @@ class GameManager {
             room.players[dmNpc.id] = dmNpc;
             
             const npcNames = ["Grok", "Lyra", "Finn"];
-            const classKeys = Object.keys(gameData.classes);
             const explorerNpcs = [];
 
             for (const name of npcNames) {
@@ -253,11 +252,6 @@ class GameManager {
                 const npc = this.createPlayerObject(npcId, name);
                 npc.isNpc = true;
                 npc.role = 'Explorer';
-                
-                const randomClassId = classKeys[Math.floor(Math.random() * classKeys.length)];
-                this.assignClassToPlayer(room.id, npc, randomClassId);
-                
-                // NPC setup will now happen in the atomic _finalizeAndStartGame function
                 room.players[npc.id] = npc;
                 explorerNpcs.push(npc);
             }
@@ -329,27 +323,18 @@ class GameManager {
         if (!player || player.class || player.role !== 'Explorer') return;
     
         this.assignClassToPlayer(room.id, player, classId);
-        this._checkAndFinalizeSetup(room);
+        this._attemptToFinalizeSetup(room);
     }
 
     chooseAdvancedSetup(socket, { choice }) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-        if (!room || !player || room.gameState.phase !== 'advanced_setup_choice' || player.madeAdvancedChoice) {
+        if (!room || !player || player.madeAdvancedChoice) {
             return;
         }
 
-        player.madeAdvancedChoice = true;
-
-        if (choice === 'gear') {
-            this.dealCard(room.id, player.id, 'weapon', 1);
-            this.dealCard(room.id, player.id, 'armor', 1);
-        } else if (choice === 'resources') {
-            this.dealCard(room.id, player.id, 'item', 2);
-            this.dealCard(room.id, player.id, 'spell', 1);
-        }
-        
-        this._checkAndFinalizeSetup(room);
+        player.madeAdvancedChoice = choice; // Store the choice ('gear' or 'resources')
+        this._attemptToFinalizeSetup(room);
     }
     
     calculatePlayerStats(player) {
@@ -398,83 +383,89 @@ class GameManager {
         return newStats;
     }
     
-    // REFACTORED: Centralized gatekeeper for setup phases.
-    _checkAndFinalizeSetup(room) {
-        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
-        if (explorers.length === 0) return;
+    // REFACTORED: Unified "gatekeeper" function.
+    _attemptToFinalizeSetup(room) {
+        const humanExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
+        if (humanExplorers.length === 0) return; // No one to set up
 
-        // Stage 1: Wait for all explorers to choose a class
-        if (room.gameState.phase === 'class_selection') {
-            if (explorers.every(p => p.class)) {
-                // Everyone has a class. What's next?
-                if (room.gameState.gameMode === 'Advanced') {
-                    room.gameState.phase = 'advanced_setup_choice';
-                    this.emitGameState(room.id); // Show the advanced choice screen
-                } else {
-                    // For Beginner/Custom, setup is done. Finalize.
-                    this._finalizeAndStartGame(room);
-                }
-            } else {
-                // Not everyone has chosen a class yet, just update.
-                this.emitGameState(room.id);
+        // Check if every single human explorer is ready.
+        const allReady = humanExplorers.every(p => {
+            if (!p.class) return false; // Must have a class.
+            if (room.gameState.gameMode === 'Advanced' && !p.madeAdvancedChoice) {
+                return false; // In Advanced mode, must have made the choice.
             }
-            return;
-        }
+            return true;
+        });
 
-        // Stage 2: Wait for all explorers to make their advanced choice
-        if (room.gameState.phase === 'advanced_setup_choice') {
-            if (explorers.every(p => p.madeAdvancedChoice)) {
-                // Everyone made their choice. Finalize.
-                this._finalizeAndStartGame(room);
-            } else {
-                // Not everyone has chosen yet, just update.
-                this.emitGameState(room.id);
-            }
+        if (allReady) {
+            this._finalizeAndStartGame(room);
+        } else {
+            // Not everyone is ready, just send an update so UIs can refresh.
+            this.emitGameState(room.id);
         }
     }
 
-    // NEW: Atomic setup function that runs ONCE.
+    // REFACTORED: Atomic setup function that runs ONCE after all choices are made.
     _finalizeAndStartGame(room) {
-        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer');
-
-        // This is the atomic setup block.
-        explorers.forEach(player => {
-            // Only setup players who haven't been dealt cards yet (prevents re-setup on disconnect/reconnect)
-            if (player.hand.length > 0 || player.equipment.weapon || player.equipment.armor) return;
-
-            const gameMode = room.gameState.gameMode;
-            const settings = room.gameState.customSettings;
-
-            // Deal gear first based on mode
-            if (gameMode === 'Beginner') {
-                this.dealCard(room.id, player.id, 'weapon', 1);
-                this.dealCard(room.id, player.id, 'armor', 1);
-            } else if (gameMode === 'Custom') {
-                if (settings.startWithWeapon) this.dealCard(room.id, player.id, 'weapon', 1);
-                if (settings.startWithArmor) this.dealCard(room.id, player.id, 'armor', 1);
-            }
-            // Advanced mode gear was already dealt in chooseAdvancedSetup
-
-            // CRITICAL FIX: Equip gear BEFORE dealing other cards to prevent any "hand full" issues.
-            const weapon = player.hand.find(c => c.type === 'Weapon');
-            if (weapon) this._internalEquipItem(room, player, weapon.id);
-            const armor = player.hand.find(c => c.type === 'Armor');
-            if (armor) this._internalEquipItem(room, player, armor.id);
-
-            // Now, deal the rest of the cards.
-            if (gameMode === 'Beginner') {
-                this.dealCard(room.id, player.id, 'item', 2);
-                this.dealCard(room.id, player.id, 'spell', 2);
-            } else if (gameMode === 'Custom') {
-                if (settings.startingItems > 0) this.dealCard(room.id, player.id, 'item', settings.startingItems);
-                if (settings.startingSpells > 0) this.dealCard(room.id, player.id, 'spell', settings.startingSpells);
-            }
-            // Advanced resources were already dealt in chooseAdvancedSetup
+        // Setup human players
+        const humanExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
+        humanExplorers.forEach(player => {
+            this._setupPlayerHandAndGear(room, player);
         });
 
+        // Setup NPC players (for single-player mode)
+        const npcExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.isNpc);
+        npcExplorers.forEach(npc => {
+            if(!npc.class) { // Assign a class if they don't have one
+                 const classKeys = Object.keys(gameData.classes);
+                 const randomClassId = classKeys[Math.floor(Math.random() * classKeys.length)];
+                 this.assignClassToPlayer(room.id, npc, randomClassId);
+            }
+            this._setupPlayerHandAndGear(room, npc);
+        });
+        
         // NOW that setup is fully complete, start the game.
         room.gameState.phase = 'started';
         this.startFirstTurn(room.id); // This will emit the final, correct state.
+    }
+
+    // NEW: Centralized hand/gear setup logic.
+    _setupPlayerHandAndGear(room, player) {
+        // Only run setup for a player once.
+        if (player.hand.length > 0 || player.equipment.weapon || player.equipment.armor) return;
+
+        const gameMode = room.gameState.gameMode;
+        const settings = room.gameState.customSettings;
+
+        // --- Step 1: Deal gear based on mode/choices ---
+        if (gameMode === 'Beginner') {
+            this.dealCard(room.id, player.id, 'weapon', 1);
+            this.dealCard(room.id, player.id, 'armor', 1);
+        } else if (gameMode === 'Custom') {
+            if (settings.startWithWeapon) this.dealCard(room.id, player.id, 'weapon', 1);
+            if (settings.startWithArmor) this.dealCard(room.id, player.id, 'armor', 1);
+        } else if (gameMode === 'Advanced' && player.madeAdvancedChoice === 'gear') {
+            this.dealCard(room.id, player.id, 'weapon', 1);
+            this.dealCard(room.id, player.id, 'armor', 1);
+        }
+        
+        // --- Step 2: CRITICAL FIX - Equip the gear that was just dealt ---
+        const weapon = player.hand.find(c => c.type === 'Weapon');
+        if (weapon) this._internalEquipItem(room, player, weapon.id);
+        const armor = player.hand.find(c => c.type === 'Armor');
+        if (armor) this._internalEquipItem(room, player, armor.id);
+
+        // --- Step 3: Now deal the rest of the cards ---
+        if (gameMode === 'Beginner') {
+            this.dealCard(room.id, player.id, 'item', 2);
+            this.dealCard(room.id, player.id, 'spell', 2);
+        } else if (gameMode === 'Custom') {
+            if (settings.startingItems > 0) this.dealCard(room.id, player.id, 'item', settings.startingItems);
+            if (settings.startingSpells > 0) this.dealCard(room.id, player.id, 'spell', settings.startingSpells);
+        } else if (gameMode === 'Advanced' && player.madeAdvancedChoice === 'resources') {
+            this.dealCard(room.id, player.id, 'item', 2);
+            this.dealCard(room.id, player.id, 'spell', 1);
+        }
     }
 
 
