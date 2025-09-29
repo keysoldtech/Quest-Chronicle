@@ -4,6 +4,216 @@
 // the game state received from the server into the HTML DOM. It also contains WebRTC logic for voice chat
 // and the spinner animation logic for dice rolls.
 
+// ===== MENU SYSTEM =====
+let selectedGameMode = null;
+let currentRoom = null;
+
+function initializeMenu() {
+    // DOM Elements for Menu
+    const menuScreen = document.getElementById('menu-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const playerNameInput = document.getElementById('player-name-input');
+    const createRoomBtn = document.getElementById('create-room-btn');
+    const joinRoomBtn = document.getElementById('join-room-btn');
+    const roomCodeInput = document.getElementById('room-code-input');
+    const customSettingsDiv = document.getElementById('custom-settings');
+    const menuError = document.getElementById('menu-error');
+
+    // Mode selection buttons
+    const modeButtons = document.querySelectorAll('.mode-btn');
+    modeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Remove selected class from all buttons
+            modeButtons.forEach(b => b.classList.remove('selected'));
+            // Add selected class to clicked button
+            btn.classList.add('selected');
+            
+            selectedGameMode = btn.getAttribute('data-mode');
+            
+            // Show/hide custom settings
+            if (selectedGameMode === 'Custom') {
+                customSettingsDiv.classList.remove('hidden');
+            } else {
+                customSettingsDiv.classList.add('hidden');
+            }
+            
+            // Enable create button if name is entered
+            validateCreateButton();
+        });
+    });
+    
+    // Player name input validation
+    playerNameInput.addEventListener('input', validateCreateButton);
+    
+    // Create room button
+    createRoomBtn.addEventListener('click', handleCreateRoom);
+    
+    // Join room button
+    joinRoomBtn.addEventListener('click', handleJoinRoom);
+    
+    // Room code input - auto uppercase
+    roomCodeInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.toUpperCase();
+    });
+    
+    // Enter key handlers
+    playerNameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !createRoomBtn.disabled) {
+            handleCreateRoom();
+        }
+    });
+    
+    roomCodeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleJoinRoom();
+        }
+    });
+}
+
+function validateCreateButton() {
+    const playerNameInput = document.getElementById('player-name-input');
+    const createRoomBtn = document.getElementById('create-room-btn');
+    const hasName = playerNameInput.value.trim().length > 0;
+    const hasModeSelected = selectedGameMode !== null;
+    createRoomBtn.disabled = !(hasName && hasModeSelected);
+}
+
+function handleCreateRoom() {
+    const playerNameInput = document.getElementById('player-name-input');
+    const playerName = playerNameInput.value.trim();
+    
+    if (!playerName) {
+        showMenuError('Please enter your name');
+        return;
+    }
+    
+    if (!selectedGameMode) {
+        showMenuError('Please select a game mode');
+        return;
+    }
+    
+    // Gather custom settings if Custom mode
+    let customSettings = null;
+    if (selectedGameMode === 'Custom') {
+        customSettings = {
+            startWithWeapon: document.getElementById('setting-weapon').checked,
+            startWithArmor: document.getElementById('setting-armor').checked,
+            startingItems: parseInt(document.getElementById('setting-items').value),
+            startingSpells: parseInt(document.getElementById('setting-spells').value),
+            maxHandSize: parseInt(document.getElementById('setting-hand-size').value),
+            lootDropRate: parseInt(document.getElementById('setting-loot-rate').value)
+        };
+    }
+    
+    // Send to server
+    socket.emit('createRoom', {
+        playerName: playerName,
+        gameMode: selectedGameMode,
+        customSettings: customSettings
+    });
+    
+    console.log('Creating room...', { playerName, selectedGameMode, customSettings });
+}
+
+function handleJoinRoom() {
+    const playerNameInput = document.getElementById('player-name-input');
+    const roomCodeInput = document.getElementById('room-code-input');
+    const playerName = playerNameInput.value.trim();
+    const roomCode = roomCodeInput.value.trim().toUpperCase();
+    
+    if (!playerName) {
+        showMenuError('Please enter your name');
+        return;
+    }
+    
+    if (roomCode.length !== 4) {
+        showMenuError('Please enter a valid 4-letter room code');
+        return;
+    }
+    
+    socket.emit('joinRoom', {
+        roomId: roomCode,
+        playerName: playerName
+    });
+    
+    console.log('Joining room...', { playerName, roomCode });
+}
+
+function showMenuError(message) {
+    const menuError = document.getElementById('menu-error');
+    menuError.textContent = message;
+    menuError.classList.remove('hidden');
+    setTimeout(() => {
+        menuError.classList.add('hidden');
+    }, 3000);
+}
+
+function hideMenuShowGame() {
+    const menuScreen = document.getElementById('menu-screen');
+    const gameScreen = document.getElementById('game-screen');
+    menuScreen.classList.remove('active');
+    gameScreen.classList.add('active');
+    document.body.classList.add('in-game');
+}
+
+// ===== CLASS SELECTION UI =====
+function showClassSelectionUI(classes) {
+    const classCardsContainer = document.getElementById('class-cards-container');
+    const mobileClassCardsContainer = document.getElementById('mobile-class-cards-container');
+
+    [classCardsContainer, mobileClassCardsContainer].forEach(container => {
+        if (!container) return;
+        container.innerHTML = ''; // Clear it
+
+        const classGrid = document.createElement('div');
+        classGrid.className = 'class-grid';
+        classGrid.id = (container.id === 'mobile-class-cards-container' ? 'mobile-' : '') + 'class-grid';
+
+        Object.entries(classes).forEach(([classId, classData]) => {
+            const classCard = document.createElement('div');
+            classCard.className = 'class-card';
+            classCard.innerHTML = `
+                <h3>${classId}</h3>
+                <div class="class-stats">
+                    <p><strong>HP:</strong> ${classData.baseHp}</p>
+                    <p><strong>Damage:</strong> +${classData.baseDamageBonus}</p>
+                    <p><strong>Shield:</strong> +${classData.baseShieldBonus}</p>
+                    <p><strong>AP:</strong> ${classData.baseAp}</p>
+                </div>
+                <div class="class-ability">
+                    <p><strong>${classData.ability.name}</strong></p>
+                    <p class="ability-desc">${classData.ability.description}</p>
+                </div>
+                <button class="select-class-btn" onclick="selectClass('${classId}')">Select ${classId}</button>
+            `;
+            classGrid.appendChild(classCard);
+        });
+        container.appendChild(classGrid);
+    });
+
+    // Ensure the correct panels are visible.
+    const classSelectionDiv = document.getElementById('class-selection');
+    const playerStatsContainer = document.getElementById('player-stats-container');
+    const mobileClassSelection = document.getElementById('mobile-class-selection');
+    const mobilePlayerStats = document.getElementById('mobile-player-stats');
+
+    classSelectionDiv.classList.remove('hidden');
+    playerStatsContainer.classList.add('hidden');
+    mobileClassSelection.classList.remove('hidden');
+    mobilePlayerStats.classList.add('hidden');
+}
+
+
+function selectClass(classId) {
+    console.log('Selecting class:', classId);
+    socket.emit('chooseClass', { classId });
+    document.querySelectorAll('.select-class-btn').forEach(btn => {
+        btn.disabled = true;
+        btn.textContent = '...';
+    });
+}
+window.selectClass = selectClass; // Make it globally accessible for onclick attribute
+
 // --- 8. INITIALIZATION & PWA SERVICE WORKER ---
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -19,9 +229,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 3.  RENDERING LOGIC (REBUILT)
     //     - 3.1. createCardElement()
     //     - 3.2. renderPlayerList()
-    //     - 3.3. renderSetupChoices() (Rebuilt)
+    //     - 3.3. renderSetupChoices() (Replaced by showClassSelectionUI)
     //     - 3.4. renderGameplayState()
-    //     - 3.5. renderUIForPhase() (Rebuilt render router)
+    //     - 3.5. renderUIForPhase() (render router)
     // 4.  UI EVENT LISTENERS (ATTACHED VIA DOMContentLoaded)
     // 5.  SOCKET.IO EVENT HANDLERS
     // 6.  VOICE CHAT (WebRTC) LOGIC
@@ -31,17 +241,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 1. CLIENT STATE & SETUP ---
 
     // --- 1.1. State Variables ---
-    const socket = io();
-    let myPlayerInfo = {};
-    let myId = '';
-    let currentRoomState = {};
-    let localStream;
+    myPlayerInfo = {};
+    myId = '';
+    currentRoomState = {};
+    localStream;
     const peerConnections = {};
-    let selectedTargetId = null; // For combat targeting
-    let selectedWeaponId = null; // For selecting a weapon to attack with
-    let pendingActionData = null; // For narrative modal
+    selectedTargetId = null; // For combat targeting
+    selectedWeaponId = null; // For selecting a weapon to attack with
+    pendingActionData = null; // For narrative modal
     let isMyTurnPreviously = false; // For "Your Turn" popup
-    let tempSelectedClassId = null; // For temporary class selection in lobby
+    tempSelectedClassId = null; // For temporary class selection in lobby
     let pendingAbilityConfirmation = null; // For non-attack ability confirmation
     const modalQueue = [];
     let isModalActive = false;
@@ -90,15 +299,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 1.3. DOM Element References ---
     const get = (id) => document.getElementById(id);
-
-    // Lobby
-    const lobbyScreen = get('lobby');
-    const playerNameInput = get('playerName');
-    const createRoomBtn = get('createRoomBtn');
-    const joinRoomBtn = get('joinRoomBtn');
-    const roomIdInput = get('roomIdInput');
-    const gameModeSelector = get('game-mode-selector');
-    const customSettingsPanel = get('custom-settings-panel');
 
     // Main Game Area
     const gameArea = get('game-area');
@@ -550,82 +750,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // REBUILT: This function is now only responsible for rendering the setup choices and is called by the main render router.
-    function renderSetupChoices(room) {
-        if (!myPlayerInfo || myPlayerInfo.role !== 'Explorer' || !room.gameState.classData) return;
-        const { gameState } = room;
-
-        // Switch to character tab view on mobile if not already there
-        if (!get('mobile-screen-character').classList.contains('active')) {
-            document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
-            get('mobile-screen-character').classList.add('active');
-            mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
-        }
-
-        const hasChosenClass = !!myPlayerInfo.class;
-
-        // --- Part 1: Render Class Selection UI ---
-        [classCardsContainer, mobileClassCardsContainer].forEach(container => {
-            container.innerHTML = '';
-            const classData = gameState.classData;
-            if (!classData) {
-                container.innerHTML = `<p class="empty-pool-text">Loading classes...</p>`;
-                return;
-            }
-            for (const [classId, data] of Object.entries(classData)) {
-               const card = document.createElement('div');
-               card.className = 'class-card';
-               card.dataset.classId = classId;
-               card.innerHTML = `
-                   <h3 class="class-card-title">${classId}</h3>
-                   <p class="class-card-desc">${data.ability.description}</p>
-                   <div class="class-card-stats">
-                       <span>STR:</span><span>${data.stats.str}</span>
-                       <span>DEX:</span><span>${data.stats.dex}</span>
-                       <span>CON:</span><span>${data.stats.con}</span>
-                       <span>INT:</span><span>${data.stats.int}</span>
-                       <span>WIS:</span><span>${data.stats.wis}</span>
-                       <span>CHA:</span><span>${data.stats.cha}</span>
-                   </div>
-               `;
-               container.appendChild(card);
-           }
-           
-           container.querySelectorAll('.class-card').forEach(card => {
-               const classId = card.dataset.classId;
-               card.classList.toggle('selected', classId === tempSelectedClassId);
-               card.onclick = () => {
-                   if (hasChosenClass) return; // Don't allow changing class
-                   
-                   tempSelectedClassId = classId;
-                   
-                   // Update visuals directly instead of a full re-render
-                   container.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
-                   card.classList.add('selected');
-                   
-                   // Show confirm buttons
-                   confirmClassBtn.classList.remove('hidden');
-                   mobileConfirmClassBtn.classList.remove('hidden');
-               };
-           });
-       });
-
-       // --- Part 2: Control Visibility ---
-        const showClassSelection = !hasChosenClass;
-        
-        [classCardsContainer, mobileClassCardsContainer].forEach(el => el.style.display = showClassSelection ? 'flex' : 'none');
-        
-        [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => {
-           btn.classList.toggle('hidden', !tempSelectedClassId || hasChosenClass);
-           if (!hasChosenClass) {
-               btn.disabled = false;
-               btn.textContent = 'Confirm Class';
-           }
-        });
-    }
-
-
     // --- 3.4. renderGameplayState() ---
     function renderGameplayState(room) {
         const { players, gameState } = room;
@@ -789,9 +913,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const { players, gameState } = room;
 
-        lobbyScreen.classList.add('hidden');
-        gameArea.classList.remove('hidden');
-
         renderPlayerList(players, gameState, playerList, gameLobbySettingsDisplay);
         renderPlayerList(players, gameState, mobilePlayerList, mobileGameLobbySettingsDisplay);
         
@@ -870,11 +991,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
                 } else {
                     // For players, show class selection UI, hide stats UI
-                    classSelectionDiv.classList.remove('hidden');
-                    playerStatsContainer.classList.add('hidden');
-                    mobileClassSelection.classList.remove('hidden');
-                    mobilePlayerStats.classList.add('hidden');
-                    renderSetupChoices(room);
+                    showClassSelectionUI(room.gameState.classData);
                 }
                 break;
 
@@ -950,29 +1067,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- 5. SOCKET.IO EVENT HANDLERS ---
+    const socket = io();
 
     socket.on('connect', () => { myId = socket.id; });
 
-    socket.on('roomCreated', (room) => {
-        document.body.classList.add('in-game');
-        renderUIForPhase(room);
+    socket.on('roomCreated', (roomData) => {
+        console.log('Room created:', roomData);
+        currentRoom = roomData;
+        
+        // Show the room code
+        alert(`Room created! Code: ${roomData.id}\nShare this code with friends to join.`);
+        
+        // Transition to game screen
+        hideMenuShowGame();
+        
+        // If phase is class_selection, show class selection UI
+        if (roomData.gameState.phase === 'class_selection') {
+            renderUIForPhase(roomData);
+        }
+    });
+    
+    socket.on('joinSuccess', (roomData) => {
+        console.log('Joined room:', roomData);
+        currentRoom = roomData;
+        
+        // Transition to game screen
+        hideMenuShowGame();
+        
+        // Update UI based on game state
+        renderUIForPhase(roomData);
     });
 
-    socket.on('joinSuccess', (room) => {
-        document.body.classList.add('in-game');
-        renderUIForPhase(room);
-    });
     socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 
     socket.on('playerListUpdate', (room) => renderUIForPhase(room));
 
-    socket.on('gameStarted', (room) => {
-        renderUIForPhase(room);
+    socket.on('gameStarted', (roomData) => {
+        console.log('Game started!', roomData);
+        currentRoom = roomData;
+        renderUIForPhase(roomData);
     });
+
     socket.on('gameStateUpdate', (room) => renderUIForPhase(room));
     socket.on('chatMessage', (data) => logMessage(data.message, { type: 'chat', ...data }));
-    socket.on('actionError', (errorMessage) => {
-        showInfoToast(errorMessage, 'error');
+    
+    socket.on('actionError', (message) => {
+        console.error('Action error:', message);
+        showMenuError(message);
+        showInfoToast(message, 'error');
     });
 
     socket.on('simpleRollAnimation', (data) => {
@@ -1238,14 +1380,6 @@ document.addEventListener('DOMContentLoaded', () => {
             : `<span class="material-symbols-outlined">close</span>`;
     }
 
-    function initializeLobby() {
-        const beginnerRadio = document.querySelector('input[name="gameMode"][value="Beginner"]');
-        if (beginnerRadio) {
-            beginnerRadio.checked = true;
-            beginnerRadio.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-    }
-
     function showNonBlockingRollToast(data) {
         toastContainer.innerHTML = '';
 
@@ -1324,42 +1458,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- 4. UI EVENT LISTENERS ---
-
-    // --- 4.1. Lobby & Game Setup ---
-    createRoomBtn.addEventListener('click', () => {
-        const playerName = playerNameInput.value.trim();
-        if (!playerName) return showInfoToast('Please enter a player name.', 'error');
-        const checkedRadio = document.querySelector('input[name="gameMode"]:checked');
-        if (!checkedRadio) return showInfoToast('Please select a game mode.', 'error');
-        const gameMode = checkedRadio.value;
-        let customSettings = {};
-        if (gameMode === 'Beginner') {
-            customSettings = { dungeonPressure: 15, lootDropRate: 35, magicalItemChance: 10, maxHandSize: 5, enemyScaling: false, scalingRate: 50, startWithWeapon: true, startWithArmor: true, startingItems: 2, startingSpells: 2 };
-        } else if (gameMode === 'Advanced') {
-            customSettings = { dungeonPressure: 35, lootDropRate: 15, magicalItemChance: 30, maxHandSize: 5, enemyScaling: true, scalingRate: 60, startWithWeapon: false, startWithArmor: false, startingItems: 0, startingSpells: 0 };
-        } else {
-            customSettings = {
-                maxHandSize: parseInt(get('max-hand-size').value, 10), startWithWeapon: get('start-with-weapon').checked, startWithArmor: get('start-with-armor').checked, startingItems: parseInt(get('starting-items').value, 10),
-                startingSpells: parseInt(get('starting-spells').value, 10), lootDropRate: parseInt(get('loot-drop-rate').value, 10), enemyScaling: get('enemy-scaling').checked, scalingRate: parseInt(get('scaling-rate').value, 10),
-                dungeonPressure: 25, magicalItemChance: 20
-            };
-        }
-        socket.emit('createRoom', { playerName, gameMode, customSettings });
-    });
-    joinRoomBtn.addEventListener('click', () => {
-        const playerName = playerNameInput.value.trim();
-        const roomId = roomIdInput.value.trim().toUpperCase();
-        if (playerName && roomId) socket.emit('joinRoom', { roomId, playerName });
-        else showInfoToast('Please enter a player name and a room code.', 'error');
-    });
-
-    [confirmClassBtn, mobileConfirmClassBtn].forEach(btn => btn.addEventListener('click', () => {
-        if (tempSelectedClassId) {
-            socket.emit('chooseClass', { classId: tempSelectedClassId });
-            btn.disabled = true;
-            btn.textContent = 'Confirmed!';
-        }
-    }));
+    
+    // --- 4.1. Initialize Menu ---
+    initializeMenu();
 
     // --- 4.2. Turn & Action Controls ---
     [actionEndTurnBtn, mobileActionEndTurnBtn].forEach(btn => btn.addEventListener('click', () => addToModalQueue(() => endTurnConfirmModal.classList.remove('hidden'), 'end-turn-confirm')));
@@ -1451,10 +1552,6 @@ document.addEventListener('DOMContentLoaded', () => {
     discardNewItemBtn.addEventListener('click', () => { socket.emit('resolveItemSwap', { cardToDiscardId: null }); itemSwapModal.classList.add('hidden'); finishModal(); });
     itemFoundCloseBtn.addEventListener('click', () => { itemFoundModal.classList.add('hidden'); finishModal(); });
 
-    // --- 4.5. Menu & Custom Settings ---
-    document.querySelectorAll('.slider').forEach(slider => { const valueSpan = get(`${slider.id}-value`); if (valueSpan) slider.addEventListener('input', () => valueSpan.textContent = slider.value); });
-    get('enemy-scaling').addEventListener('change', (e) => get('scaling-rate-group').classList.toggle('hidden', !e.target.checked));
-
     // --- 4.6. Help & Tutorial ---
     const tutorialContent = [
         { title: "Welcome to Quest & Chronicle!", content: "<p>This is a quick guide to get you started. On your turn, you'll gain <strong>Action Points (AP)</strong> based on your class and gear. Use them wisely!</p><p>Your primary goal is to work with your party to defeat monsters and overcome challenges thrown at you by the Dungeon Master.</p>" },
@@ -1497,11 +1594,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mobileMenuToggleBtn.innerHTML = `<span class="material-symbols-outlined">menu</span>`;
         }
     });
-    
-    // --- 4.9. Lobby Settings ---
-    document.querySelectorAll('input[name="gameMode"]').forEach(radio => radio.addEventListener('change', () => customSettingsPanel.classList.toggle('hidden', document.querySelector('input[name="gameMode"]:checked').value !== 'Custom')));
 
-    initializeLobby();
 });
 
 if ('serviceWorker' in navigator) {
