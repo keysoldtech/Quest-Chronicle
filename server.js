@@ -768,8 +768,20 @@ class GameManager {
         // --- PRIORITY 3: USE CLASS ABILITY ---
         const classAbility = gameData.classes[playerClass]?.ability;
         if (classAbility && currentAp >= classAbility.apCost) {
-            if (playerClass === 'Mage') return { action: 'useClassAbility', apCost: classAbility.apCost }; // Always good to draw a spell
-            if (playerClass === 'Cleric' && board.monsters.length > 0) return { action: 'useClassAbility', apCost: classAbility.apCost }; // Buff next attack
+            let canUseAbility = true;
+            // BUG FIX: Check for required discard card before deciding to use ability.
+            if (classAbility.cost?.type === 'discard' && classAbility.cost?.cardType === 'Spell') {
+                if (!hand.some(card => card.type === 'Spell')) {
+                    canUseAbility = false;
+                }
+            }
+            if (canUseAbility) {
+                if (playerClass === 'Mage') return { action: 'useClassAbility', apCost: classAbility.apCost }; // Always good to draw a spell
+                if (playerClass === 'Cleric' && board.monsters.length > 0) return { action: 'useClassAbility', apCost: classAbility.apCost }; // Buff next attack
+                if ((playerClass === 'Barbarian' || playerClass === 'Warrior') && board.monsters.length > 0) {
+                    return { action: 'useClassAbility', apCost: classAbility.apCost };
+                }
+            }
         }
         
         // --- PRIORITY 4: USE UTILITY/DAMAGE CARDS ---
@@ -863,7 +875,7 @@ class GameManager {
                         this._resolveUnarmedAttack(room, {
                             attackerId: player.id,
                             targetId: bestAction.targetId,
-                            narrative: `${player.name} lashes out with their bare fists!`
+                            narrative: narrative
                         });
                         break;
                     case 'guard':
