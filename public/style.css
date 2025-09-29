@@ -463,8 +463,10 @@ label {
 }
 
 /* --- CHARACTER PANEL --- */
-.character-panel .panel-content, .class-cards-container {
-    display: flex; flex-direction: column; gap: 1rem;
+.character-panel .panel-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 .class-confirm-container {
     margin-top: auto;
@@ -475,7 +477,14 @@ label {
     padding: 1rem;
     font-size: 1.2rem;
 }
-.class-cards-container { overflow-y: auto; padding-right: 0.5rem; }
+.class-cards-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex-grow: 1; /* CRITICAL FIX: Ensures this container fills the available space to be scrollable */
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
 .player-class-header { color: var(--color-special); }
 .player-stats {
     display: flex;
