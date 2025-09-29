@@ -124,7 +124,6 @@ function renderUI() {
     
     if (phase === 'class_selection') {
         switchMobileScreen('character');
-        switchTab('character-panel'); // For desktop, ensure the panel is visible if tabs were used
         if (myPlayer.class) {
             const waitingHTML = `<h2 class="panel-header">Class Chosen!</h2><p class="panel-content">Waiting for game to start...</p>`;
             desktopCharacterPanel.innerHTML = waitingHTML;
