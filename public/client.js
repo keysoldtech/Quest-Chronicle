@@ -7,7 +7,7 @@
 // --- INDEX ---
 // 1.  CLIENT STATE & SETUP
 //     - 1.1. State Variables
-//     - 1.2. Static Data (Classes, Visuals)
+//     - 1.2. Static Data (Visuals)
 //     - 1.3. DOM Element References
 // 2.  HELPER FUNCTIONS
 //     - 2.1. Toast Notifications
@@ -52,17 +52,9 @@ const iceServers = {
         { urls: 'stun:stun1.l.google.com:19302' }
     ]
 };
+let authoritativeClassData = {}; // BUG FIX: This will hold the single source of truth for class data from the server.
 
-// --- 1.2. Static Data (Classes, Visuals) ---
-const classData = {
-    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Unchecked Assault', apCost: 1, description: 'Discard a Spell to add +6 damage to your next successful weapon attack this turn.' } },
-    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Aid', apCost: 1, description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
-    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, ability: { name: 'Mystic Recall', apCost: 1, description: 'Draw one card from the Spell deck.' } },
-    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, ability: { name: 'Hunters Mark', apCost: 1, description: 'Mark a monster. All attacks against it deal +2 damage for one round.' } },
-    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, ability: { name: 'Evasion', apCost: 2, description: 'For one round, all attacks against you have disadvantage (DM rerolls hits).' } },
-    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, ability: { name: 'Weapon Surge', apCost: 1, description: 'Discard a Spell to add +4 damage to your next successful weapon attack this turn.' } },
-};
-
+// --- 1.2. Static Data (Visuals) ---
 const statVisuals = {
     hp:          { icon: 'favorite', color: 'var(--stat-color-hp)' },
     ap:          { icon: 'bolt', color: 'var(--stat-color-ap)' },
@@ -573,8 +565,8 @@ function renderClassAbilityCard(player, container) {
         container.classList.add('hidden');
         return;
     }
-
-    const ability = classData[player.class]?.ability;
+    // BUG FIX: Use the single source of truth for class data.
+    const ability = authoritativeClassData[player.class]?.ability;
     if (!ability) {
         container.classList.add('hidden');
         return;
@@ -845,26 +837,27 @@ function renderGameState(room) {
     // --- 3.4.6. Class Selection Rendering ---
     if (!hasConfirmedClass && isExplorer && gameState.phase === 'class_selection') {
         [classCardsContainer, mobileClassCardsContainer].forEach(container => {
-             if (container.children.length === 0) {
-                for (const [classId, data] of Object.entries(classData)) {
-                    const card = document.createElement('div');
-                    card.className = 'class-card';
-                    card.dataset.classId = classId;
-                    card.innerHTML = `
-                        <h3 class="class-card-title">${classId}</h3>
-                        <p class="class-card-desc">${data.ability.description}</p>
-                        <div class="class-card-stats">
-                            <span>STR:</span><span>${data.stats.str}</span>
-                            <span>DEX:</span><span>${data.stats.dex}</span>
-                            <span>CON:</span><span>${data.stats.con}</span>
-                            <span>INT:</span><span>${data.stats.int}</span>
-                            <span>WIS:</span><span>${data.stats.wis}</span>
-                            <span>CHA:</span><span>${data.stats.cha}</span>
-                        </div>
-                    `;
-                    container.appendChild(card);
-                }
+             // BUG FIX: Always re-render class cards from authoritative data to prevent stale UI.
+             container.innerHTML = '';
+             for (const [classId, data] of Object.entries(authoritativeClassData)) {
+                const card = document.createElement('div');
+                card.className = 'class-card';
+                card.dataset.classId = classId;
+                card.innerHTML = `
+                    <h3 class="class-card-title">${classId}</h3>
+                    <p class="class-card-desc">${data.ability.description}</p>
+                    <div class="class-card-stats">
+                        <span>STR:</span><span>${data.stats.str}</span>
+                        <span>DEX:</span><span>${data.stats.dex}</span>
+                        <span>CON:</span><span>${data.stats.con}</span>
+                        <span>INT:</span><span>${data.stats.int}</span>
+                        <span>WIS:</span><span>${data.stats.wis}</span>
+                        <span>CHA:</span><span>${data.stats.cha}</span>
+                    </div>
+                `;
+                container.appendChild(card);
             }
+            
             container.querySelectorAll('.class-card').forEach(card => {
                 const classId = card.dataset.classId;
                 card.classList.toggle('selected', classId === tempSelectedClassId);
@@ -1112,7 +1105,12 @@ socket.on('roomCreated', (room) => {
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.remove('hidden'));
     renderGameState(room);
 });
-socket.on('joinSuccess', (room) => {
+socket.on('joinSuccess', (data) => {
+    // BUG FIX: Handle both new and late join data structures.
+    const room = data.room || data;
+    if (data.classData) {
+        authoritativeClassData = data.classData;
+    }
     document.body.classList.add('in-game');
     lobbyScreen.classList.add('hidden');
     gameArea.classList.remove('hidden');
@@ -1124,7 +1122,11 @@ socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left t
 
 // --- 5.2. Game State & Info ---
 socket.on('playerListUpdate', (room) => renderGameState(room));
-socket.on('gameStarted', (room) => {
+socket.on('gameStarted', (data) => {
+    // BUG FIX: Receive room state and authoritative class data from the server.
+    const { room, classData } = data;
+    authoritativeClassData = classData;
+    
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.add('hidden'));
     renderGameState(room);
 });

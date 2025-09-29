@@ -186,7 +186,8 @@ class GameManager {
             
             socket.join(roomId);
             this.socketToRoom[socket.id] = roomId; // Map socket to room for efficiency
-            socket.emit('joinSuccess', room);
+            // BUG FIX: Late joiners also need the authoritative class data.
+            socket.emit('joinSuccess', { room, classData: gameData.classes });
             this.emitGameState(roomId);
             return;
         }
@@ -197,7 +198,7 @@ class GameManager {
         socket.join(roomId);
         this.socketToRoom[socket.id] = roomId; // Map socket to room for efficiency
         
-        socket.emit('joinSuccess', room);
+        socket.emit('joinSuccess', { room });
         this.emitPlayerListUpdate(roomId);
     }
     
@@ -307,7 +308,9 @@ class GameManager {
         shuffle(room.gameState.decks.monster.tier3);
 
         room.gameState.phase = 'class_selection';
-        io.to(room.id).emit('gameStarted', room);
+        
+        // BUG FIX: Send the authoritative class data to all clients to prevent data mismatch.
+        io.to(room.id).emit('gameStarted', { room, classData: gameData.classes });
     }
 
     // --- 3.4. Player Setup (Class, Stats, Cards) ---

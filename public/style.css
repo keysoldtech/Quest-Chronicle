@@ -672,7 +672,7 @@ label {
     100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
 }
 
-.tab-content { display: none; flex-grow: 1; overflow-y: auto; }
+.tab-content { display: none; flex-grow: 1; overflow: hidden; }
 .tab-content.active { display: flex; flex-direction: column; }
 .log-content-area { padding: 1rem; flex-grow: 1; overflow-y: auto; font-size: 0.9rem; }
 
