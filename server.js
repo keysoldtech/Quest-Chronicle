@@ -232,74 +232,13 @@ class GameManager {
         const room = this.findRoomBySocket(socket);
         if (!room || room.hostId !== socket.id || room.gameState.phase !== 'lobby') return;
         
-        const players = Object.values(room.players).filter(p => !p.isNpc);
-
-        if (players.length === 1) {
-            // Single Player: The player is an Explorer, create an NPC DM and 3 NPC Explorers.
-            const player = players[0];
-            player.role = 'Explorer';
-
-            const dmNpc = this.createPlayerObject('npc-dm', 'Dungeon Master');
-            dmNpc.role = 'DM';
-            dmNpc.isNpc = true;
-            room.players[dmNpc.id] = dmNpc;
-            
-            const npcNames = ["Grok", "Lyra", "Finn"];
-            const explorerNpcs = [];
-
-            for (const name of npcNames) {
-                const npcId = `npc-${name.toLowerCase()}`;
-                const npc = this.createPlayerObject(npcId, name);
-                npc.isNpc = true;
-                npc.role = 'Explorer';
-                room.players[npc.id] = npc;
-                explorerNpcs.push(npc);
-            }
-            
-            const explorerIds = [player.id, ...explorerNpcs.map(n => n.id)];
-            shuffle(explorerIds);
-            room.gameState.turnOrder = [dmNpc.id, ...explorerIds];
-
-        } else {
-            const dm = players[Math.floor(Math.random() * players.length)];
-            dm.role = 'DM';
-            players.forEach(p => {
-                if (p.id !== dm.id) p.role = 'Explorer';
-            });
-            const explorerIds = players.filter(p => p.id !== dm.id).map(p => p.id);
-            shuffle(explorerIds);
-            room.gameState.turnOrder = [dm.id, ...explorerIds];
-        }
-        
-        const createDeck = (cardArray) => cardArray.map(c => ({...c, id: this.generateUniqueCardId() }));
-        room.gameState.decks.item = createDeck(gameData.itemCards);
-        room.gameState.decks.spell = createDeck(gameData.spellCards);
-        room.gameState.decks.weapon = createDeck(gameData.weaponCards);
-        room.gameState.decks.armor = createDeck(gameData.armorCards);
-        room.gameState.decks.worldEvent = createDeck(gameData.worldEventCards);
-        room.gameState.decks.playerEvent = createDeck(gameData.playerEventCards);
-        room.gameState.decks.partyEvent = createDeck(gameData.partyEventCards);
-        
-        room.gameState.decks.monster.tier1 = createDeck(gameData.monsterTiers.tier1);
-        room.gameState.decks.monster.tier2 = createDeck(gameData.monsterTiers.tier2);
-        room.gameState.decks.monster.tier3 = createDeck(gameData.monsterTiers.tier3);
-
-        room.gameState.decks.treasure = [
-            ...room.gameState.decks.item,
-            ...room.gameState.decks.weapon,
-            ...room.gameState.decks.armor
-        ];
-        
-        Object.values(room.gameState.decks).forEach(deck => {
-            if (Array.isArray(deck)) shuffle(deck);
-        });
-        shuffle(room.gameState.decks.monster.tier1);
-        shuffle(room.gameState.decks.monster.tier2);
-        shuffle(room.gameState.decks.monster.tier3);
-
         room.gameState.phase = 'class_selection';
+
+        // ARCHITECTURAL FIX: Send a new, dedicated event for showing the class selection.
+        // This decouples the initial data delivery from the main game state updates, fixing the race condition.
+        io.to(room.id).emit('showClassSelection', { classData: room.gameState.classData });
         
-        io.to(room.id).emit('gameStarted', room);
+        this.emitGameState(room.id); // Also send a state update to change the phase
     }
 
     // --- 3.4. Player Setup (Class, Stats, Cards) ---
@@ -405,37 +344,77 @@ class GameManager {
 
     // REFACTORED: Atomic setup function that runs ONCE after all choices are made.
     _finalizeAndStartGame(room) {
-        // Setup human players
-        const humanExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
-        humanExplorers.forEach(player => {
-            this._setupPlayerHandAndGear(room, player);
-        });
+        // --- Part 1: Assign roles and turn order ---
+        const players = Object.values(room.players).filter(p => !p.isNpc);
+        if (players.length === 1) {
+            const player = players[0];
+            player.role = 'Explorer';
+            const dmNpc = this.createPlayerObject('npc-dm', 'Dungeon Master');
+            dmNpc.role = 'DM'; dmNpc.isNpc = true; room.players[dmNpc.id] = dmNpc;
+            const npcNames = ["Grok", "Lyra", "Finn"];
+            const explorerNpcs = [];
+            for (const name of npcNames) {
+                const npcId = `npc-${name.toLowerCase()}`;
+                const npc = this.createPlayerObject(npcId, name);
+                npc.isNpc = true; npc.role = 'Explorer'; room.players[npc.id] = npc;
+                explorerNpcs.push(npc);
+            }
+            const explorerIds = [player.id, ...explorerNpcs.map(n => n.id)];
+            shuffle(explorerIds);
+            room.gameState.turnOrder = [dmNpc.id, ...explorerIds];
+        } else {
+            const dm = players[Math.floor(Math.random() * players.length)];
+            dm.role = 'DM';
+            players.forEach(p => { if (p.id !== dm.id) p.role = 'Explorer'; });
+            const explorerIds = players.filter(p => p.id !== dm.id).map(p => p.id);
+            shuffle(explorerIds);
+            room.gameState.turnOrder = [dm.id, ...explorerIds];
+        }
 
-        // Setup NPC players (for single-player mode)
-        const npcExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.isNpc);
-        npcExplorers.forEach(npc => {
-            if(!npc.class) { // Assign a class if they don't have one
+        // --- Part 2: Build and shuffle all decks ---
+        const createDeck = (cardArray) => cardArray.map(c => ({...c, id: this.generateUniqueCardId() }));
+        Object.keys(room.gameState.decks).forEach(key => {
+            if(key === 'monster') {
+                Object.keys(room.gameState.decks.monster).forEach(tier => {
+                    room.gameState.decks.monster[tier] = createDeck(gameData.monsterTiers[tier]);
+                    shuffle(room.gameState.decks.monster[tier]);
+                });
+            } else if (key !== 'treasure') {
+                const sourceDataKey = `${key}Cards`; // e.g., 'itemCards'
+                if(gameData[sourceDataKey]) {
+                    room.gameState.decks[key] = createDeck(gameData[sourceDataKey]);
+                    shuffle(room.gameState.decks[key]);
+                }
+            }
+        });
+        room.gameState.decks.treasure = [
+            ...room.gameState.decks.item, ...room.gameState.decks.weapon, ...room.gameState.decks.armor
+        ];
+        shuffle(room.gameState.decks.treasure);
+
+
+        // --- Part 3: Setup all players (human and NPC) ---
+        Object.values(room.players).filter(p => p.role === 'Explorer').forEach(player => {
+            if(player.isNpc && !player.class) {
                  const classKeys = Object.keys(gameData.classes);
                  const randomClassId = classKeys[Math.floor(Math.random() * classKeys.length)];
-                 this.assignClassToPlayer(room.id, npc, randomClassId);
+                 this.assignClassToPlayer(room.id, player, randomClassId);
             }
-            this._setupPlayerHandAndGear(room, npc);
+            this._setupPlayerHandAndGear(room, player);
         });
         
-        // NOW that setup is fully complete, start the game.
+        // --- Part 4: Start the game ---
         room.gameState.phase = 'started';
-        this.startFirstTurn(room.id); // This will emit the final, correct state.
+        io.to(room.id).emit('gameStarted', room); // This event signals the client to transition to the main game view.
+        this.startFirstTurn(room.id);
     }
 
     // NEW: Centralized hand/gear setup logic.
     _setupPlayerHandAndGear(room, player) {
-        // Only run setup for a player once.
         if (player.hand.length > 0 || player.equipment.weapon || player.equipment.armor) return;
-
         const gameMode = room.gameState.gameMode;
         const settings = room.gameState.customSettings;
 
-        // --- Step 1: Deal gear based on mode/choices ---
         if (gameMode === 'Beginner') {
             this.dealCard(room.id, player.id, 'weapon', 1);
             this.dealCard(room.id, player.id, 'armor', 1);
@@ -447,13 +426,11 @@ class GameManager {
             this.dealCard(room.id, player.id, 'armor', 1);
         }
         
-        // --- Step 2: CRITICAL FIX - Equip the gear that was just dealt ---
         const weapon = player.hand.find(c => c.type === 'Weapon');
         if (weapon) this._internalEquipItem(room, player, weapon.id);
         const armor = player.hand.find(c => c.type === 'Armor');
         if (armor) this._internalEquipItem(room, player, armor.id);
 
-        // --- Step 3: Now deal the rest of the cards ---
         if (gameMode === 'Beginner') {
             this.dealCard(room.id, player.id, 'item', 2);
             this.dealCard(room.id, player.id, 'spell', 2);

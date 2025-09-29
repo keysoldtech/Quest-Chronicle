@@ -605,9 +605,9 @@ function renderLobbyState(room) {
 
 
 // REFACTORED: Simplified logic for rendering setup choices.
-function renderSetupChoices(room) {
-    const isExplorer = myPlayerInfo.role === 'Explorer';
-    if (!isExplorer) return;
+function renderSetupChoices(classData) {
+    const room = currentRoomState; // Use the globally available state
+    if (!myPlayerInfo || myPlayerInfo.role !== 'Explorer') return;
 
     // Switch to character tab view on mobile if not already there
     if (!get('mobile-screen-character').classList.contains('active')) {
@@ -617,19 +617,17 @@ function renderSetupChoices(room) {
         document.querySelector('.nav-btn[data-screen="character"]').classList.add('active');
     }
 
-    // Determine what to show based on player state, not game phase
     const hasChosenClass = !!myPlayerInfo.class;
     const needsAdvancedChoice = room.gameState.gameMode === 'Advanced' && !myPlayerInfo.madeAdvancedChoice;
 
     // --- Part 1: Render Class Selection UI ---
     [classCardsContainer, mobileClassCardsContainer].forEach(container => {
         container.innerHTML = '';
-        // ARCHITECTURAL FIX: Read class data from the permanent gameState location.
-        if (!room.gameState.classData) {
+        if (!classData) {
             container.innerHTML = `<p class="empty-pool-text">Loading classes...</p>`;
             return;
         }
-        for (const [classId, data] of Object.entries(room.gameState.classData)) {
+        for (const [classId, data] of Object.entries(classData)) {
            const card = document.createElement('div');
            card.className = 'class-card';
            card.dataset.classId = classId;
@@ -721,7 +719,6 @@ function renderGameplayState(room) {
         mobilePlayerClassName.textContent = `The ${myPlayerInfo.class}`;
         [playerClassName, mobilePlayerClassName].forEach(el => el.classList.remove('hidden'));
         
-        // ARCHITECTURAL FIX: Read class data from the permanent gameState location.
         const ability = room.gameState.classData?.[myPlayerInfo.class]?.ability;
         if (ability) {
             let canUse = myPlayerInfo.currentAp >= ability.apCost;
@@ -922,9 +919,10 @@ function renderUIForPhase(room) {
                 mobilePlayerStats.classList.remove('hidden');
                 mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
             } else {
+                // The actual rendering is now handled by the 'showClassSelection' event handler
+                // to prevent race conditions. We just need to make the container visible.
                 classSelectionDiv.classList.remove('hidden');
                 mobileClassSelection.classList.remove('hidden');
-                renderSetupChoices(room); // Use the new unified setup renderer
             }
             break;
         case 'started':
@@ -1000,6 +998,15 @@ socket.on('joinSuccess', (room) => {
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 
 socket.on('playerListUpdate', (room) => renderUIForPhase(room));
+
+// ARCHITECTURAL FIX: New dedicated handler for class selection data.
+socket.on('showClassSelection', ({ classData }) => {
+    // This handler's only job is to render the class list.
+    // This ensures it appears reliably, regardless of other state updates.
+    renderSetupChoices(classData);
+});
+
+
 socket.on('gameStarted', (room) => {
     renderUIForPhase(room);
 });
