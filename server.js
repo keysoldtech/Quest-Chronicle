@@ -403,7 +403,7 @@ class GameManager {
         
         // --- Part 4: Start the game ---
         room.gameState.phase = 'started';
-        io.to(room.id).emit('gameStarted', room); // This event signals the client to transition to the main game view.
+        this.emitGameState(room.id); // This event signals the client to transition to the main game view.
         this.startFirstTurn(room.id);
     }
 

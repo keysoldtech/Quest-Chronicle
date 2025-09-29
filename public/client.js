@@ -13,10 +13,10 @@
 //     - 2.1. Toast Notifications
 //     - 2.2. Modal & Queue Management
 //     - 2.3. Logging
-// 3.  RENDERING LOGIC (REFACTORED)
+// 3.  RENDERING LOGIC (REBUILT)
 //     - 3.1. createCardElement()
 //     - 3.2. renderPlayerList()
-//     - 3.3. renderSetupChoices() (Updated)
+//     - 3.3. renderSetupChoices() (Rebuilt)
 //     - 3.4. renderGameplayState()
 //     - 3.5. renderUIForPhase() (Rebuilt render router)
 // 4.  UI EVENT LISTENERS (ATTACHED VIA DOMContentLoaded)
@@ -392,7 +392,7 @@ function closeNarrativeModal() {
     finishModal();
 }
 
-// --- 3. RENDERING LOGIC (REFACTORED) ---
+// --- 3. RENDERING LOGIC (REBUILT) ---
 
 // --- 3.1. createCardElement() ---
 function createCardElement(card, actions = {}) {
