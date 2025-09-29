@@ -233,12 +233,8 @@ class GameManager {
         if (!room || room.hostId !== socket.id || room.gameState.phase !== 'lobby') return;
         
         room.gameState.phase = 'class_selection';
-
-        // ARCHITECTURAL FIX: Send a new, dedicated event for showing the class selection.
-        // This decouples the initial data delivery from the main game state updates, fixing the race condition.
-        io.to(room.id).emit('showClassSelection', { classData: room.gameState.classData });
         
-        this.emitGameState(room.id); // Also send a state update to change the phase
+        this.emitGameState(room.id); // Send a state update to change the phase. The client will handle rendering.
     }
 
     // --- 3.4. Player Setup (Class, Stats, Cards) ---

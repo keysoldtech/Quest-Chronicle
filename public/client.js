@@ -17,10 +17,9 @@
 //     - 3.1. createCardElement()
 //     - 3.2. renderPlayerList()
 //     - 3.3. renderLobbyState() (New)
-//     - 3.4. renderClassSelection()
-//     - 3.5. renderAdvancedSetup()
-//     - 3.6. renderGameplayState()
-//     - 3.7. renderUIForPhase() (Updated render router)
+//     - 3.4. renderSetupChoices() (Updated)
+//     - 3.5. renderGameplayState()
+//     - 3.6. renderUIForPhase() (Updated render router)
 // 4.  UI EVENT LISTENERS (ATTACHED VIA DOMContentLoaded)
 // 5.  SOCKET.IO EVENT HANDLERS
 // 6.  VOICE CHAT (WebRTC) LOGIC
@@ -605,9 +604,9 @@ function renderLobbyState(room) {
 
 
 // REFACTORED: Simplified logic for rendering setup choices.
-function renderSetupChoices(classData) {
-    const room = currentRoomState; // Use the globally available state
-    if (!myPlayerInfo || myPlayerInfo.role !== 'Explorer') return;
+function renderSetupChoices(room) {
+    const classData = room.gameState.classData;
+    if (!myPlayerInfo || myPlayerInfo.role !== 'Explorer' || !classData) return;
 
     // Switch to character tab view on mobile if not already there
     if (!get('mobile-screen-character').classList.contains('active')) {
@@ -652,7 +651,7 @@ function renderSetupChoices(classData) {
            card.onclick = () => {
                if (hasChosenClass) return; // Don't allow changing class
                tempSelectedClassId = classId;
-               renderUIForPhase(currentRoomState);
+               renderUIForPhase(currentRoomState); // Re-render to show selection and confirm button
            };
        });
    });
@@ -919,10 +918,10 @@ function renderUIForPhase(room) {
                 mobilePlayerStats.classList.remove('hidden');
                 mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
             } else {
-                // The actual rendering is now handled by the 'showClassSelection' event handler
-                // to prevent race conditions. We just need to make the container visible.
                 classSelectionDiv.classList.remove('hidden');
                 mobileClassSelection.classList.remove('hidden');
+                // THIS IS THE FIX: The main renderer is now responsible for calling the setup UI renderer.
+                renderSetupChoices(room);
             }
             break;
         case 'started':
@@ -998,14 +997,6 @@ socket.on('joinSuccess', (room) => {
 socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left the game.`, { type: 'system' }));
 
 socket.on('playerListUpdate', (room) => renderUIForPhase(room));
-
-// ARCHITECTURAL FIX: New dedicated handler for class selection data.
-socket.on('showClassSelection', ({ classData }) => {
-    // This handler's only job is to render the class list.
-    // This ensures it appears reliably, regardless of other state updates.
-    renderSetupChoices(classData);
-});
-
 
 socket.on('gameStarted', (room) => {
     renderUIForPhase(room);
@@ -1506,7 +1497,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: "Welcome to Quest & Chronicle!", content: "<p>This is a quick guide to get you started. On your turn, you'll gain <strong>Action Points (AP)</strong> based on your class and gear. Use them wisely!</p><p>Your primary goal is to work with your party to defeat monsters and overcome challenges thrown at you by the Dungeon Master.</p>" },
         { title: "Your Turn", content: "<p>At the start of your turn, you may get to roll a <strong>d20</strong> for a random event. This could lead to finding new items, special player events, or nothing at all.</p><p>After that, you can spend your AP on actions. The main actions are attacking, guarding, using cards, or resting to heal.</p>" },
         { title: "Combat & Abilities", content: "<p>To attack, first click your <strong>equipped weapon</strong> (or fists), then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Your <strong>Class Ability</strong> is a powerful, unique skill. Check the Character tab to see its description and cost, and use it to turn the tide of battle!</p>" },
-        { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, spells, and items. Click an equippable item in your hand to equip it. If your hand is full when you find a new item, you'll be asked to swap something out.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
+        { title: "Cards & Gear", content: "<p>You'll find new new weapons, armor, spells, and items. Click an equippable item in your hand to equip it. If your hand is full when you find a new item, you'll be asked to swap something out.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
     ];
     let currentTutorialPage = 0;
     function renderTutorialPage() {
