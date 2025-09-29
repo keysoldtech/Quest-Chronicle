@@ -16,6 +16,7 @@ let selectedGameMode = null; // Keep mode selection global
 //     - 2.1. Toast Notifications
 //     - 2.2. Modal & Queue Management
 //     - 2.3. Logging
+//     - 2.4. UI Switching
 // 3.  RENDERING LOGIC (REBUILT)
 //     - 3.1. createCardElement()
 //     - 3.2. renderPlayerList()
@@ -29,6 +30,7 @@ let selectedGameMode = null; // Keep mode selection global
 // 8.  MENU & CLASS SELECTION (Handled in main())
 // 9.  INITIALIZATION (main())
 
+// --- 2.4. UI Switching ---
 function switchTab(targetId) {
     const desktopTabContainer = document.querySelector('.info-tabs-panel');
     if (!desktopTabContainer) return;
@@ -39,6 +41,34 @@ function switchTab(targetId) {
     desktopTabContainer.querySelectorAll('.tab-content').forEach(content => {
         content.classList.toggle('active', content.id === targetId);
     });
+}
+
+function switchMobileScreen(screenName) {
+    const get = id => document.getElementById(id);
+    const mobileScreens = {
+        game: get('mobile-screen-game'),
+        character: get('mobile-screen-character'),
+        party: get('mobile-screen-party'),
+        info: get('mobile-screen-info'),
+        log: get('mobile-screen-log'),
+    };
+    const mobileNavs = {
+        game: get('mobile-bottom-nav').querySelector('[data-screen="game"]'),
+        character: get('mobile-bottom-nav').querySelector('[data-screen="character"]'),
+        party: get('mobile-bottom-nav').querySelector('[data-screen="party"]'),
+        info: get('mobile-bottom-nav').querySelector('[data-screen="info"]'),
+        log: get('mobile-bottom-nav').querySelector('[data-screen="log"]'),
+    };
+
+    Object.values(mobileScreens).forEach(s => s.classList.remove('active'));
+    Object.values(mobileNavs).forEach(n => n.classList.remove('active'));
+    
+    if (mobileScreens[screenName]) {
+        mobileScreens[screenName].classList.add('active');
+    }
+    if (mobileNavs[screenName]) {
+        mobileNavs[screenName].classList.add('active');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', main);
@@ -370,21 +400,7 @@ function renderUIForPhase() {
         class: get('class-selection'),
         stats: get('player-stats-container'),
     };
-    const mobileScreens = {
-        game: get('mobile-screen-game'),
-        character: get('mobile-screen-character'),
-        party: get('mobile-screen-party'),
-        info: get('mobile-screen-info'),
-        log: get('mobile-screen-log'),
-    };
-    const mobileNavs = {
-        game: get('mobile-bottom-nav').querySelector('[data-screen="game"]'),
-        character: get('mobile-bottom-nav').querySelector('[data-screen="character"]'),
-        party: get('mobile-bottom-nav').querySelector('[data-screen="party"]'),
-        info: get('mobile-bottom-nav').querySelector('[data-screen="info"]'),
-        log: get('mobile-bottom-nav').querySelector('[data-screen="log"]'),
-    };
-
+   
     switch (gameState.phase) {
         case 'class_selection':
             desktopPanels.stats.classList.add('hidden');
@@ -395,10 +411,7 @@ function renderUIForPhase() {
                 showClassSelectionUI(gameState.classData);
             }
             // Force mobile view to character screen
-            Object.values(mobileScreens).forEach(s => s.classList.remove('active'));
-            Object.values(mobileNavs).forEach(n => n.classList.remove('active'));
-            mobileScreens.character.classList.add('active');
-            mobileNavs.character.classList.add('active');
+            switchMobileScreen('character');
             break;
             
         case 'started':
@@ -407,10 +420,7 @@ function renderUIForPhase() {
             renderGameplayState(currentRoomState);
             // On game start, ensure mobile view defaults to game screen
             if (isMyTurnPreviously === false) { // only do this once on transition to 'started'
-                Object.values(mobileScreens).forEach(s => s.classList.remove('active'));
-                Object.values(mobileNavs).forEach(n => n.classList.remove('active'));
-                mobileScreens.game.classList.add('active');
-                mobileNavs.game.classList.add('active');
+                switchMobileScreen('game');
                 switchTab('game-log-tab');
             }
             break;
@@ -522,7 +532,13 @@ socket.on('roomCreated', (roomData) => {
     gameScreen.classList.add('active');
     
     initializeGameUIListeners(); 
-    updateAndRender(roomData);
+    
+    // Defer the first render to the next animation frame.
+    // This fixes a race condition where the UI updates before the browser has
+    // processed the layout change from hiding the menu and showing the game screen.
+    requestAnimationFrame(() => {
+        updateAndRender(roomData);
+    });
 });
 
 socket.on('joinSuccess', (roomData) => { 
@@ -532,7 +548,9 @@ socket.on('joinSuccess', (roomData) => {
     menuScreen.classList.remove('active'); 
     gameScreen.classList.add('active'); 
     initializeGameUIListeners(); 
-    updateAndRender(roomData);
+    requestAnimationFrame(() => {
+        updateAndRender(roomData);
+    });
 });
 
 socket.on('gameStarted', updateAndRender);
@@ -576,7 +594,11 @@ function initializeGameUIListeners() {
     [get('action-full-rest-btn'), get('mobile-action-full-rest-btn')].forEach(btn => btn.addEventListener('click', () => socket.emit('playerAction', { action: 'fullRest' })));
     get('dm-play-monster-btn').addEventListener('click', () => socket.emit('dmAction', { action: 'playMonster' }));
 
-    get('mobile-bottom-nav').addEventListener('click', (e) => { const navBtn = e.target.closest('.nav-btn'); if (!navBtn || !navBtn.dataset.screen) return; get('mobile-bottom-nav').querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active')); navBtn.classList.add('active'); navBtn.classList.remove('highlight'); const screenId = `mobile-screen-${navBtn.dataset.screen}`; document.querySelectorAll('.mobile-screen').forEach(screen => screen.classList.remove('active')); get(screenId).classList.add('active'); });
+    get('mobile-bottom-nav').addEventListener('click', (e) => { 
+        const navBtn = e.target.closest('.nav-btn'); 
+        if (!navBtn || !navBtn.dataset.screen) return; 
+        switchMobileScreen(navBtn.dataset.screen);
+    });
     
     get('chat-toggle-btn').addEventListener('click', () => { get('chat-overlay').classList.toggle('hidden'); get('menu-dropdown').classList.add('hidden'); get('menu-toggle-btn').innerHTML = `<span class="material-symbols-outlined">menu</span>`; });
     get('chat-close-btn').addEventListener('click', () => get('chat-overlay').classList.add('hidden'));
