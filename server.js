@@ -228,13 +228,16 @@ class GameManager {
     }
 
     // --- 3.3. Game Lifecycle (Create, Join, Start) ---
+    // REBUILT: This function is now simple and only starts the class selection process.
     startGame(socket) {
         const room = this.findRoomBySocket(socket);
         if (!room || room.hostId !== socket.id || room.gameState.phase !== 'lobby') return;
-        
+
         room.gameState.phase = 'class_selection';
         
-        this.emitGameState(room.id); // Send a state update to change the phase. The client will handle rendering.
+        // NEW: Send a dedicated event with the class data. This decouples the initial render
+        // from the main gameStateUpdate loop, fixing the race condition.
+        io.to(room.id).emit('beginClassSelection', { classData: gameData.classes });
     }
 
     // --- 3.4. Player Setup (Class, Stats, Cards) ---
@@ -316,7 +319,7 @@ class GameManager {
         return newStats;
     }
     
-    // REFACTORED: Unified "gatekeeper" function.
+    // REBUILT: Unified "gatekeeper" function.
     _checkAndFinalizeSetup(room) {
         const humanExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isNpc);
         if (humanExplorers.length === 0) return; // No one to set up
@@ -333,12 +336,12 @@ class GameManager {
         if (allReady) {
             this._finalizeAndStartGame(room);
         } else {
-            // Not everyone is ready, just send an update so UIs can refresh.
+            // Not everyone is ready, just send an update so UIs can refresh (e.g., to show who has picked).
             this.emitGameState(room.id);
         }
     }
 
-    // REFACTORED: Atomic setup function that runs ONCE after all choices are made.
+    // REBUILT: Atomic setup function that runs ONCE after all choices are made.
     _finalizeAndStartGame(room) {
         // --- Part 1: Assign roles and turn order ---
         const players = Object.values(room.players).filter(p => !p.isNpc);

@@ -603,7 +603,7 @@ function renderLobbyState(room) {
 }
 
 
-// REFACTORED: Simplified logic for rendering setup choices.
+// REBUILT: This function is now only responsible for rendering the setup choices and is called by the main render router.
 function renderSetupChoices(room) {
     const classData = room.gameState.classData;
     if (!myPlayerInfo || myPlayerInfo.role !== 'Explorer' || !classData) return;
@@ -684,7 +684,7 @@ function renderSetupChoices(room) {
 }
 
 
-// --- 3.6. renderGameplayState() ---
+// --- 3.5. renderGameplayState() ---
 function renderGameplayState(room) {
     const { players, gameState } = room;
     const isExplorer = myPlayerInfo.role === 'Explorer';
@@ -836,7 +836,7 @@ function renderGameplayState(room) {
 }
 
 
-// --- 3.7. renderUIForPhase() (Updated render router) ---
+// --- 3.6. renderUIForPhase() (Updated render router) ---
 function renderUIForPhase(room) {
     currentRoomState = room;
     myPlayerInfo = room.players[myId];
