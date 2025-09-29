@@ -31,6 +31,7 @@ const socket = io();
 let myPlayerInfo = {};
 let myId = '';
 let currentRoomState = {};
+let previousGamePhase = 'lobby'; // BUG FIX: Track previous phase to detect when setup finishes.
 let localStream;
 const peerConnections = {};
 let selectedTargetId = null; // For combat targeting
@@ -606,10 +607,28 @@ function renderClassAbilityCard(player, container) {
 function renderGameState(room) {
     // --- 3.4.1. State Update & Variable Setup ---
     const oldLootCount = currentRoomState.gameState?.lootPool?.length || 0;
+    const newGamePhase = room.gameState.phase;
     currentRoomState = room;
     const { players, gameState, hostId } = room;
     myPlayerInfo = players[myId];
-    if (!myPlayerInfo) return;
+    
+    // BUG FIX: Add a defensive check. If my player info doesn't exist for some reason, abort the render.
+    if (!myPlayerInfo) {
+        console.warn("My player info not found in game state update. Aborting render.");
+        return;
+    }
+
+    // BUG FIX: Detect when the setup phase ends and force the UI to the main game screen.
+    const setupPhases = ['class_selection', 'advanced_setup_choice', 'item_swap_resolution'];
+    if (setupPhases.includes(previousGamePhase) && newGamePhase === 'started') {
+        // Force the mobile view to the "Game" screen
+        document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
+        get('mobile-screen-game').classList.add('active');
+        mobileBottomNav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.nav-btn[data-screen="game"]').classList.add('active');
+    }
+    previousGamePhase = newGamePhase; // Update the phase tracker for the next render.
+    
     const newLootCount = gameState.lootPool?.length || 0;
     
     const isHost = myId === hostId;
@@ -666,7 +685,7 @@ function renderGameState(room) {
     const inMobileSetupPhase = (gameState.phase === 'class_selection' || gameState.phase === 'advanced_setup_choice') && isExplorer;
 
     // If we are in a setup phase and haven't completed it, force the Character screen to be active.
-    if (inMobileSetupPhase && !myPlayerInfo.madeAdvancedChoice) {
+    if (inMobileSetupPhase && !myPlayerInfo.madeAdvancedChoice && !myPlayerInfo.class) {
         if (!get('mobile-screen-character').classList.contains('active')) {
              document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
              get('mobile-screen-character').classList.add('active');
