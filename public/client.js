@@ -267,31 +267,41 @@ const toastContainer = get('toast-container');
 
 // --- 2.1. Toast Notifications ---
 function showInfoToast(message, type = 'info') {
+    // A new toast replaces any existing toast to prevent stacking.
+    toastContainer.innerHTML = ''; 
+
     const toast = document.createElement('div');
     toast.className = `toast-notification-entry toast-${type}`;
-    toast.textContent = message;
-
+    
+    const messageSpan = document.createElement('span');
+    messageSpan.textContent = message;
+    
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
     closeBtn.className = 'toast-close-btn';
+    closeBtn.setAttribute('aria-label', 'Close notification');
     closeBtn.onclick = () => {
-        toast.style.opacity = 0;
+        toast.classList.remove('visible');
         setTimeout(() => toast.remove(), 300);
     };
 
+    toast.appendChild(messageSpan);
     toast.appendChild(closeBtn);
     toastContainer.appendChild(toast);
 
     // Force reflow to enable animation
-    getComputedStyle(toast).opacity;
-    toast.style.opacity = 1;
-    toast.style.transform = 'translateY(0)';
+    requestAnimationFrame(() => {
+        toast.classList.add('visible');
+    });
     
     setTimeout(() => {
-        toast.style.opacity = 0;
-        setTimeout(() => toast.remove(), 5000);
+        if(toast.parentElement) {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }
     }, 5000);
 }
+
 
 const randomAttackDescriptions = [
     "strikes with a fierce shout, pouring all their strength into the action.",
@@ -498,7 +508,7 @@ function createCardElement(card, actions = {}) {
     return cardDiv;
 }
 
-// --- 3.2. renderPlayerList() ---
+// --- 3.2.renderPlayerList() ---
 function renderPlayerList(players, gameState, listElement, settingsDisplayElement) {
     const currentPlayerId = gameState.turnOrder[gameState.currentPlayerIndex] || null;
     listElement.innerHTML = ''; 
@@ -1100,7 +1110,6 @@ socket.on('playerLeft', ({ playerName }) => logMessage(`${playerName} has left t
 socket.on('playerListUpdate', (room) => renderGameState(room));
 socket.on('gameStarted', (room) => {
     [startGameBtn, mobileStartGameBtn].forEach(btn => btn.classList.add('hidden'));
-    logMessage('The game has begun!', { type: 'system' });
     renderGameState(room);
 });
 socket.on('gameStateUpdate', (room) => renderGameState(room));
@@ -1472,13 +1481,20 @@ function initializeLobby() {
 }
 
 function showNonBlockingRollToast(data) {
+    // A new roll toast replaces any existing one.
+    toastContainer.innerHTML = '';
+
     const toast = document.createElement('div');
     toast.className = 'toast-roll-overlay';
 
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
     closeBtn.className = 'toast-roll-close';
-    closeBtn.onclick = () => toast.remove();
+    closeBtn.setAttribute('aria-label', 'Close roll result');
+    closeBtn.onclick = () => {
+        toast.classList.remove('visible');
+        setTimeout(() => toast.remove(), 300);
+    };
 
     toast.innerHTML = `
         <div class="toast-roll-content">
@@ -1489,9 +1505,17 @@ function showNonBlockingRollToast(data) {
     toast.querySelector('.toast-roll-content').prepend(closeBtn);
     
     toastContainer.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.classList.add('visible');
+    });
+
     setTimeout(() => {
-        toast.remove();
-    }, 7000); // Automatically remove after 7 seconds
+        if (toast.parentElement) {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 7000);
 }
 
 function showDiceRoll(options) {
@@ -1816,9 +1840,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 4.6. Help & Tutorial ---
     const tutorialContent = [
         { title: "Welcome to Quest & Chronicle!", content: "<p>This is a quick guide to get you started. On your turn, you'll gain <strong>Action Points (AP)</strong> based on your class and gear. Use them wisely!</p><p>Your primary goal is to work with your party to defeat monsters and overcome challenges thrown at you by the Dungeon Master.</p>" },
-        { title: "Your Turn", content: "<p>At the start of your turn, you'll get to roll a <strong>d20</strong> for a random event. This could lead to finding new items, special player events, or nothing at all.</p><p>After that, you can spend your AP on actions. The main actions are attacking, guarding, or resting to heal.</p>" },
-        { title: "Combat & Abilities", content: "<p>To attack, first click your <strong>equipped weapon</strong>, then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Your <strong>Class Ability</strong> is a powerful, unique skill. Check the Character tab to see its description and cost, and use it to turn the tide of battle!</p>" },
-        { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, and items. Click an equippable item in your hand to equip it.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
+        { title: "Your Turn", content: "<p>At the start of your turn, you may get to roll a <strong>d20</strong> for a random event. This could lead to finding new items, special player events, or nothing at all.</p><p>After that, you can spend your AP on actions. The main actions are attacking, guarding, using cards, or resting to heal.</p>" },
+        { title: "Combat & Abilities", content: "<p>To attack, first click your <strong>equipped weapon</strong> (or fists), then click a monster on the board to target it. This will bring up a final confirmation prompt.</p><p>Your <strong>Class Ability</strong> is a powerful, unique skill. Check the Character tab to see its description and cost, and use it to turn the tide of battle!</p>" },
+        { title: "Cards & Gear", content: "<p>You'll find new weapons, armor, spells, and items. Click an equippable item in your hand to equip it. If your hand is full when you find a new item, you'll be asked to swap something out.</p><p>Pay attention to card effects! They can provide powerful bonuses or unique actions.</p><p><strong>That's it! Good luck, adventurer!</strong></p>" }
     ];
     let currentTutorialPage = 0;
 
@@ -1828,7 +1852,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function renderTutorialPage() {
         const page = tutorialContent[currentTutorialPage];
-        get('tutorial-content').innerHTML = `<h2>${page.title}</h2>${page.content}`;
+        get('tutorial-page-content').innerHTML = `<h2 class="panel-header">${page.title}</h2><div class="tutorial-page-body">${page.content}</div>`;
         get('tutorial-page-indicator').textContent = `${currentTutorialPage + 1} / ${tutorialContent.length}`;
         get('tutorial-prev-btn').disabled = currentTutorialPage === 0;
         get('tutorial-next-btn').textContent = currentTutorialPage === tutorialContent.length - 1 ? "Finish" : "Next";
@@ -1851,28 +1875,35 @@ document.addEventListener('DOMContentLoaded', () => {
             renderTutorialPage();
         }
     });
-    get('tutorial-skip-btn').addEventListener('click', closeTutorial);
+    get('tutorial-close-btn').addEventListener('click', closeTutorial);
 
     const helpContentHTML = `
         <h3>Core Mechanics</h3>
-        <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or using abilities, cost AP. Your total AP is determined by your class and equipment.</p>
+        <p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Most actions, like attacking or using abilities, cost AP. Your total AP is determined by your class and equipment, and it refills at the start of your turn.</p>
         <p><strong>Health (HP):</strong> Your life force. If it reaches 0, you fall but can get back up by spending a Life. If you're out of Lives, you're out of the game!</p>
         <p><strong>Dice Rolls:</strong> Most actions are resolved with a d20 roll. To succeed, you usually need to roll a number that meets or exceeds a target's Defense Class (DC) or Armor Class (AC).</p>
+        <p><strong>Bag Capacity:</strong> You have a limited number of cards you can hold (your hand size). If you draw a card while your hand is full, you'll be prompted to discard one to make room.</p>
+        
+        <hr>
 
         <h3>Player Stats</h3>
-        <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit.</p>
+        <p><strong>Damage Bonus:</strong> Added to your weapon damage rolls and your d20 roll to hit an enemy.</p>
         <p><strong>Shield Bonus:</strong> Your defense against attacks. An enemy must roll a d20 + their attack bonus that is higher than 10 + your shield bonus to hit you.</p>
-        <p><strong>Health Dice:</strong> A resource used for healing during a Respite or Rest action.</p>
-        <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes that influence rolls and certain abilities.</p>
+        <p><strong>Health Dice:</strong> A resource used for healing during a Respite or Rest action. You have a limited number per adventure, determined by your class.</p>
+        <p><strong>Lives:</strong> If your HP drops to 0, you spend a Life to get back up at half HP. Run out, and you're defeated!</p>
+        <p><strong>Shield HP:</strong> Temporary HP gained from actions like Guard. This is depleted before your normal HP but disappears at the end of your turn.</p>
+        <p><strong>STR, DEX, CON, INT, WIS, CHA:</strong> Your core attributes that influence rolls and certain abilities. For example, STR is often used for melee attacks, while DEX can be used for ranged attacks or dodging traps.</p>
+        
+        <hr>
 
         <h3>Actions (Your Turn)</h3>
-        <p><strong>Attack (-1 or -2 AP):</strong> Use your equipped weapon or fists to attack a monster.</p>
-        <p><strong>Use Item/Cast Spell (-1 AP):</strong> Use a card from your hand. Some may require a target.</p>
-        <p><strong>Use Class Ability (Varies):</strong> Perform your unique class ability.</p>
-        <p><strong>Guard (-1 AP):</strong> Add a temporary Shield HP bonus for one round, making you harder to damage.</p>
-        <p><strong>Brief Respite (-1 AP):</strong> Spend one Health Die to recover HP.</p>
-        <p><strong>Full Rest (-2 AP):</strong> Spend two Health Dice to recover HP.</p>
-        <p><strong>Contribute to Challenge (-1 AP):</strong> If a Skill Challenge is active, spend AP to make a roll and contribute.</p>
+        <p><strong>Attack (-1 or -2 AP):</strong> Use your equipped weapon or fists to attack a monster. Click your weapon card first, then click the monster you want to target.</p>
+        <p><strong>Use Item/Cast Spell (-1 AP):</strong> Use a card from your hand. Some cards may require you to select a target before using them.</p>
+        <p><strong>Use Class Ability (Varies):</strong> Perform your unique class ability. You can find this on your Character screen. Click the 'Use Ability' button to activate it.</p>
+        <p><strong>Guard (-1 AP):</strong> Add a temporary Shield HP bonus for one round, making you harder to damage. The amount is usually 2, but can be improved by armor.</p>
+        <p><strong>Brief Respite (-1 AP):</strong> Spend one Health Die to recover a rolled amount of HP (e.g., 1d4, 1d6, etc. depending on your class).</p>
+        <p><strong>Full Rest (-2 AP):</strong> Spend two Health Dice to recover a larger, rolled amount of HP.</p>
+        <p><strong>Contribute to Challenge (-1 AP):</strong> If a Skill Challenge is active, spend AP to make a roll and contribute to the party's success.</p>
     `;
     [helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => {
         get('help-content').innerHTML = helpContentHTML;

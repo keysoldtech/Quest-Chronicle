@@ -599,6 +599,11 @@ class GameManager {
         const room = this.rooms[roomId];
         room.gameState.currentPlayerIndex = 0;
         room.gameState.turnCount = 1;
+        this.sendMessageToRoom(roomId, {
+            channel: 'game',
+            type: 'system',
+            message: `The game has begun!`
+        });
         this.startTurn(roomId);
     }
     
@@ -944,7 +949,7 @@ class GameManager {
             this.sendMessageToRoom(room.id, {
                 channel: 'game',
                 type: 'system',
-                message: `The Dungeon Master summons a ${monsterCard.name}!`
+                message: `The Dungeon Master summons a <b>${monsterCard.name}</b>!`
             });
             this.emitGameState(room.id);
         }
@@ -976,7 +981,7 @@ class GameManager {
                     player.currentAp -= gameData.actionCosts.guard;
                     const bonus = player.equipment.armor?.guardBonus || 2;
                     player.stats.shieldHp += bonus;
-                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} guards, gaining ${bonus} Shield HP.` });
+                    this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> guards, gaining ${bonus} Shield HP.` });
                 } else { socket.emit('actionError', `Not enough AP. Guard costs ${gameData.actionCosts.guard}.`); }
                 break;
             case 'briefRespite':
@@ -1026,6 +1031,11 @@ class GameManager {
             if(isCrit) totalDamage += this.rollDice(weapon.effect.dice); // Crits deal extra weapon dice damage
             
             target.currentHp -= totalDamage;
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>HIT!</b> ${attacker.name} dealt <b>${totalDamage}</b> damage to ${target.name}.` });
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<em>(Roll: ${d20Roll} + ${attacker.stats.damageBonus} = ${totalRollToHit} vs DC ${target.requiredRollToHit})</em>` });
+        } else {
+             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>MISS!</b> ${attacker.name} failed to hit ${target.name}.` });
+             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<em>(Roll: ${d20Roll} + ${attacker.stats.damageBonus} = ${totalRollToHit} vs DC ${target.requiredRollToHit})</em>` });
         }
         
         io.to(room.id).emit('attackAnimation', {
@@ -1063,6 +1073,11 @@ class GameManager {
             totalDamage = 1 + attacker.stats.str; // 1 + STR mod for damage
             if (isCrit) totalDamage *= 2;
             target.currentHp -= totalDamage;
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>HIT!</b> ${attacker.name} dealt <b>${totalDamage}</b> damage to ${target.name} with their fists.` });
+             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<em>(Roll: ${d20Roll} + ${attacker.stats.str} = ${totalRollToHit} vs DC ${target.requiredRollToHit})</em>` });
+        } else {
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>MISS!</b> ${attacker.name} failed to land a punch on ${target.name}.` });
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<em>(Roll: ${d20Roll} + ${attacker.stats.str} = ${totalRollToHit} vs DC ${target.requiredRollToHit})</em>` });
         }
 
         io.to(room.id).emit('attackAnimation', {
@@ -1080,7 +1095,7 @@ class GameManager {
         const target = room.players[targetId];
         if (!monster || !target) return;
 
-        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The ${monster.name} attacks ${target.name}!` });
+        this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The <b>${monster.name}</b> attacks <b>${target.name}</b>!` });
         
         const d20Roll = this.rollDice('1d20');
         const isCrit = d20Roll === 20;
@@ -1098,6 +1113,11 @@ class GameManager {
             if(isCrit) totalDamage += this.rollDice(monster.effect.dice);
             
             this._applyDamageToPlayer(room, target, totalDamage);
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>HIT!</b> The ${monster.name} dealt <b>${totalDamage}</b> damage to ${target.name}.` });
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<em>(Roll: ${d20Roll} + ${monster.attackBonus} = ${totalRollToHit} vs DC ${requiredRoll})</em>` });
+        } else {
+             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>MISS!</b> The ${monster.name} failed to hit ${target.name}.` });
+             this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<em>(Roll: ${d20Roll} + ${monster.attackBonus} = ${totalRollToHit} vs DC ${requiredRoll})</em>` });
         }
         
         io.to(room.id).emit('monsterAttackAnimation', {
@@ -1114,7 +1134,7 @@ class GameManager {
         const monsterIndex = room.gameState.board.monsters.findIndex(m => m.id === monsterId);
         if (monsterIndex > -1) {
             const monster = room.gameState.board.monsters[monsterIndex];
-            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The ${monster.name} has been defeated!` });
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The <b>${monster.name}</b> has been defeated!` });
             room.gameState.board.monsters.splice(monsterIndex, 1);
 
             // Add loot to the loot pool based on custom settings
@@ -1122,7 +1142,7 @@ class GameManager {
                 if (room.gameState.decks.treasure.length > 0) {
                     const lootCard = room.gameState.decks.treasure.pop();
                     room.gameState.lootPool.push(lootCard);
-                     this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party discovered a ${lootCard.name}!` });
+                     this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `The party discovered a <b>${lootCard.name}</b>!` });
                 }
             }
         }
@@ -1146,10 +1166,40 @@ class GameManager {
             player.lifeCount -= 1;
             if (player.lifeCount > 0) {
                 player.stats.currentHp = Math.floor(player.stats.maxHp / 2); // Respawn at half health
-                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} has fallen but gets back up! They have ${player.lifeCount} lives remaining.` });
+                this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> has fallen but gets back up! They have ${player.lifeCount} lives remaining.` });
             } else {
-                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `${player.name} has fallen and is out of the fight!` });
+                 this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> has fallen and is out of the fight!` });
                  // Handle permanent defeat logic here
+            }
+        }
+    }
+
+    _resolveBriefRespite(room, player) {
+        const apCost = gameData.actionCosts.briefRespite;
+        if (player.currentAp >= apCost && player.healthDice.current > 0) {
+            player.currentAp -= apCost;
+            player.healthDice.current--;
+            const healAmount = this.rollDice(`1d${player.healthDice.max}`);
+            player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> takes a brief respite and heals for ${healAmount} HP.` });
+        } else {
+            if (!player.isNpc) {
+                io.sockets.sockets.get(player.id)?.emit('actionError', `Cannot take a respite. Check AP and Health Dice.`);
+            }
+        }
+    }
+    
+    _resolveFullRest(room, player) {
+        const apCost = gameData.actionCosts.fullRest;
+        if (player.currentAp >= apCost && player.healthDice.current >= 2) {
+            player.currentAp -= apCost;
+            player.healthDice.current -= 2;
+            const healAmount = this.rollDice(`2d${player.healthDice.max}`);
+            player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healAmount);
+            this.sendMessageToRoom(room.id, { channel: 'game', type: 'system', message: `<b>${player.name}</b> takes a full rest and heals for ${healAmount} HP.` });
+        } else {
+             if (!player.isNpc) {
+                io.sockets.sockets.get(player.id)?.emit('actionError', `Cannot take a full rest. Check AP and Health Dice.`);
             }
         }
     }
@@ -1185,7 +1235,7 @@ class GameManager {
             // Find an item
             if (room.gameState.decks.treasure.length > 0) {
                 const card = room.gameState.decks.treasure.pop();
-                outcome = { type: 'item', message: `You found an item: ${card.name}!`, card };
+                outcome = { type: 'item', message: `You found an item: <b>${card.name}</b>!`, card };
                 this._addCardToPlayerHand(room, player, card);
                 socket.emit('eventItemFound', card);
             }
@@ -1218,7 +1268,7 @@ class GameManager {
             // TODO: Resolve the event card's effect. For now, just log it.
             this.sendMessageToRoom(room.id, {
                 channel: 'game', type: 'system',
-                message: `<b>${player.name}</b> chose: ${choice.name}. ${choice.outcome}`
+                message: `<b>${player.name}</b> chose: <b>${choice.name}</b>. ${choice.outcome}`
             });
         }
         
@@ -1237,7 +1287,7 @@ class GameManager {
             // Player chose to discard the new item.
             this.sendMessageToRoom(room.id, {
                 channel: 'game', type: 'system',
-                message: `<b>${player.name}</b> discarded the newly found ${newCard.name}.`
+                message: `<b>${player.name}</b> discarded the newly found <b>${newCard.name}</b>.`
             });
         } else {
             // Player chose to discard an item from their hand.
@@ -1248,7 +1298,7 @@ class GameManager {
                 player.hand.push(newCard); // Add new card
                 this.sendMessageToRoom(room.id, {
                     channel: 'game', type: 'system',
-                    message: `<b>${player.name}</b> swapped their ${discardedCard.name} for the new ${newCard.name}.`
+                    message: `<b>${player.name}</b> swapped their <b>${discardedCard.name}</b> for the new <b>${newCard.name}</b>.`
                 });
             }
         }

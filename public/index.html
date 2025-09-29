@@ -36,7 +36,7 @@
     <!-- Lobby Screen: Visible on page load -->
     <div id="lobby" class="lobby-container">
         <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-        <p class="subtitle-font">v4.5.3 (Playtest-v1.3)</p>
+        <p class="subtitle-font">v4.5.5 (Playtest-v1.5)</p>
         
         <div class="input-group">
             <label for="playerName">Player Name</label>
@@ -117,7 +117,7 @@
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                 </div>
                  <div class="header-controls">
-                    <p class="build-number-font">v4.5.3 (Playtest-v1.3)</p>
+                    <p class="build-number-font">v4.5.5 (Playtest-v1.5)</p>
                     <div id="dm-controls" class="dm-controls hidden">
                          <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                     </div>
@@ -207,12 +207,12 @@
                     <div id="player-hand" class="player-hand-container card-container-row"></div>
                 </div>
             </footer>
-
+            
             <div id="fixed-action-bar" class="fixed-action-bar hidden">
                 <button id="action-skill-challenge-btn" class="btn btn-special hidden">Challenge (-1 AP)</button>
-                <button id="action-guard-btn" class="btn btn-secondary">Guard (-1 AP)</button>
-                <button id="action-brief-respite-btn" class="btn btn-secondary">Respite (-1 AP)</button>
-                <button id="action-full-rest-btn" class="btn btn-secondary">Rest (-2 AP)</button>
+                <button id="action-guard-btn" class="btn btn-secondary">Guard (1AP)</button>
+                <button id="action-brief-respite-btn" class="btn btn-secondary">Respite (1AP)</button>
+                <button id="action-full-rest-btn" class="btn btn-secondary">Rest (2AP)</button>
                 <button id="action-end-turn-btn" class="btn btn-primary">End Turn</button>
             </div>
         </div>
@@ -500,14 +500,16 @@
     </div>
 
     <div id="tutorial-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div id="tutorial-content"></div>
+        <div class="modal-content tutorial-content">
+            <div id="tutorial-page-content">
+                <!-- Tutorial page content will be injected here -->
+            </div>
             <div class="tutorial-navigation">
                 <button id="tutorial-prev-btn" class="btn btn-secondary">Previous</button>
                 <span id="tutorial-page-indicator"></span>
                 <button id="tutorial-next-btn" class="btn btn-primary">Next</button>
             </div>
-             <button id="tutorial-skip-btn" class="btn btn-sm" style="position: absolute; top: 10px; right: 10px;">Skip Tutorial</button>
+             <button id="tutorial-close-btn" class="btn btn-sm modal-close-btn">&times;</button>
         </div>
     </div>
 
