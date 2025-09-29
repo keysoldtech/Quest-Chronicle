@@ -843,37 +843,52 @@ function renderUIForPhase(room) {
     document.querySelector('[data-tab="party-events-tab"]').classList.toggle('highlight', !!gameState.currentPartyEvent);
     document.querySelector('[data-tab="party-loot-tab"]').classList.toggle('highlight', newLootCount > oldLootCount);
 
-    // Reset all major content panels
-    [classSelectionDiv, playerStatsContainer, mobileClassSelection, mobilePlayerStats, gameBoardDiv, mobileBoardCards, playerHandDiv, mobilePlayerHand].forEach(el => el.classList.add('hidden'));
-    fixedActionBar.classList.add('hidden');
-    mobileActionBar.classList.add('hidden');
-    
-    // Show panels based on phase
+    // Explicitly manage panel visibility based on game phase
     switch (gameState.phase) {
         case 'lobby':
             turnIndicator.textContent = "Waiting in lobby...";
             mobileTurnIndicator.textContent = "Lobby";
+            // Hide all in-game panels
+            [classSelectionDiv, playerStatsContainer, mobileClassSelection, mobilePlayerStats, gameBoardDiv, mobileBoardCards, playerHandDiv, mobilePlayerHand, fixedActionBar, mobileActionBar].forEach(el => el.classList.add('hidden'));
             break;
+
         case 'class_selection':
-            [classSelectionDiv, mobileClassSelection].forEach(el => el.classList.remove('hidden'));
+            // Hide gameplay elements
+            [gameBoardDiv, mobileBoardCards, playerHandDiv, mobilePlayerHand, fixedActionBar, mobileActionBar].forEach(el => el.classList.add('hidden'));
+
             if (myPlayerInfo.role === 'DM') {
+                 // For DM, show a waiting message in the stats panel instead of class selection
+                classSelectionDiv.classList.add('hidden');
                 playerStatsContainer.classList.remove('hidden');
                 playerStatsContainer.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
+                mobileClassSelection.classList.add('hidden');
                 mobilePlayerStats.classList.remove('hidden');
                 mobilePlayerStats.innerHTML = `<h2 class="panel-header">Setup Phase</h2><p style="padding: 1rem; text-align: center;">Waiting for explorers to choose their class...</p>`;
             } else {
+                // For players, show class selection UI, hide stats UI
+                classSelectionDiv.classList.remove('hidden');
+                playerStatsContainer.classList.add('hidden');
+                mobileClassSelection.classList.remove('hidden');
+                mobilePlayerStats.classList.add('hidden');
                 renderSetupChoices(room);
             }
             break;
+
         case 'started':
-            playerStatsContainer.classList.remove('hidden');
-            mobilePlayerStats.classList.remove('hidden');
+            // Show gameplay elements, hide class selection
             gameBoardDiv.classList.remove('hidden');
             mobileBoardCards.classList.remove('hidden');
             playerHandDiv.classList.remove('hidden');
             mobilePlayerHand.classList.remove('hidden');
-            [classSelectionDiv, mobileClassSelection].forEach(el => el.classList.add('hidden')); // Explicitly hide class selection
+            classSelectionDiv.classList.add('hidden');
+            mobileClassSelection.classList.add('hidden');
+            
+            // Show player stats
+            playerStatsContainer.classList.remove('hidden');
+            mobilePlayerStats.classList.remove('hidden');
+            
             renderGameplayState(room);
+
             if (isMyTurn && !isMyTurnPreviously) {
                  addToModalQueue(() => {
                     yourTurnPopup.classList.remove('hidden');
@@ -882,6 +897,7 @@ function renderUIForPhase(room) {
                 }, 'your-turn-popup');
             }
             break;
+            
         default:
             console.error("Unknown in-game phase:", gameState.phase);
     }
