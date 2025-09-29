@@ -106,15 +106,12 @@ class GameManager {
         const newPlayer = this.createPlayerObject(socket.id, playerName);
         const newRoomId = this.generateRoomId();
     
-        // Set default custom settings if not provided
+        // Simplify and guarantee default settings exist
         const defaultSettings = {
-            startWithWeapon: true,
-            startWithArmor: true,
-            startingItems: 2,
-            startingSpells: 2,
-            maxHandSize: 10,
-            lootDropRate: 50
+            startWithWeapon: true, startWithArmor: true, startingItems: 2, 
+            startingSpells: 2, maxHandSize: 10, lootDropRate: 50
         };
+        const settingsToUse = customSettings || defaultSettings;
     
         const newRoom = {
             id: newRoomId,
@@ -122,10 +119,9 @@ class GameManager {
             players: { [socket.id]: newPlayer },
             voiceChatPeers: [],
             gameState: {
-                phase: 'class_selection', // Start at class selection
+                phase: 'class_selection',
                 gameMode: gameMode || 'Beginner',
-                customSettings: customSettings || defaultSettings,
-                // Ensure decks are initialized to avoid crashes
+                customSettings: settingsToUse, // Use the guaranteed settings
                 decks: {
                     item: [], spell: [], monster: { tier1: [], tier2: [], tier3: [] },
                     weapon: [], armor: [], worldEvent: [], playerEvent: [],
@@ -144,15 +140,13 @@ class GameManager {
             chatLog: []
         };
     
-        // Player role assignment
         newPlayer.role = 'Explorer';
-    
         this.rooms[newRoomId] = newRoom;
         socket.join(newRoomId);
         this.socketToRoom[socket.id] = newRoomId;
     
-        // Send room data WITH class data so client can show selection
-        io.to(newRoomId).emit('roomCreated', {
+        // Use io.to(room.id) or socket.emit for the host
+        socket.emit('roomCreated', {
             ...newRoom,
             availableClasses: gameData.classes
         });
