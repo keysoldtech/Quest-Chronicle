@@ -717,9 +717,6 @@ function renderGameplayState(room) {
     const isStunned = myPlayerInfo.statusEffects && myPlayerInfo.statusEffects.some(e => e.type === 'stun' || e.name === 'Stunned');
     const challenge = gameState.skillChallenge;
 
-    // Hide all setup panels
-    [classSelectionDiv, advancedCardChoiceDiv, mobileClassSelection, mobileAdvancedCardChoiceDiv].forEach(el => el.classList.add('hidden'));
-    
     // Show gameplay panels
     playerStatsContainer.classList.toggle('hidden', !isExplorer);
     mobilePlayerStats.classList.toggle('hidden', !isExplorer);
@@ -877,7 +874,6 @@ function renderUIForPhase(room) {
     currentRoomState = room;
     myPlayerInfo = room.players[myId];
     if (!myPlayerInfo) { 
-        // This can happen briefly on a late join, handle gracefully
         console.warn("My player info not found, waiting for next update.");
         return;
     }
@@ -886,7 +882,10 @@ function renderUIForPhase(room) {
 
     // --- Phase-Based Routing ---
     // This is now the main switch that determines which major UI to show.
+    // It is the sole authority for hiding/showing top-level containers.
     if (gameState.phase === 'lobby') {
+        lobbyScreen.classList.remove('hidden');
+        gameArea.classList.add('hidden');
         renderLobbyState(room);
         return; // Stop here for lobby
     }
@@ -952,14 +951,15 @@ function renderUIForPhase(room) {
     document.querySelector('[data-tab="party-loot-tab"]').classList.toggle('highlight', newLootCount > oldLootCount);
 
     // --- In-Game Phase Specific Renders ---
+    // The router now hides all panels first, then calls the specific function to show the correct one.
+    [classSelectionDiv, advancedCardChoiceDiv, playerStatsContainer].forEach(el => el.classList.add('hidden'));
+
     switch (gameState.phase) {
         case 'class_selection':
             renderClassSelection(room);
-            renderGameplayState(room); // Render gameplay elements in the background
             break;
         case 'advanced_setup_choice':
             renderAdvancedSetup(room);
-            renderGameplayState(room); // Render gameplay elements in the background
             break;
         case 'item_swap_resolution':
         case 'started':
