@@ -634,14 +634,19 @@ label {
 
 /* Class Selection Cards */
 .class-card {
-    padding: 1rem;
-    border: 2px solid var(--color-border);
+    border: 2px solid #e8eff3;
     border-radius: 8px;
-    background: var(--color-surface);
+    padding: 15px;
+    margin: 10px;
+    background: #1a2226;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: transform 0.2s, border-color 0.2s;
 }
-.class-card:hover { border-color: var(--color-primary); }
+
+.class-card:hover {
+    transform: scale(1.05);
+    border-color: #3b82f6;
+}
 .class-card.selected { border-color: var(--color-special); box-shadow: 0 0 10px var(--color-special); }
 .class-card-title { font-family: var(--font-title); font-size: 1.5rem; }
 .class-card-desc { font-size: 0.9rem; color: var(--color-text-secondary); margin: 0.5rem 0; }
@@ -1185,4 +1190,14 @@ label {
 .selected-item {
      border-color: var(--color-special);
      box-shadow: 0 0 10px var(--color-special);
+}
+
+.class-card button {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
 }

@@ -948,10 +948,24 @@ function renderUIForPhase(room) {
 // --- 5. SOCKET.IO EVENT HANDLERS ---
 
 socket.on('connect', () => { myId = socket.id; });
+
 socket.on('roomCreated', (room) => {
+    currentRoomState = room; // User requested state update
     document.body.classList.add('in-game');
+    
+    // Keep existing render logic, as it sets up other parts of the UI
     renderUIForPhase(room);
+
+    // NEW LOGIC: If phase is class_selection, override the class UI with the new, simpler version
+    if (room.gameState.phase === 'class_selection' && room.availableClasses) {
+        // This check prevents the DM from seeing the class selection screen
+        const myPlayer = room.players[myId];
+        if (myPlayer && myPlayer.role === 'Explorer') {
+            showClassSelectionUI(room.availableClasses);
+        }
+    }
 });
+
 socket.on('joinSuccess', (room) => {
     document.body.classList.add('in-game');
     renderUIForPhase(room);
@@ -1473,7 +1487,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const helpContentHTML = `<h3>Core Mechanics</h3><p><strong>Action Points (AP):</strong> Your primary resource for taking actions on your turn. Refills at the start of your turn.</p><p><strong>Health (HP):</strong> Your life force. If it reaches 0, you spend a Life to get back up.</p><h3>Player Stats</h3><p><strong>Damage Bonus:</strong> Added to weapon damage rolls and your d20 roll to hit an enemy.</p><p><strong>Shield Bonus:</strong> Your defense against attacks. An enemy must roll a d20 + their attack bonus higher than 10 + your shield bonus to hit you.</p><h3>Actions (Your Turn)</h3><p><strong>Attack (-1 or -2 AP):</strong> Click your equipped weapon, then a monster.</p><p><strong>Use Item/Cast Spell (-1 AP):</strong> Use a card from your hand.</p><p><strong>Guard (-1 AP):</strong> Add temporary Shield HP.</p><p><strong>Brief Respite (-1 AP):</strong> Spend one Health Die to heal.</p><p><strong>Full Rest (-2 AP):</strong> Spend two Health Dice to heal more.</p>`;
     [helpBtn, mobileHelpBtn].forEach(btn => btn.addEventListener('click', () => { get('help-content').innerHTML = helpContentHTML; helpModal.classList.remove('hidden'); }));
-    get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
+    get('help-close-btn').addEventListener('click', () => helpModal.classList.add('hidden'); });
 
     if (!localStorage.getItem('tutorialCompleted')) { renderTutorialPage(); tutorialModal.classList.remove('hidden'); }
 
@@ -1504,4 +1518,54 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
         .then(reg => console.log('SW registered', reg))
         .catch(err => console.error('SW registration failed:', err));
+}
+
+// Function to show the class selection UI on the Character Tab
+function showClassSelectionUI(classes) {
+    const containers = [
+        document.querySelector('#class-cards-container'),
+        document.querySelector('#mobile-class-cards-container')
+    ];
+
+    containers.forEach(container => {
+        if (!container) return;
+        
+        // Make sure parent is visible and stats are hidden
+        const classSelectionView = container.closest('#class-selection, #mobile-class-selection');
+        if (classSelectionView) classSelectionView.classList.remove('hidden');
+        
+        const statsView = classSelectionView?.parentElement.querySelector('#player-stats-container, #mobile-player-stats');
+        if (statsView) statsView.classList.add('hidden');
+
+        container.innerHTML = ''; // Clear previous content
+
+        Object.entries(classes).forEach(([classId, classData]) => {
+            const classCard = document.createElement('div');
+            classCard.className = 'class-card';
+            classCard.innerHTML = `
+                <h3>${classId}</h3>
+                <p>HP: ${classData.baseHp}</p>
+                <p>Damage: +${classData.baseDamageBonus}</p>
+                <p>Shield: +${classData.baseShieldBonus}</p>
+                <p>AP: ${classData.baseAp}</p>
+                <p><strong>Ability:</strong> ${classData.ability.name}</p>
+                <p>${classData.ability.description}</p>
+                <button onclick="selectClass('${classId}')">Select ${classId}</button>
+            `;
+            container.appendChild(classCard);
+        });
+    });
+}
+
+// Function to emit the class selection choice to the server
+function selectClass(classId) {
+    socket.emit('chooseClass', { classId });
+
+    // Provide immediate feedback to the user
+    document.querySelectorAll('.class-card button').forEach(button => {
+        button.disabled = true;
+        if (button.getAttribute('onclick') === `selectClass('${classId}')`) {
+            button.textContent = 'Selected!';
+        }
+    });
 }

@@ -105,55 +105,56 @@ class GameManager {
     createRoom(socket, { playerName, gameMode, customSettings }) {
         const newPlayer = this.createPlayerObject(socket.id, playerName);
         const newRoomId = this.generateRoomId();
-        
+    
+        // Set default custom settings if not provided
+        const defaultSettings = {
+            startWithWeapon: true,
+            startWithArmor: true,
+            startingItems: 2,
+            startingSpells: 2,
+            maxHandSize: 10,
+            lootDropRate: 50
+        };
+    
         const newRoom = {
             id: newRoomId,
             hostId: socket.id,
             players: { [socket.id]: newPlayer },
             voiceChatPeers: [],
             gameState: {
-                phase: 'class_selection', // MODIFIED: Go directly to class selection
-                gameMode: gameMode,
-                customSettings: customSettings,
-                decks: { 
-                    item: [], spell: [], monster: { tier1: [], tier2: [], tier3: [] }, weapon: [], armor: [], worldEvent: [],
-                    playerEvent: [],
-                    partyEvent: [],
-                    treasure: [],
+                phase: 'class_selection', // Start at class selection
+                gameMode: gameMode || 'Beginner',
+                customSettings: customSettings || defaultSettings,
+                decks: {
+                    item: [], spell: [], monster: { tier1: [], tier2: [], tier3: [] },
+                    weapon: [], armor: [], worldEvent: [], playerEvent: [],
+                    partyEvent: [], treasure: [],
                 },
                 turnOrder: [],
                 currentPlayerIndex: -1,
                 board: { monsters: [] },
                 lootPool: [],
                 turnCount: 0,
-                worldEvents: {
-                    currentEvent: null,
-                    duration: 0,
-                    sourcePlayerId: null,
-                },
+                worldEvents: { currentEvent: null, duration: 0, sourcePlayerId: null },
                 currentPartyEvent: null,
                 skillChallenge: { isActive: false },
-                classData: gameData.classes, 
+                classData: gameData.classes,
             },
             chatLog: []
         };
-
-        // MODIFIED: Immediately set up for single player
-        const player = newRoom.players[socket.id];
-        player.role = 'Explorer';
-        const dmNpc = this.createPlayerObject('npc-dm', 'Dungeon Master');
-        dmNpc.role = 'DM'; dmNpc.isNpc = true; newRoom.players[dmNpc.id] = dmNpc;
-        const npcNames = ["Grok", "Lyra", "Finn"];
-        for (const name of npcNames) {
-            const npcId = `npc-${name.toLowerCase()}`;
-            const npc = this.createPlayerObject(npcId, name);
-            npc.isNpc = true; npc.role = 'Explorer'; newRoom.players[npc.id] = npc;
-        }
-        
+    
+        // DON'T create NPCs yet - wait until after class selection
+        newPlayer.role = 'Explorer';
+    
         this.rooms[newRoomId] = newRoom;
         socket.join(newRoomId);
         this.socketToRoom[socket.id] = newRoomId;
-        socket.emit('roomCreated', newRoom);
+    
+        // Send room data WITH class data so client can show selection
+        socket.emit('roomCreated', {
+            ...newRoom,
+            availableClasses: gameData.classes // Explicitly send class data
+        });
     }
     
     joinRoom(socket, { roomId, playerName }) {
@@ -258,15 +259,26 @@ class GameManager {
         if (!player || player.class || player.role !== 'Explorer') return;
     
         this.assignClassToPlayer(room.id, player, classId);
-        
-        const humanPlayers = Object.values(room.players).filter(p => !p.isNpc && p.role === 'Explorer');
-        const allHumansReady = humanPlayers.every(p => p.class);
-
-        if (allHumansReady) {
-            this._completeSetupAndStartGame(room);
-        } else {
-            this.emitGameState(room.id); // Update for everyone else to see the class choice
+    
+        // NOW create the NPCs after the human player has chosen their class
+        if (!room.players['npc-dm']) {
+            const dmNpc = this.createPlayerObject('npc-dm', 'Dungeon Master');
+            dmNpc.role = 'DM';
+            dmNpc.isNpc = true;
+            room.players[dmNpc.id] = dmNpc;
+    
+            const npcNames = ["Grok", "Lyra", "Finn"];
+            for (const name of npcNames) {
+                const npcId = `npc-${name.toLowerCase()}`;
+                const npc = this.createPlayerObject(npcId, name);
+                npc.isNpc = true;
+                npc.role = 'Explorer';
+                room.players[npc.id] = npc;
+            }
         }
+    
+        // Since this is single-player, start immediately after class selection
+        this._completeSetupAndStartGame(room);
     }
     
     calculatePlayerStats(player) {

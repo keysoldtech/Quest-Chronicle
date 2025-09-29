@@ -36,7 +36,7 @@
         <!-- 2.1. Initial Create/Join Form -->
         <div id="lobby-form-view">
             <h1 class="title-font" data-text="Quest & Chronicle">Quest & Chronicle</h1>
-            <p class="subtitle-font">v5.0.4 (Playtest-v5.0.4)</p>
+            <p class="subtitle-font">v5.0.5 (Playtest-v5.0.5)</p>
             
             <div class="input-group">
                 <label for="playerName">Player Name</label>
@@ -118,7 +118,7 @@
                      <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                 </div>
                  <div class="header-controls">
-                    <p class="build-number-font">v5.0.4 (Playtest-v5.0.4)</p>
+                    <p class="build-number-font">v5.0.5 (Playtest-v5.0.5)</p>
                     <div id="dm-controls" class="dm-controls hidden">
                          <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                     </div>
@@ -396,127 +396,4 @@
              <p id="event-prompt">Roll the dice to see what happens.</p>
              <button id="event-roll-btn" class="btn btn-special">Roll d20</button>
              <div id="event-card-selection" class="card-container-row hidden" style="justify-content: center;"></div>
-        </div>
-    </div>
-    
-    <div id="world-event-save-modal" class="modal-overlay hidden">
-        <div class="modal-content" style="text-align: center;">
-            <h2 id="world-event-save-title" class="panel-header">World Event!</h2>
-            <p id="world-event-save-prompt">You must make a save!</p>
-            <button id="world-event-save-roll-btn" class="btn btn-special">Roll d20</button>
-        </div>
-    </div>
-
-    <div id="skill-challenge-overlay" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 600px;">
-            <h2 id="skill-challenge-title" class="panel-header">Skill Challenge</h2>
-            <p id="skill-challenge-desc"></p>
-            <div id="skill-challenge-progress" class="skill-challenge-progress-container"></div>
-            <p id="skill-challenge-info"></p>
-            <div id="skill-challenge-log" class="log-content-area" style="height: 150px; margin-top: 1rem;"></div>
-            <div class="modal-actions">
-                <button id="skill-challenge-close-btn" class="btn btn-secondary">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="item-select-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <h2 class="panel-header">Use an Item?</h2>
-            <p>Select an item from your hand or equipment to help with the roll. Or, use no item.</p>
-            <div id="item-select-container" class="card-container-row" style="margin-top: 1rem; max-height: 250px; flex-wrap: nowrap;"></div>
-            <div class="modal-actions">
-                <button id="item-select-cancel-btn" class="btn btn-secondary">Cancel</button>
-                <button id="item-select-confirm-btn" class="btn btn-primary">Confirm Roll</button>
-            </div>
-        </div>
-    </div>
-    
-    <div id="equipment-choice-modal" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 600px;">
-            <h2 class="panel-header">Choose Your Equipment</h2>
-            <p>You found a new piece of gear. You can swap it with your currently equipped item, or keep what you have.</p>
-            <div class="equipment-choice-container">
-                <div class="equipment-choice-item">
-                    <h3 class="sub-header-font">Currently Equipped</h3>
-                    <div id="equipped-item-display"></div>
-                </div>
-                 <div class="equipment-choice-item">
-                    <h3 class="sub-header-font">New Item Found</h3>
-                    <div id="new-item-display"></div>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="keep-current-btn" class="btn btn-secondary">Keep Current</button>
-                <button id="equip-new-btn" class="btn btn-primary">Equip New</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="item-swap-modal" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 800px;">
-            <h2 class="panel-header">Inventory Full!</h2>
-            <p id="item-swap-prompt">Your hand is full. To keep the new item, choose one from your hand to discard. Otherwise, you can discard the new item.</p>
-            <div class="item-swap-container">
-                <div class="item-swap-column">
-                    <h3 class="sub-header-font">New Item</h3>
-                    <div id="swap-new-item-display"></div>
-                </div>
-                <div class="item-swap-column">
-                    <h3 class="sub-header-font">Your Hand (Choose one to discard)</h3>
-                    <div id="swap-hand-display" class="card-container-row"></div>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button id="discard-new-item-btn" class="btn btn-danger">Discard New Item</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="item-found-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <h2 class="panel-header">Item Found!</h2>
-            <p>Your travels have rewarded you.</p>
-            <div id="item-found-display" class="item-found-display"></div>
-            <div class="modal-actions">
-                <button id="item-found-close-btn" class="btn btn-primary">Continue</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="tutorial-modal" class="modal-overlay hidden">
-        <div class="modal-content tutorial-content">
-            <div id="tutorial-page-content">
-                <!-- Tutorial page content will be injected here -->
-            </div>
-            <div class="tutorial-navigation">
-                <button id="tutorial-prev-btn" class="btn btn-secondary">Previous</button>
-                <span id="tutorial-page-indicator"></span>
-                <button id="tutorial-next-btn" class="btn btn-primary">Next</button>
-            </div>
-             <button id="tutorial-close-btn" class="btn btn-sm modal-close-btn">&times;</button>
-        </div>
-    </div>
-
-    <div id="help-modal" class="modal-overlay hidden">
-        <div class="modal-content" style="max-width: 800px; max-height: 80vh; display: flex; flex-direction: column;">
-            <h2 class="panel-header">Game Guide</h2>
-            <div id="help-content" style="overflow-y: auto; padding-right: 1rem;">
-                <!-- Content will be injected by JS -->
-            </div>
-            <div class="modal-actions" style="margin-top: 1rem; border-top: 1px solid var(--color-border); padding-top: 1rem;">
-                <button id="help-close-btn" class="btn btn-primary">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="voice-chat-container"></div>
-    <div id="animation-overlay"></div>
-    <div id="toast-container" class="toast-container"></div>
-    
-    <button id="skip-popup-btn" class="btn btn-secondary btn-sm skip-popup-btn hidden">Skip</button>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="/client.js"></script>
-</body>
-</html>
+        
