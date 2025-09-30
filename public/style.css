@@ -528,10 +528,6 @@ body {
 .toast-container { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; width: 90%; max-width: 500px; pointer-events: none; }
 .toast-roll-overlay { background-color: var(--color-surface-light); color: var(--color-text-primary); padding: 0; border-radius: 8px; border: 1px solid var(--color-border); box-shadow: var(--shadow-lg); width: 100%; text-align: center; opacity: 0; transform: translateY(-20px); transition: opacity 0.3s ease, transform 0.3s ease; overflow: hidden; }
 .toast-roll-overlay.visible { opacity: 1; transform: translateY(0); }
-.toast-roll-overlay.other { width: 300px; align-self: flex-start; margin-left: -50%; transform: translateX(calc(50vw - 100%)); }
-.toast-roll-overlay.other .panel-header { font-size: 1rem; }
-.toast-roll-overlay.other .result-line { font-size: 1.2rem; }
-.toast-roll-overlay.other .roll-details { font-size: 0.8rem; }
 .toast-roll-content { padding: 1rem; position: relative; }
 .toast-roll-content .panel-header { margin: -1rem -1rem 0.75rem -1rem; font-size: 1.2rem; padding: 0.5rem 1rem; }
 .result-line { font-size: 1.8rem; font-weight: bold; margin-bottom: 0.5rem; font-family: var(--font-title); text-shadow: 0 0 5px currentColor; }

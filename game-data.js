@@ -140,14 +140,14 @@ const magicalAffixes = {
         { name: 'Swift', tier: 2, bonuses: { ap: 2 } },
     ],
     suffixes: [
-        { name: 'of Fortitude', tier: 1, bonuses: { hp: 5, con: 1 } },
-        { name: 'of Vigor', tier: 2, bonuses: { hp: 10, con: 2 } },
-        { name: 'of the Titan', tier: 3, bonuses: { hp: 15, con: 3 } },
+        { name: 'of Fortitude', tier: 1, bonuses: { maxHp: 5, con: 1 } },
+        { name: 'of Vigor', tier: 2, bonuses: { maxHp: 10, con: 2 } },
+        { name: 'of the Titan', tier: 3, bonuses: { maxHp: 15, con: 3 } },
         { name: 'of Striking', tier: 1, bonuses: { damageBonus: 1, str: 1 } },
         { name: 'of Ruin', tier: 2, bonuses: { damageBonus: 2, str: 2 } },
         { name: 'of Annihilation', tier: 3, bonuses: { damageBonus: 3, str: 3 } },
-        { name: 'of the Sentinel', tier: 2, bonuses: { shieldBonus: 1, hp: 5 } },
-        { name: 'of the Berserker', tier: 2, bonuses: { damageBonus: 1, hp: 5 } },
+        { name: 'of the Sentinel', tier: 2, bonuses: { shieldBonus: 1, maxHp: 5 } },
+        { name: 'of the Berserker', tier: 2, bonuses: { damageBonus: 1, maxHp: 5 } },
     ]
 };
 
@@ -194,9 +194,9 @@ const weaponCards = [
 const armorCards = [
     { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], guardBonus: 2, effect: { bonuses: { shieldBonus: 1, ap: 1 }, description: "Light and flexible, allowing for quick movements." } },
     { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], guardBonus: 4, effect: { bonuses: { shieldBonus: 3 }, description: "Made of interlocking metal rings, it offers substantial protection." } },
-    { name: "Plate Armor", type: "Armor", class: ["Warrior"], guardBonus: 5, effect: { bonuses: { shieldBonus: 4, hp: 5 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
+    { name: "Plate Armor", type: "Armor", class: ["Warrior"], guardBonus: 5, effect: { bonuses: { shieldBonus: 4, maxHp: 5 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
     { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], guardBonus: 3, effect: { bonuses: { shieldBonus: 2 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
-    { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], guardBonus: 3, effect: { bonuses: { shieldBonus: 2, hp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
+    { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], guardBonus: 3, effect: { bonuses: { shieldBonus: 2, maxHp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
 ];
 
 // --- 7.5. World Event Cards ---

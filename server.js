@@ -243,9 +243,9 @@ class GameManager {
         room.players[dmNpc.id] = dmNpc;
 
         const numHumanPlayers = Object.values(room.players).filter(p => !p.isNpc).length;
-        const numNpcsToCreate = Math.max(0, 3 - numHumanPlayers);
+        const numNpcsToCreate = Math.max(0, 4 - numHumanPlayers); // Always create a party of 4 explorers
         
-        const npcNames = ["Grok", "Lyra", "Finn"];
+        const npcNames = ["Grok", "Lyra", "Finn", "Elara"]; // Added a 4th name
         const availableClasses = Object.keys(gameData.classes);
         for (let i = 0; i < numNpcsToCreate; i++) {
             const name = npcNames[i];
@@ -409,7 +409,7 @@ class GameManager {
     // --- 3.5. Turn Management ---
     async startTurn(roomId) {
         const room = this.rooms[roomId];
-        if (!room) return;
+        if (!room || !room.gameState.turnOrder.length) return;
 
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
         if (!player) return;
@@ -442,15 +442,32 @@ class GameManager {
         const player = room.players[socket.id];
         if (!player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
         
-        player.stats.shieldHp = 0;
-        
-        room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
-        if (room.gameState.currentPlayerIndex === 0) { 
-             room.gameState.turnCount++;
-             if(Math.random() < 0.3) {
-                 this.dmPlayPartyEvent(room);
-             }
+        await this.advanceToNextTurn(room.id);
+    }
+    
+    async advanceToNextTurn(roomId) {
+        const room = this.rooms[roomId];
+        if (!room) return;
+    
+        // Reset shield of player whose turn just ended
+        const previousPlayerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
+        const previousPlayer = room.players[previousPlayerId];
+        if (previousPlayer) {
+            previousPlayer.stats.shieldHp = 0;
         }
+    
+        // Advance to the next player in the turn order
+        room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
+        
+        // Check if it's the start of a new round (DM's turn)
+        if (room.gameState.currentPlayerIndex === 0) { 
+            room.gameState.turnCount++;
+            // On subsequent rounds, the DM might play a party event
+            if (room.gameState.turnCount > 1 && Math.random() < 0.3) {
+                this.dmPlayPartyEvent(room);
+            }
+        }
+        
         await this.startTurn(room.id);
     }
     
@@ -458,26 +475,43 @@ class GameManager {
     async handleDmTurn(room) {
         await new Promise(res => setTimeout(res, 1000));
         
-        if (room.gameState.board.monsters.length > 0) {
-            for (const monster of [...room.gameState.board.monsters]) {
-               if (monster.currentHp <= 0) continue;
-               await new Promise(res => setTimeout(res, 1500));
-               const targetId = this._chooseMonsterTarget(room);
-               if (targetId) {
-                   await this.initiateAttack(room, { attackerId: monster.id, targetId: targetId, isMonster: true });
-               }
-           }
-        } else {
-             if (Math.random() < 0.75) {
+        // Special logic for the very first turn of the game
+        if (room.gameState.turnCount === 1) {
+            const actionRoll = Math.random();
+            if (actionRoll < 0.33) {
+                this.logEvent(room.id, "The DM prepares to unleash a monster...", 'event');
                 this.dmPlayMonster(room);
-            } else {
+            } else if (actionRoll < 0.66) {
+                this.logEvent(room.id, "The DM consults the winds of fate...", 'event');
                 this.dmPlayWorldEvent(room);
+            } else {
+                this.logEvent(room.id, "A dark omen! The DM unleashes a monster and a world event!", 'event');
+                this.dmPlayMonster(room);
+                await new Promise(res => setTimeout(res, 1000)); // Pause between actions
+                this.dmPlayWorldEvent(room);
+            }
+        } else {
+            // Standard DM turn logic for subsequent turns
+            if (room.gameState.board.monsters.length > 0) {
+                for (const monster of [...room.gameState.board.monsters]) {
+                   if (monster.currentHp <= 0) continue;
+                   await new Promise(res => setTimeout(res, 1500));
+                   const targetId = this._chooseMonsterTarget(room);
+                   if (targetId) {
+                       await this.initiateAttack(room, { attackerId: monster.id, targetId: targetId, isMonster: true });
+                   }
+               }
+            } else {
+                 if (Math.random() < 0.75) {
+                    this.dmPlayMonster(room);
+                } else {
+                    this.dmPlayWorldEvent(room);
+                }
             }
         }
         
         await new Promise(res => setTimeout(res, 1500));
-        room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
-        this.startTurn(room.id);
+        await this.advanceToNextTurn(room.id);
     }
     
      async handleNpcExplorerTurn(room, player) {
@@ -489,6 +523,7 @@ class GameManager {
         const classAbility = gameData.classes[player.class]?.ability;
         if (classAbility && player.currentAp >= classAbility.apCost) {
             if (Math.random() < 0.3) { // 30% chance to use ability
+                this.logEvent(room.id, `${player.name} uses their ability: ${classAbility.name}!`, 'action');
                 this.applyEffect(room, {type: 'ability', abilityName: classAbility.name}, player, null);
                 player.currentAp -= classAbility.apCost;
                 actionTaken = true;
@@ -498,8 +533,10 @@ class GameManager {
         if (!actionTaken && player.stats.currentHp < player.stats.maxHp / 2) {
             const healingSpell = player.hand.find(c => c.effect.type === 'heal');
             if (healingSpell && player.currentAp >= (healingSpell.apCost || 1)) {
+                 this.logEvent(room.id, `${player.name} uses ${healingSpell.name} to heal themselves.`, 'action');
                  this.applyEffect(room, healingSpell.effect, player, player);
                  player.currentAp -= (healingSpell.apCost || 1);
+                 player.hand.splice(player.hand.findIndex(c => c.id === healingSpell.id), 1);
                  actionTaken = true;
             }
         }
@@ -525,8 +562,7 @@ class GameManager {
         
         this.emitGameState(room.id);
         await new Promise(res => setTimeout(res, 1000));
-        room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
-        this.startTurn(room.id);
+        await this.advanceToNextTurn(room.id);
     }
 
     _chooseMonsterTarget(room) {
