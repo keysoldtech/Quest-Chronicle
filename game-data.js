@@ -27,7 +27,7 @@ const classes = {
     Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Unchecked Assault', apCost: 1, cost: { type: 'discard', cardType: 'Spell' }, description: 'Discard a Spell card to add +6 damage to your next successful weapon attack this turn.' } },
     Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Aid', apCost: 1, cost: null, description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
     Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, healthDice: 2, stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, ability: { name: 'Mystic Recall', apCost: 1, cost: null, description: 'Draw one card from the Spell deck.' } },
-    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, ability: { name: 'Hunters Mark', apCost: 1, cost: null, target: 'monster', description: 'Mark a monster. All attacks against it deal +2 damage for one round.' } },
+    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, ability: { name: 'Hunters Mark', apCost: 1, cost: null, description: 'Mark a monster. All attacks against it deal +2 damage for one round.' } },
     Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, healthDice: 2, stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, ability: { name: 'Evasion', apCost: 2, cost: null, description: 'For one round, all attacks against you have disadvantage (DM rerolls hits).' } },
     Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, ability: { name: 'Weapon Surge', apCost: 1, cost: { type: 'discard', cardType: 'Spell' }, description: 'Discard a Spell card to add +4 damage to your next successful weapon attack this turn.' } },
 };
@@ -130,24 +130,24 @@ const npcDialogue = {
 // --- 6. MAGICAL AFFIXES (for item generation) ---
 const magicalAffixes = {
     prefixes: [
-        { name: 'Hardened', tier: 1, bonuses: { shieldBonus: 1 } },
-        { name: 'Reinforced', tier: 2, bonuses: { shieldBonus: 2 } },
-        { name: 'Adamant', tier: 3, bonuses: { shieldBonus: 3 } },
-        { name: 'Vicious', tier: 1, bonuses: { damageBonus: 1 } },
-        { name: 'Savage', tier: 2, bonuses: { damageBonus: 2 } },
-        { name: 'Bloodthirsty', tier: 3, bonuses: { damageBonus: 3 } },
-        { name: 'Agile', tier: 1, bonuses: { ap: 1 } },
-        { name: 'Swift', tier: 2, bonuses: { ap: 2 } },
+        { name: 'Hardened', tier: 1, bonuses: { shieldBonus: 1 }, types: ['armor'] },
+        { name: 'Reinforced', tier: 2, bonuses: { shieldBonus: 2 }, types: ['armor'] },
+        { name: 'Adamant', tier: 3, bonuses: { shieldBonus: 3 }, types: ['armor'] },
+        { name: 'Vicious', tier: 1, bonuses: { damageBonus: 1 }, types: ['weapon'] },
+        { name: 'Savage', tier: 2, bonuses: { damageBonus: 2 }, types: ['weapon'] },
+        { name: 'Bloodthirsty', tier: 3, bonuses: { damageBonus: 3 }, types: ['weapon'] },
+        { name: 'Agile', tier: 1, bonuses: { ap: 1 }, types: ['weapon', 'armor'] },
+        { name: 'Swift', tier: 2, bonuses: { ap: 2 }, types: ['weapon', 'armor'] },
     ],
     suffixes: [
-        { name: 'of Fortitude', tier: 1, bonuses: { maxHp: 5, con: 1 } },
-        { name: 'of Vigor', tier: 2, bonuses: { maxHp: 10, con: 2 } },
-        { name: 'of the Titan', tier: 3, bonuses: { maxHp: 15, con: 3 } },
-        { name: 'of Striking', tier: 1, bonuses: { damageBonus: 1, str: 1 } },
-        { name: 'of Ruin', tier: 2, bonuses: { damageBonus: 2, str: 2 } },
-        { name: 'of Annihilation', tier: 3, bonuses: { damageBonus: 3, str: 3 } },
-        { name: 'of the Sentinel', tier: 2, bonuses: { shieldBonus: 1, maxHp: 5 } },
-        { name: 'of the Berserker', tier: 2, bonuses: { damageBonus: 1, maxHp: 5 } },
+        { name: 'of Fortitude', tier: 1, bonuses: { hp: 5, con: 1 }, types: ['armor'] },
+        { name: 'of Vigor', tier: 2, bonuses: { hp: 10, con: 2 }, types: ['armor'] },
+        { name: 'of the Titan', tier: 3, bonuses: { hp: 15, con: 3 }, types: ['armor'] },
+        { name: 'of Striking', tier: 1, bonuses: { damageBonus: 1, str: 1 }, types: ['weapon'] },
+        { name: 'of Ruin', tier: 2, bonuses: { damageBonus: 2, str: 2 }, types: ['weapon'] },
+        { name: 'of Annihilation', tier: 3, bonuses: { damageBonus: 3, str: 3 }, types: ['weapon'] },
+        { name: 'of the Sentinel', tier: 2, bonuses: { shieldBonus: 1, hp: 5 }, types: ['armor'] },
+        { name: 'of the Berserker', tier: 2, bonuses: { damageBonus: 1, hp: 5 }, types: ['weapon'] },
     ]
 };
 
@@ -182,28 +182,28 @@ const spellCards = [
 
 // --- 7.3. Weapon Cards ---
 const weaponCards = [
-    { name: "Longsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian", "Any"], range: 'melee', effect: { dice: "1d8", description: "A versatile and reliable martial weapon." } },
-    { name: "Greataxe", type: "Weapon", apCost: 2, class: ["Barbarian", "Warrior"], range: 'melee', effect: { dice: "1d12", description: "A heavy, two-handed axe that deals devastating damage.", bonuses: { damageBonus: 1 } } },
-    { name: "Shortbow", type: "Weapon", apCost: 2, class: ["Ranger", "Rogue", "Any"], range: 'ranged', effect: { dice: "1d6", description: "A light and fast ranged weapon." } },
-    { name: "Dagger", type: "Weapon", apCost: 1, class: ["Rogue", "Mage", "Any"], range: 'melee', effect: { dice: "1d4", description: "A light, concealable blade. Can be used for quick attacks." } },
-    { name: "Mace", type: "Weapon", apCost: 2, class: ["Cleric", "Warrior"], range: 'melee', effect: { dice: "1d6", description: "A simple but effective bludgeoning weapon." } },
-    { name: "Greatsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian"], range: 'melee', effect: { dice: "2d6", critBonusDice: "1d6", description: "A massive sword that hits hard and can cause grievous wounds on a critical hit." } }
+    { name: "Longsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian", "Any"], effect: { dice: "1d8", description: "A versatile and reliable martial weapon." } },
+    { name: "Greataxe", type: "Weapon", apCost: 2, class: ["Barbarian", "Warrior"], effect: { dice: "1d12", description: "A heavy, two-handed axe that deals devastating damage.", bonuses: { damageBonus: 1 } } },
+    { name: "Shortbow", type: "Weapon", apCost: 2, class: ["Ranger", "Rogue", "Any"], effect: { dice: "1d6", description: "A light and fast ranged weapon." } },
+    { name: "Dagger", type: "Weapon", apCost: 1, class: ["Rogue", "Mage", "Any"], effect: { dice: "1d4", description: "A light, concealable blade. Can be used for quick attacks." } },
+    { name: "Mace", type: "Weapon", apCost: 2, class: ["Cleric", "Warrior"], effect: { dice: "1d6", description: "A simple but effective bludgeoning weapon." } },
+    { name: "Greatsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian"], effect: { dice: "2d6", critBonusDice: "1d6", description: "A massive sword that hits hard and can cause grievous wounds on a critical hit." } }
 ];
 
 // --- 7.4. Armor Cards ---
 const armorCards = [
-    { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], guardBonus: 2, effect: { bonuses: { shieldBonus: 1, ap: 1 }, description: "Light and flexible, allowing for quick movements." } },
-    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], guardBonus: 4, effect: { bonuses: { shieldBonus: 3 }, description: "Made of interlocking metal rings, it offers substantial protection." } },
-    { name: "Plate Armor", type: "Armor", class: ["Warrior"], guardBonus: 5, effect: { bonuses: { shieldBonus: 4, maxHp: 5 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
-    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], guardBonus: 3, effect: { bonuses: { shieldBonus: 2 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
-    { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], guardBonus: 3, effect: { bonuses: { shieldBonus: 2, maxHp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
+    { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], effect: { bonuses: { shieldBonus: 1, ap: 1 }, description: "Light and flexible, allowing for quick movements." } },
+    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], effect: { bonuses: { shieldBonus: 3 }, description: "Made of interlocking metal rings, it offers substantial protection." } },
+    { name: "Plate Armor", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 4, hp: 5 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
+    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], effect: { bonuses: { shieldBonus: 2 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
+    { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], effect: { bonuses: { shieldBonus: 2, hp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
 ];
 
 // --- 7.5. World Event Cards ---
 const worldEventCards = [
-    { name: "Echoes of the Past", tags: "Environmental / Magical", type: "World Event", description: "A wave of psychic energy washes over the area. Each Explorer must succeed on a DC 13 Wisdom save or be stunned for their next turn.", effect: { type: 'save', stat: 'wis', dc: 13, consequence: { type: 'status', effect: 'Stunned', duration: 1 }} },
-    { name: "Sudden Downpour", tags: "Environmental", type: "World Event", description: "A torrential rain begins. For 2 rounds, all ranged weapon attacks are made with disadvantage.", effect: { type: 'global_modifier', modifier: 'disadvantage', attackType: 'ranged', duration: 2 } },
-    { name: "Whispers in the Dark", tags: "Psychological", type: "World Event", description: "Malevolent whispers claw at the edges of your minds. Each Explorer must succeed on a DC 12 Charisma save or take 2d6 psychic damage.", effect: { type: 'save', stat: 'cha', dc: 12, consequence: { type: 'damage', dice: '2d6' }}},
+    { name: "Echoes of the Past", tags: "Environmental / Magical", type: "World Event", description: "A wave of psychic energy washes over the area. Each Explorer must succeed on a DC 13 Wisdom save or be stunned for their next turn.", saveInfo: { save: "WIS", dc: 13 } },
+    { name: "Sudden Downpour", tags: "Environmental", type: "World Event", description: "A torrential rain begins, extinguishing all non-magical flames. Ranged weapon attacks are made with disadvantage.", saveInfo: null },
+    { name: "Whispers in the Dark", tags: "Psychological", type: "World Event", description: "Malevolent whispers claw at the edges of your minds. Each Explorer must succeed on a DC 12 Charisma save or take 2d6 psychic damage.", saveInfo: { save: "CHA", dc: 12 } },
 ];
 
 // --- 7.6. Player Event Cards ---
@@ -226,17 +226,17 @@ const partyEventCards = [
 // --- 8.1. All Monsters List ---
 const allMonsters = {
     // Tier 1
-    goblin: { name: "Goblin", type: "Monster", maxHp: 42, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
-    giantRat: { name: "Giant Rat", type: "Monster", maxHp: 40, attackBonus: 3, requiredRollToHit: 12, effect: { dice: "1d4" }, ap: 1 },
-    skeleton: { name: "Skeleton", type: "Monster", maxHp: 48, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
+    goblin: { name: "Goblin", type: "Monster", maxHp: 7, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
+    giantRat: { name: "Giant Rat", type: "Monster", maxHp: 5, attackBonus: 3, requiredRollToHit: 12, effect: { dice: "1d4" }, ap: 1 },
+    skeleton: { name: "Skeleton", type: "Monster", maxHp: 13, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
     // Tier 2
-    orc: { name: "Orc", type: "Monster", maxHp: 50, attackBonus: 5, requiredRollToHit: 13, effect: { dice: "1d12" }, ap: 2 },
-    hobgoblin: { name: "Hobgoblin", type: "Monster", maxHp: 46, attackBonus: 3, requiredRollToHit: 18, effect: { dice: "1d8" }, ap: 2 },
-    bugbear: { name: "Bugbear", type: "Monster", maxHp: 62, attackBonus: 4, requiredRollToHit: 16, effect: { dice: "2d8" }, ap: 1 },
+    orc: { name: "Orc", type: "Monster", maxHp: 15, attackBonus: 5, requiredRollToHit: 13, effect: { dice: "1d12" }, ap: 2 },
+    hobgoblin: { name: "Hobgoblin", type: "Monster", maxHp: 11, attackBonus: 3, requiredRollToHit: 18, effect: { dice: "1d8" }, ap: 2 },
+    bugbear: { name: "Bugbear", type: "Monster", maxHp: 27, attackBonus: 4, requiredRollToHit: 16, effect: { dice: "2d8" }, ap: 1 },
     // Tier 3
-    troll: { name: "Troll", type: "Monster", maxHp: 119, attackBonus: 7, requiredRollToHit: 15, effect: { dice: "2d6" }, ap: 3 },
-    ogre: { name: "Ogre", type: "Monster", maxHp: 94, attackBonus: 6, requiredRollToHit: 11, effect: { dice: "2d8" }, ap: 2 },
-    beholder: { name: "Beholder", type: "Monster", maxHp: 215, attackBonus: 5, requiredRollToHit: 18, effect: { dice: "4d6" }, ap: 4 },
+    troll: { name: "Troll", type: "Monster", maxHp: 84, attackBonus: 7, requiredRollToHit: 15, effect: { dice: "2d6" }, ap: 3 },
+    ogre: { name: "Ogre", type: "Monster", maxHp: 59, attackBonus: 6, requiredRollToHit: 11, effect: { dice: "2d8" }, ap: 2 },
+    beholder: { name: "Beholder", type: "Monster", maxHp: 180, attackBonus: 5, requiredRollToHit: 18, effect: { dice: "4d6" }, ap: 4 },
 };
 
 // --- 8.2. Monster Tiers (for spawning) ---

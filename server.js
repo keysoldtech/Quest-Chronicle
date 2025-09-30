@@ -14,7 +14,7 @@
 //    - 3.6. AI Logic (NPC Turns)
 //    - 3.7. Action Resolution (Attacks, Abilities, etc.)
 //    - 3.8. Event & Challenge Handling
-//    - 3.9. Chat & Voice Chat Relaying
+//    - 3.9. Voice Chat Relaying
 //    - 3.10. Disconnect Logic
 // 4. SOCKET.IO CONNECTION HANDLING
 
@@ -41,15 +41,6 @@ function shuffle(array) {
     return array;
 }
 
-function deepClone(obj) {
-    return JSON.parse(JSON.stringify(obj));
-}
-
-function getDialogue(type) {
-    const lines = gameData.npcDialogue.explorer[type];
-    return lines ? lines[Math.floor(Math.random() * lines.length)] : '';
-}
-
 // --- 3. GAME STATE MANAGEMENT (GameManager Class) ---
 class GameManager {
     // --- 3.1. Constructor & Core Utilities ---
@@ -64,28 +55,10 @@ class GameManager {
         return this.rooms[roomId];
     }
     
-    emitGameState(roomId, includeStaticData = false) {
-        const room = this.rooms[roomId];
-        if (room) {
-            // To save bandwidth, we only send the full static data on the first load.
-            // All subsequent updates omit it.
-            const payload = deepClone(room);
-            if (!includeStaticData && payload.staticDataForClient) {
-                delete payload.staticDataForClient;
-            }
-            io.to(roomId).emit('gameStateUpdate', payload);
-        }
-    }
-
-    emitToRoom(roomId, event, payload) {
-        io.to(roomId).emit(event, payload);
-    }
-
-    logEvent(roomId, message, type = 'system') {
-        const room = this.rooms[roomId];
-        if (room) {
-            room.gameLog.unshift({ turn: room.gameState.turnCount, message, type });
-            if (room.gameLog.length > 100) room.gameLog.pop();
+    // REBUILT: Single point of emission for game state. This is the core of the new architecture.
+    emitGameState(roomId) {
+        if (this.rooms[roomId]) {
+            io.to(roomId).emit('gameStateUpdate', this.rooms[roomId]);
         }
     }
 
@@ -146,8 +119,7 @@ class GameManager {
             id: newRoomId,
             hostId: socket.id,
             players: { [socket.id]: newPlayer },
-            chatLog: [],
-            staticDataForClient: { classes: gameData.classes },
+            voiceChatPeers: [],
             gameState: {
                 phase: 'class_selection',
                 gameMode: gameMode || 'Beginner',
@@ -160,9 +132,9 @@ class GameManager {
                 turnCount: 0,
                 worldEvents: { currentEvent: null, duration: 0 },
                 currentPartyEvent: null,
-                skillChallenge: null,
+                skillChallenge: { isActive: false },
             },
-            gameLog: []
+            chatLog: []
         };
     
         newPlayer.role = 'Explorer';
@@ -170,22 +142,21 @@ class GameManager {
         socket.join(newRoomId);
         this.socketToRoom[socket.id] = newRoomId;
     
-        this.emitGameState(newRoomId, true);
+        this.emitGameState(newRoomId);
     }
     
     joinRoom(socket, { roomId, playerName }) {
         const room = this.rooms[roomId];
         if (!room) return socket.emit('actionError', 'Room not found.');
-        if (Object.keys(room.players).length >= 4) return socket.emit('actionError', 'Room is full.');
-        if (room.gameState.phase !== 'class_selection') return socket.emit('actionError', 'Game has already started.');
+        if (Object.values(room.players).some(p => !p.isNpc)) return socket.emit('actionError', 'This game already has a player.');
 
         const newPlayer = this.createPlayerObject(socket.id, playerName);
         newPlayer.role = 'Explorer';
         room.players[socket.id] = newPlayer;
         socket.join(roomId);
-        this.socketToRoom[socket.id] = newPlayer.id; // Correctly map socket id to player id
+        this.socketToRoom[socket.id] = roomId;
         
-        this.emitGameState(roomId, true); // Send full state with static data to joining player
+        this.emitGameState(roomId);
     }
 
     // --- 3.3. Game Lifecycle (The New Core Orchestrator) ---
@@ -197,19 +168,6 @@ class GameManager {
         // 1. Assign class to the human player
         this.assignClassToPlayer(player, classId);
 
-        // Check if all human players have chosen a class
-        const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
-        if (humanPlayers.every(p => p.class)) {
-            this.startGame(room.id);
-        } else {
-            this.emitGameState(room.id);
-        }
-    }
-
-    startGame(roomId) {
-        const room = this.rooms[roomId];
-        if (!room || room.gameState.phase !== 'class_selection') return;
-        
         // 2. Create and set up NPCs
         this.createNpcs(room);
         
@@ -245,13 +203,9 @@ class GameManager {
         dmNpc.isNpc = true;
         room.players[dmNpc.id] = dmNpc;
 
-        const numHumanPlayers = Object.values(room.players).filter(p => !p.isNpc).length;
-        const numNpcsToCreate = Math.max(0, 4 - numHumanPlayers); // Always create a party of 4 explorers
-        
-        const npcNames = ["Grok", "Lyra", "Finn", "Elara"]; // Added a 4th name
+        const npcNames = ["Grok", "Lyra", "Finn"];
         const availableClasses = Object.keys(gameData.classes);
-        for (let i = 0; i < numNpcsToCreate; i++) {
-            const name = npcNames[i];
+        for (const name of npcNames) {
             const npcId = `npc-${name.toLowerCase()}`;
             const npc = this.createPlayerObject(npcId, name);
             npc.isNpc = true;
@@ -263,7 +217,7 @@ class GameManager {
     }
 
     initializeDecks(room) {
-        const createDeck = (cardArray) => cardArray.map(c => ({ ...deepClone(c), id: this.generateUniqueCardId() }));
+        const createDeck = (cardArray) => cardArray.map(c => ({ ...c, id: this.generateUniqueCardId() }));
         
         room.gameState.decks = {
             item: shuffle(createDeck(gameData.itemCards)),
@@ -322,40 +276,17 @@ class GameManager {
     drawCardFromDeck(roomId, deckName, playerClass = null) {
         const room = this.rooms[roomId];
         if (!room) return null;
-    
-        let deck;
-        if (deckName.startsWith('monster.')) {
-            const tier = deckName.split('.')[1];
-            deck = room.gameState.decks.monster[tier];
-        } else {
-            deck = room.gameState.decks[deckName];
-        }
-    
-        if (!deck || !Array.isArray(deck) || deck.length === 0) return null;
-    
-        if (playerClass && (deckName === 'weapon' || deckName === 'armor' || deckName === 'spell')) {
-            // Priority 1: Find a card specifically for the player's class.
-            let suitableCardIndex = deck.findIndex(card => card.class && card.class.includes(playerClass));
+        const deck = room.gameState.decks[deckName];
+        if (!deck || deck.length === 0) return null;
+
+        if (playerClass && (deckName === 'spell' || deckName === 'weapon' || deckName === 'armor')) {
+            const suitableCardIndex = deck.findIndex(card => 
+                !card.class || card.class.includes("Any") || card.class.includes(playerClass)
+            );
             if (suitableCardIndex !== -1) {
                 return deck.splice(suitableCardIndex, 1)[0];
             }
-    
-            // Priority 2: If no class-specific card, find an "Any" or non-restricted card.
-            suitableCardIndex = deck.findIndex(card => !card.class || card.class.includes("Any"));
-             if (suitableCardIndex !== -1) {
-                return deck.splice(suitableCardIndex, 1)[0];
-            }
-
-            // Priority 3 (Exception): Barbarians/Warriors can draw any spell to discard for abilities.
-            if (deckName === 'spell' && (playerClass === 'Barbarian' || playerClass === 'Warrior') && deck.length > 0) {
-                 return deck.pop(); // Take whatever is on top if no other options exist.
-            }
-            
-            // If no suitable card is found at all.
-            return null;
         }
-    
-        // If no class is specified, just pop the top card.
         return deck.pop();
     }
 
@@ -364,44 +295,44 @@ class GameManager {
         const classData = gameData.classes[classId];
         if (!classData || !player) return;
         player.class = classId;
+        // Temporary stats until equipment is finalized
         player.stats = this.calculatePlayerStats(player);
     }
 
     calculatePlayerStats(player) {
-        const baseStats = { maxHp: 0, currentHp: player.stats.currentHp || 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+        const baseStats = { maxHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
         if (!player.class) return baseStats;
     
         const classData = gameData.classes[player.class];
+        const newStats = {
+            ...baseStats,
+            maxHp: classData.baseHp,
+            damageBonus: classData.baseDamageBonus,
+            shieldBonus: classData.baseShieldBonus,
+            ap: classData.baseAp,
+            ...classData.stats
+        };
     
-        // 1. Start with class base stats
-        const newStats = { ...baseStats };
-        Object.assign(newStats, classData.stats);
-        newStats.maxHp = classData.baseHp;
-        newStats.damageBonus = classData.baseDamageBonus;
-        newStats.shieldBonus = classData.baseShieldBonus;
-        newStats.ap = classData.baseAp;
-    
-        // 2. Add bonuses from equipment
         for (const item of Object.values(player.equipment)) {
             if (item?.effect?.bonuses) {
-                for (const [key, value] of Object.entries(item.effect.bonuses)) {
-                     newStats[key] = (newStats[key] || 0) + value;
-                }
+                Object.keys(item.effect.bonuses).forEach(key => {
+                    newStats[key] = (newStats[key] || 0) + item.effect.bonuses[key];
+                });
             }
         }
         
-        // 3. Add bonuses from status effects
         for (const effect of player.statusEffects) {
              if (effect.type === 'stat_modifier' && effect.bonuses) {
-                for (const key in effect.bonuses) {
+                Object.keys(effect.bonuses).forEach(key => {
                     newStats[key] = (newStats[key] || 0) + effect.bonuses[key];
-                }
+                });
             }
         }
     
-        // 4. Sanitize HP values
-        newStats.currentHp = newStats.currentHp || newStats.maxHp;
-        newStats.currentHp = Math.min(newStats.currentHp, newStats.maxHp);
+        // Ensure current HP doesn't exceed new max HP
+        if (player.stats.currentHp) {
+            newStats.currentHp = Math.min(player.stats.currentHp, newStats.maxHp);
+        }
         
         return newStats;
     }
@@ -417,20 +348,20 @@ class GameManager {
         const cardToEquip = player.hand.splice(cardIndex, 1)[0];
         const itemType = cardToEquip.type.toLowerCase();
 
+        // Unequip old item and put it back in hand
         if (player.equipment[itemType]) {
             player.hand.push(player.equipment[itemType]);
         }
         
         player.equipment[itemType] = cardToEquip;
         player.stats = this.calculatePlayerStats(player);
-        this.logEvent(room.id, `${player.name} equips ${cardToEquip.name}.`, 'system');
         this.emitGameState(room.id);
     }
     
     // --- 3.5. Turn Management ---
     async startTurn(roomId) {
         const room = this.rooms[roomId];
-        if (!room || !room.gameState.turnOrder.length) return;
+        if (!room) return;
 
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
         if (!player) return;
@@ -438,551 +369,104 @@ class GameManager {
         player.stats = this.calculatePlayerStats(player);
         player.currentAp = player.stats.ap;
         
-        this.logEvent(roomId, `<strong>Turn ${room.gameState.turnCount}:</strong> ${player.name}'s turn begins.`, 'turn');
-        
-        // Handle start-of-turn events
-        if (player.role === 'Explorer') {
-            this.handleStartOfTurnEffects(room, player);
-            this.handlePlayerEventTrigger(room, player);
-        }
-
-        this.emitGameState(roomId);
-        await new Promise(res => setTimeout(res, 100)); // Brief delay to let client render turn change
-
-        if (player.isNpc) {
-            try {
-                if (player.role === 'DM') {
-                    await this.handleDmTurn(room);
-                } else {
-                    await this.handleNpcExplorerTurn(room, player);
-                }
-            } catch (error) {
-                console.error(`Unhandled error during NPC turn for ${player.name}:`, error);
-                this.logEvent(room.id, `A critical error occurred during ${player.name}'s turn. Advancing turn.`, 'error');
-            } finally {
-                // Ensure turn always advances
-                await this.advanceToNextTurn(room.id);
+        if (player.isNpc && player.role === 'DM') {
+            await this.handleDmTurn(room);
+        } else {
+             // For human and NPC explorers, just emit the state. The client/NPC logic will handle the turn.
+            this.emitGameState(roomId);
+            if(player.isNpc) {
+                 await new Promise(res => setTimeout(res, 1000)); // Pause for effect
+                 this.handleNpcExplorerTurn(room, player);
             }
         }
     }
 
-    async endTurn(socket) {
+    endTurn(socket) {
         const room = this.findRoomBySocket(socket);
         if (!room) return;
         const player = room.players[socket.id];
         if (!player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
         
-        await this.advanceToNextTurn(room.id);
-    }
-    
-    async advanceToNextTurn(roomId) {
-        const room = this.rooms[roomId];
-        if (!room) return;
-    
-        // Reset shield of player whose turn just ended
-        const previousPlayerId = room.gameState.turnOrder[room.gameState.currentPlayerIndex];
-        const previousPlayer = room.players[previousPlayerId];
-        if (previousPlayer) {
-            previousPlayer.stats.shieldHp = 0;
-            // Also handle expiring status effects
-            previousPlayer.statusEffects = previousPlayer.statusEffects.filter(eff => {
-                if(eff.duration) eff.duration--;
-                return !eff.duration || eff.duration > 0;
-            });
-        }
-    
-        // Advance to the next player in the turn order
+        // Clear temporary turn-based stats
+        player.stats.shieldHp = 0;
+        
         room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
-        
-        // Check if it's the start of a new round (DM's turn)
-        if (room.gameState.currentPlayerIndex === 0) { 
+        if (room.gameState.currentPlayerIndex === 0) {
             room.gameState.turnCount++;
-            this.logEvent(room.id, `A new round begins.`, 'system');
-            // On subsequent rounds, the DM might play a party event
-            if (room.gameState.turnCount > 1 && Math.random() < 0.3) {
-                this.dmPlayPartyEvent(room);
-            }
         }
-        
-        await this.startTurn(room.id);
+        this.startTurn(room.id);
     }
     
     // --- 3.6. AI Logic (NPC Turns) ---
     async handleDmTurn(room) {
-        await new Promise(res => setTimeout(res, 1000));
-        
+        // Simple logic for Turn 1
         if (room.gameState.turnCount === 1) {
-             this.logEvent(room.id, getDialogue('environment'), 'event');
-             this.emitGameState(room.id);
-             await new Promise(res => setTimeout(res, 1500));
-        }
-        
-        // Priority 1: If the board is empty, summon a monster to apply pressure.
-        if (room.gameState.board.monsters.length === 0 && room.gameState.turnCount > 1) {
-            this.logEvent(room.id, "The DM senses a lull and calls forth a new challenger!", 'event');
-            this.dmPlayMonster(room);
-            this.emitGameState(room.id);
-            await new Promise(res => setTimeout(res, 1500));
-            return; // End DM turn after summoning to an empty board
-        }
-
-        // Priority 2: Have any existing monsters attack
-        if (room.gameState.board.monsters.length > 0) {
-            this.logEvent(room.id, `The monsters retaliate!`, 'event');
-            this.emitGameState(room.id);
-            for (const monster of [...room.gameState.board.monsters]) {
-               if (monster.currentHp <= 0) continue;
-               await new Promise(res => setTimeout(res, 1500));
-               const targetId = this._chooseMonsterTarget(room);
-               if (targetId) {
-                   await this.initiateAttack(room, { attackerId: monster.id, targetId: targetId, isMonster: true });
-               }
-           }
-        }
-
-        // Priority 3: Decide the DM's main environmental/summoning action
-        await new Promise(res => setTimeout(res, 1000));
-        const actionRoll = Math.random();
-
-        if (room.gameState.turnCount === 1) { // Special first turn logic
-             this.logEvent(room.id, "The DM prepares to unleash a monster...", 'event');
-             this.dmPlayMonster(room);
-        } else { // Standard logic for subsequent turns
-            if (room.gameState.board.monsters.length < 4 && actionRoll < 0.75) {
-                this.logEvent(room.id, `The DM calls for reinforcements...`, 'event');
-                this.dmPlayMonster(room);
+             const playMonsterChance = 0.7; // 70% chance to play a monster
+             if (Math.random() < playMonsterChance) {
+                 this.dmPlayMonster(room);
+             } else {
+                 this.dmPlayWorldEvent(room);
+             }
+        } else {
+             // Logic for subsequent turns (monster attacks)
+            if (room.gameState.board.monsters.length > 0) {
+                 for (const monster of room.gameState.board.monsters) {
+                    await new Promise(res => setTimeout(res, 1000)); // Pause between monster attacks
+                    const targetId = this._chooseMonsterTarget(room);
+                    if (targetId) {
+                         const result = this._resolveMonsterAttack(room, monster.id, targetId);
+                         if(result) io.to(room.id).emit('rollResult', result);
+                    }
+                }
             } else {
-                this.logEvent(room.id, `The environment shifts...`, 'event');
-                this.dmPlayWorldEvent(room);
+                // If board is clear, play another monster
+                this.dmPlayMonster(room);
             }
         }
         
-        this.emitGameState(room.id);
+        // End DM turn after a delay
         await new Promise(res => setTimeout(res, 1500));
+        
+        room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
+        this.startTurn(room.id);
     }
     
-     async handleNpcExplorerTurn(room, player) {
-        await new Promise(res => setTimeout(res, 1000));
-        let ap = player.currentAp;
-
-        while (ap > 0) {
-            const monsters = room.gameState.board.monsters.filter(m => m.currentHp > 0);
-            let actionTakenThisLoop = false;
-
-            // Priority 0: Attempt skill challenge if active
-            const challenge = room.gameState.skillChallenge;
-            if (challenge && challenge.isActive && ap >=1 && Math.random() < 0.8) {
-                this.logEvent(room.id, `${player.name} decides to tackle the challenge!`, 'action');
-                this.emitGameState(room.id);
-                await new Promise(res => setTimeout(res, 1000));
-                this.resolveSkillChallenge(room, player, challenge.id);
-                ap -= 1; // All attempts cost 1 ap
-                actionTakenThisLoop = true;
+     handleNpcExplorerTurn(room, player) {
+        // Simplified AI: Attack the weakest monster if possible, otherwise guard.
+        const monsters = room.gameState.board.monsters;
+        if (monsters.length > 0 && player.currentAp >= 1) {
+            const weakestMonster = monsters.sort((a, b) => a.currentHp - b.currentHp)[0];
+            const weapon = player.equipment.weapon;
+            if (weapon && player.currentAp >= (weapon.apCost || 2)) {
+                 const result = this._resolveAttack(room, player, { weaponId: weapon.id, targetId: weakestMonster.id });
+                 if(result) io.to(room.id).emit('rollResult', result);
+            } else {
+                 const result = this._resolveAttack(room, player, { weaponId: 'unarmed', targetId: weakestMonster.id });
+                 if(result) io.to(room.id).emit('rollResult', result);
             }
-
-            // Priority 1: Use ability if advantageous
-            const classAbility = gameData.classes[player.class]?.ability;
-            if (!actionTakenThisLoop && classAbility && ap >= classAbility.apCost && Math.random() < 0.3) {
-                this.logEvent(room.id, `${player.name} uses their ability: ${classAbility.name}!`, 'action');
-                this.applyEffect(room, {type: 'ability', abilityName: classAbility.name}, player, null);
-                ap -= classAbility.apCost;
-                actionTakenThisLoop = true;
-            }
-
-            // Priority 2: Heal if low on health
-            if (!actionTakenThisLoop && player.stats.currentHp < player.stats.maxHp / 2) {
-                const healingSpell = player.hand.find(c => c.effect.type === 'heal');
-                if (healingSpell && ap >= (healingSpell.apCost || 1)) {
-                     this.logEvent(room.id, `${player.name} exclaims, "${getDialogue('heal')}"`, 'action');
-                     this.applyEffect(room, healingSpell.effect, player, player);
-                     ap -= (healingSpell.apCost || 1);
-                     player.hand.splice(player.hand.findIndex(c => c.id === healingSpell.id), 1);
-                     actionTakenThisLoop = true;
-                }
-            }
-
-            // Priority 3: Attack if there are monsters
-            if (!actionTakenThisLoop && monsters.length > 0) {
-                const weakestMonster = monsters.sort((a, b) => a.currentHp - b.currentHp)[0];
-                const weapon = player.equipment.weapon;
-                const weaponApCost = weapon?.apCost || 2;
-                const unarmedApCost = 1;
-
-                if (weapon && ap >= weaponApCost) {
-                     this.logEvent(room.id, `${player.name} shouts, "${getDialogue('attack')}"`, 'system');
-                     await this.initiateAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: weapon.id });
-                     ap -= weaponApCost;
-                     actionTakenThisLoop = true;
-                } else if (ap >= unarmedApCost) { 
-                     this.logEvent(room.id, `${player.name} shouts, "${getDialogue('attack')}"`, 'system');
-                     await this.initiateAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: 'unarmed' });
-                     ap -= unarmedApCost;
-                     actionTakenThisLoop = true;
-                }
-            } 
-            
-            // Default Action: Guard if nothing else to do
-            if (!actionTakenThisLoop && ap >= 1) {
-                 ap -= 1;
-                 player.stats.shieldHp += (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
-                 this.logEvent(room.id, `${player.name} takes a defensive stance, gaining ${player.stats.shieldHp} shield.`, 'info');
-                 actionTakenThisLoop = true;
-            }
-
-            // If no action could be taken, break the loop to prevent infinite loops
-            if (!actionTakenThisLoop) {
-                break;
-            }
-            
-            player.currentAp = ap;
-            this.emitGameState(room.id);
-            await new Promise(res => setTimeout(res, 1500));
+        } else if (player.currentAp >= 1) {
+             player.currentAp -= 1;
+             player.stats.shieldHp += player.equipment.armor?.guardBonus || 2;
         }
+
+        // End turn after action
+        room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
+        this.startTurn(room.id);
     }
 
     _chooseMonsterTarget(room) {
         const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
         return explorers.length > 0 ? explorers[Math.floor(Math.random() * explorers.length)].id : null;
     }
-    
-    // --- 3.7. Action Resolution ---
-    handlePlayerAction(socket, data) {
-        const room = this.findRoomBySocket(socket);
-        const player = room?.players[socket.id];
-        if (!player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
 
-        const { action, cardId, targetId, description, challengeId, cardToDiscardId } = data;
-        const sendError = (msg) => socket.emit('actionError', msg);
-
-        const actionHandlers = {
-            'attack': () => this.initiateAttack(room, { attackerId: player.id, targetId, weaponId: cardId, description }),
-            'guard': () => {
-                if (player.currentAp < gameData.actionCosts.guard) return sendError("Not enough AP to Guard.");
-                player.currentAp -= gameData.actionCosts.guard;
-                const shieldGain = (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
-                player.stats.shieldHp += shieldGain;
-                this.logEvent(room.id, `${player.name} takes a defensive stance, gaining ${shieldGain} shield.`, 'info');
-            },
-            'briefRespite': () => {
-                if (player.currentAp < gameData.actionCosts.briefRespite) return sendError("Not enough AP for Respite.");
-                player.currentAp -= gameData.actionCosts.briefRespite;
-                this.logEvent(room.id, `${player.name} takes a brief respite to recover.`, 'info');
-                this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d4` }, player, player);
-            },
-            'fullRest': () => {
-                 if (player.currentAp < gameData.actionCosts.fullRest) return sendError("Not enough AP for a Full Rest.");
-                 player.currentAp -= gameData.actionCosts.fullRest;
-                 this.logEvent(room.id, `${player.name} takes a full rest to recover.`, 'info');
-                 this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d8` }, player, player);
-            },
-            'useCard': () => {
-                const cardIndex = player.hand.findIndex(c => c.id === cardId);
-                if (cardIndex === -1) return;
-                const card = player.hand[cardIndex];
-                if (player.currentAp < (card.apCost || 1)) return sendError("Not enough AP to use this card.");
-                player.currentAp -= (card.apCost || 1);
-                player.hand.splice(cardIndex, 1);
-                const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
-                this.logEvent(room.id, `${player.name} uses ${card.name}.`, 'action');
-                this.applyEffect(room, card.effect, player, target);
-            },
-            'claimLoot': () => {
-                const lootIndex = room.gameState.lootPool.findIndex(c => c.id === cardId);
-                if (lootIndex === -1) return;
-                const lootCard = room.gameState.lootPool.splice(lootIndex, 1)[0];
-                player.hand.push(lootCard);
-                this.logEvent(room.id, `${player.name} claims the ${lootCard.name}!`, 'loot');
-            },
-            'useAbility': () => {
-                const ability = gameData.classes[player.class]?.ability;
-                if (!ability || player.currentAp < ability.apCost) return sendError("Not enough AP to use your ability.");
-            
-                // Handle discard cost
-                if (ability.cost?.type === 'discard') {
-                    const cardToDiscardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
-                    if (cardToDiscardIndex === -1) return sendError('Card to discard not found in hand.');
-                    const cardToDiscard = player.hand[cardToDiscardIndex];
-                    if (cardToDiscard.type.toLowerCase() !== ability.cost.cardType.toLowerCase()) return sendError(`You must discard a ${ability.cost.cardType} card.`);
-            
-                    player.hand.splice(cardToDiscardIndex, 1); // Discard the card
-                    this.logEvent(room.id, `${player.name} discards ${cardToDiscard.name} to power their ability.`, 'info');
-                }
-            
-                player.currentAp -= ability.apCost;
-                const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
-                this.logEvent(room.id, `${player.name} uses ${ability.name}!`, 'action');
-                this.applyEffect(room, {type: 'ability', abilityName: ability.name, ...ability}, player, target);
-            },
-            'skillChallenge': () => this.resolveSkillChallenge(room, player, challengeId),
-        };
-
-        if (actionHandlers[action]) {
-            actionHandlers[action]();
-            this.emitGameState(room.id);
-        }
-    }
-    
-    async initiateAttack(room, { attackerId, targetId, weaponId, description, isMonster = false }) {
-        const attacker = isMonster ? room.gameState.board.monsters.find(m => m.id === attackerId) : room.players[attackerId];
-        const target = isMonster ? room.players[targetId] : room.gameState.board.monsters.find(m => m.id === targetId);
-    
-        if (!attacker || !target) return;
-    
-        const isUnarmed = weaponId === 'unarmed';
-        const weapon = isUnarmed ? null : (isMonster ? null : attacker.equipment?.weapon);
-        if (!isMonster && !isUnarmed && (!weapon || weapon.id !== weaponId)) return;
-    
-        const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
-        if (!isMonster) {
-            if (attacker.currentAp < apCost) return; // Server-side check
-            attacker.currentAp -= apCost;
-        }
-    
-        const weaponName = isMonster ? 'claws' : (isUnarmed ? 'Fists' : weapon.name);
-        const narrative = description ? `<i>"${description}"</i>` : `attacks ${target.name} with ${weaponName}.`;
-        this.logEvent(room.id, `${attacker.name} ${narrative}`, 'action');
-        this.emitGameState(room.id);
-        await new Promise(res => setTimeout(res, 500));
-    
-        let d20 = this.rollDice('1d20');
-        
-        // Handle Divine Aid buff
-        const divineAidBuff = !isMonster ? attacker.statusEffects.find(e => e.type === 'buff_next_roll') : null;
-        if (divineAidBuff) {
-            const bonusRoll = this.rollDice(divineAidBuff.bonuses.dice);
-            d20 += bonusRoll;
-            this.logEvent(room.id, `${attacker.name}'s Divine Aid adds a +${bonusRoll} to their roll!`, 'info');
-            attacker.statusEffects = attacker.statusEffects.filter(e => e.id !== divineAidBuff.id); // Consume buff
-        }
-        
-        const toHitBonus = isMonster ? attacker.attackBonus : (isUnarmed ? attacker.stats.str : (attacker.stats.damageBonus + (weapon.range === 'ranged' ? attacker.stats.dex : attacker.stats.str)));
-        const targetAC = isMonster ? (target.stats.shieldBonus + 10) : target.requiredRollToHit;
-        const isCrit = d20 >= 20; // Allow for buffed rolls to crit
-        const isMiss = d20 <= 1; // Only a natural 1 is a miss
-        const hit = isCrit || (!isMiss && (d20 + toHitBonus) >= targetAC);
-        const resultText = isCrit ? 'CRITICAL HIT' : (hit ? 'HIT' : 'MISS');
-    
-        this.logEvent(room.id, `${attacker.name}'s roll: ${d20} + ${toHitBonus} = <strong>${d20 + toHitBonus}</strong> vs DC ${targetAC}. <span class="log-${hit ? 'hit' : 'miss'}">${resultText}!</span>`, 'info');
-    
-        this.emitToRoom(room.id, 'attackRollResult', {
-            attacker: { id: attacker.id, name: attacker.name },
-            target: { id: target.id, name: target.name },
-            roll: d20,
-            bonus: toHitBonus,
-            total: d20 + toHitBonus,
-            required: targetAC,
-            result: resultText
-        });
-        await new Promise(res => setTimeout(res, 2500));
-    
-        if (hit) {
-            const damageDice = isMonster ? attacker.effect.dice : (isUnarmed ? '1d4' : weapon.effect.dice);
-            let damageRoll = this.rollDice(damageDice);
-            const damageBonus = isMonster ? 0 : (isUnarmed ? attacker.stats.str : (attacker.stats.damageBonus + (weapon.range === 'ranged' ? 0 : attacker.stats.str)));
-            let totalDamage = damageRoll + damageBonus;
-            
-            if (isCrit) {
-                totalDamage *= 2;
-                if (!isMonster && weapon?.effect?.critBonusDice) {
-                    totalDamage += this.rollDice(weapon.effect.critBonusDice);
-                }
-            }
-    
-            // Handle temp attack buffs (Unchecked Assault, Hunter's Mark, etc.)
-            const attackBuff = !isMonster ? attacker.statusEffects.find(e => e.type === 'buff_next_attack') : null;
-            if (attackBuff) {
-                totalDamage += attackBuff.bonuses.damageBonus;
-                this.logEvent(room.id, `${attacker.name}'s ${attackBuff.name} adds +${attackBuff.bonuses.damageBonus} damage!`, 'info');
-                attacker.statusEffects = attacker.statusEffects.filter(e => e.id !== attackBuff.id); // Consume the buff
-            }
-
-            const markDebuff = target.statusEffects.find(e => e.type === 'debuff_marked');
-            if(markDebuff){
-                totalDamage += markDebuff.bonuses.damageTaken;
-                this.logEvent(room.id, `The target is marked and takes +${markDebuff.bonuses.damageTaken} extra damage!`, 'info');
-            }
-
-            this.emitToRoom(room.id, 'damageRollResult', {
-                attacker: { id: attacker.id, name: attacker.name },
-                target: { id: target.id, name: target.name },
-                dice: damageDice,
-                roll: damageRoll,
-                bonus: damageBonus,
-                total: totalDamage
-            });
-            await new Promise(res => setTimeout(res, 2500));
-            
-            this.applyEffect(room, { type: 'damage', value: totalDamage }, attacker, target, isCrit);
-        }
-        this.emitGameState(room.id);
-    }
-
-    applyEffect(room, effect, source, target, isCrit = false) {
-        if (!effect || !source) return;
-
-        const logHitOrHeal = (value, type, targetName) => {
-            const message = type === 'damage' 
-                ? `${source.name} deals <strong>${value}</strong> damage to ${targetName}. <span class="log-hit">${isCrit ? 'CRITICAL!' : ''}</span>`
-                : `${source.name} heals <strong>${value}</strong> HP for ${targetName}.`;
-            this.logEvent(room.id, message, 'damage');
-        };
-
-        switch (effect.type) {
-            case 'damage': {
-                const damageValue = effect.value !== undefined ? effect.value : this.rollDice(effect.dice);
-                logHitOrHeal(damageValue, 'damage', target.name);
-                if (target.type === 'Monster') {
-                    target.currentHp -= damageValue;
-                    if (target.currentHp <= 0) this._handleMonsterDefeat(room, target.id, target.name);
-                } else { // Player
-                    this._applyDamageToPlayer(target, damageValue);
-                }
-                break;
-            }
-            case 'heal': {
-                const healValue = this.rollDice(effect.dice);
-                target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healValue);
-                logHitOrHeal(healValue, 'heal', target.name);
-                break;
-            }
-            case 'buff':
-            case 'debuff':
-            case 'stat_modifier': {
-                target.statusEffects.push({
-                    id: `eff-${Date.now()}`,
-                    name: effect.name || 'Stat Change',
-                    ...effect
-                });
-                this.logEvent(room.id, `${target.name} is affected by ${effect.name || 'a status effect'}.`, 'info');
-                target.stats = this.calculatePlayerStats(target);
-                break;
-            }
-            case 'ability': {
-                if (effect.abilityName === 'Mystic Recall') {
-                    const card = this.drawCardFromDeck(room.id, 'spell', source.class);
-                    if (card) {
-                        source.hand.push(card);
-                        this.logEvent(room.id, `${source.name} recalls a new spell: ${card.name}.`, 'info');
-                    }
-                }
-                if (effect.abilityName === 'Unchecked Assault') {
-                    source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Unchecked Assault', type: 'buff_next_attack', bonuses: { damageBonus: 6 }, duration: 1 });
-                    this.logEvent(room.id, `${source.name} is empowered for their next attack!`, 'info');
-                }
-                if (effect.abilityName === 'Weapon Surge') {
-                    source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Weapon Surge', type: 'buff_next_attack', bonuses: { damageBonus: 4 }, duration: 1 });
-                    this.logEvent(room.id, `${source.name} is empowered for their next attack!`, 'info');
-                }
-                if(effect.abilityName === 'Divine Aid') {
-                    source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Divine Aid', type: 'buff_next_roll', bonuses: { dice: '1d4' }, duration: 1 });
-                    this.logEvent(room.id, `${source.name} is guided by a divine presence for their next roll.`, 'info');
-                }
-                if(effect.abilityName === 'Hunters Mark' && target) {
-                    target.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Hunters Mark', type: 'debuff_marked', bonuses: { damageTaken: 2 }, duration: 2 });
-                     this.logEvent(room.id, `${target.name} has been marked by ${source.name}!`, 'info');
-                }
-                if(effect.abilityName === 'Evasion') {
-                    source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Evasion', type: 'buff_evasion', duration: 2 });
-                    this.logEvent(room.id, `${source.name} becomes preternaturally elusive.`, 'info');
-                }
-                break;
-            }
-        }
-    }
-    
-    _handleMonsterDefeat(room, monsterId, monsterName) {
-        this.logEvent(room.id, `${monsterName} has been defeated!`, 'info');
-        room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== monsterId);
-        const lootChance = (room.gameState.customSettings.lootDropRate || 50) / 100;
-        if (Math.random() < lootChance) {
-            const loot = this.generateRandomLoot(room);
-            if (loot) {
-                room.gameState.lootPool.push(loot);
-                this.logEvent(room.id, `The party discovered some loot: ${loot.name}!`, 'loot');
-            }
-        }
-        
-        if (room.gameState.board.monsters.length === 0) {
-            this.logEvent(room.id, `All monsters have been defeated!`, 'system');
-            if (Math.random() < 0.4) {
-                this.dmTriggerSkillChallenge(room);
-            }
-        }
-    }
-    
-    generateRandomLoot(room) {
-        const { magicalAffixes, weaponCards, armorCards } = gameData;
-        const baseCard = Math.random() < 0.5 ? deepClone(weaponCards[Math.floor(Math.random() * weaponCards.length)]) : deepClone(armorCards[Math.floor(Math.random() * armorCards.length)]);
-    
-        baseCard.id = this.generateUniqueCardId();
-        baseCard.effect.bonuses = baseCard.effect.bonuses || {};
-        let nameParts = [baseCard.name];
-        
-        const addAffix = (type) => {
-            const affixes = magicalAffixes[type];
-            if (affixes.length > 0) {
-                const affix = affixes[Math.floor(Math.random() * affixes.length)];
-                if(type === 'prefixes') nameParts.unshift(affix.name);
-                else nameParts.push(affix.name);
-
-                Object.keys(affix.bonuses).forEach(key => {
-                    baseCard.effect.bonuses[key] = (baseCard.effect.bonuses[key] || 0) + affix.bonuses[key];
-                });
-            }
-        };
-
-        if (Math.random() < 0.6) addAffix('prefixes');
-        if (Math.random() < 0.4) addAffix('suffixes');
-
-        if(nameParts.length > 1) {
-            baseCard.name = nameParts.join(' ');
-            baseCard.effect.description += " Imbued with magical properties.";
-        }
-        
-        return baseCard;
-    }
-
-    _applyDamageToPlayer(player, damage) {
-        const shieldedDamage = Math.min(player.stats.shieldHp, damage);
-        if (shieldedDamage > 0) {
-            this.logEvent(this.findRoomBySocket({ id: player.id })?.id, `${player.name}'s shield absorbs ${shieldedDamage} damage.`, 'info');
-        }
-        player.stats.shieldHp -= shieldedDamage;
-        damage -= shieldedDamage;
-        player.stats.currentHp -= damage;
-
-        if (player.stats.currentHp <= 0) {
-            player.stats.currentHp = 0;
-            this.logEvent(this.findRoomBySocket({ id: player.id })?.id, `${player.name} has been defeated!`, 'death');
-        }
-    }
-
-    // --- 3.8. Event & Challenge Handling ---
     dmPlayMonster(room) {
-        const { turnCount } = room.gameState;
-        const tierKey = turnCount <= 3 ? 'tier1' : (turnCount <= 6 ? 'tier2' : 'tier3');
-        const monsterCard = this.drawCardFromDeck(room.id, `monster.${tierKey}`);
-        
+        const { turnCount, decks } = room.gameState;
+        const tier = turnCount <= 3 ? 'tier1' : (turnCount <= 6 ? 'tier2' : 'tier3');
+        const monsterCard = this.drawCardFromDeck(room.id, `monster.${tier}`);
         if (monsterCard) {
-            // --- MONSTER SCALING LOGIC ---
-            const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
-            const playerCount = humanPlayers.length || 1; // Default to 1 to avoid zero division
-            
-            // Scale HP: +25% HP for each player beyond the first
-            const hpBonus = Math.floor(monsterCard.maxHp * 0.25 * (playerCount - 1));
-            monsterCard.maxHp += hpBonus;
             monsterCard.currentHp = monsterCard.maxHp;
-
-            // Scale Attack: +1 attack for every 2 players
-            const attackBonus = Math.floor((playerCount) / 2);
-            monsterCard.attackBonus += attackBonus;
-            // --- END SCALING ---
-
             monsterCard.statusEffects = [];
             room.gameState.board.monsters.push(monsterCard);
-            this.logEvent(room.id, `The Dungeon Master summons a toughened ${monsterCard.name}!`, 'monster');
-        } else {
-            this.logEvent(room.id, `The DM tried to summon a monster, but the deck was empty.`, 'error');
         }
     }
     
@@ -991,127 +475,169 @@ class GameManager {
         if (eventCard) {
             room.gameState.worldEvents.currentEvent = eventCard;
             room.gameState.worldEvents.duration = 2; // Example duration
-            this.logEvent(room.id, `A world event occurs: <strong>${eventCard.name}</strong>. ${eventCard.description}`, 'event');
-            this.emitGameState(room.id);
         }
-    }
-
-    handleStartOfTurnEffects(room, player) {
-        const event = room.gameState.worldEvents.currentEvent;
-        if (event && event.effect?.type === 'save') {
-            const { stat, dc, consequence } = event.effect;
-            const d20 = this.rollDice('1d20');
-            const statBonus = player.stats[stat] || 0;
-            const total = d20 + statBonus;
-            const success = total >= dc;
-            this.logEvent(room.id, `${player.name} makes a ${stat.toUpperCase()} save for "${event.name}"... Roll: ${d20} + ${statBonus} = <strong>${total}</strong> vs DC ${dc}.`, 'info');
-            if (!success) {
-                this.logEvent(room.id, `They failed the save!`, 'damage');
-                this.applyEffect(room, consequence, {name: 'World Event'}, player);
-            }
-        }
-    }
-
-    handlePlayerEventTrigger(room, player) {
-        if (Math.random() < 0.15) { // 15% chance for a player event
-            const eventCard = this.drawCardFromDeck(room.id, 'playerEvent');
-            if (eventCard) {
-                this.logEvent(room.id, `An event befalls ${player.name}: <strong>${eventCard.name}</strong>. ${eventCard.outcome}`, 'event');
-                this.applyEffect(room, eventCard.effect, null, player);
-            }
-        }
-    }
-
-    dmPlayPartyEvent(room) {
-        const eventCard = this.drawCardFromDeck(room.id, 'partyEvent');
-        if (eventCard) {
-            room.gameState.currentPartyEvent = eventCard;
-            this.logEvent(room.id, `A party event occurs: <strong>${eventCard.name}</strong>. ${eventCard.outcome}`, 'event');
-            Object.values(room.players).filter(p => p.role === 'Explorer').forEach(p => {
-                this.applyEffect(room, eventCard.effect, null, p);
-            });
-            this.emitGameState(room.id);
-        }
-    }
-
-    dmTriggerSkillChallenge(room) {
-        const challenge = deepClone(gameData.skillChallenges[Math.floor(Math.random() * gameData.skillChallenges.length)]);
-        room.gameState.skillChallenge = { ...challenge, isActive: true, successes: 0, failures: 0 };
-        this.logEvent(room.id, `A challenge presents itself! <strong>${challenge.name}</strong>: ${challenge.description}`, 'event');
-        this.emitGameState(room.id);
-    }
-
-    resolveSkillChallenge(room, player, challengeId) {
-        const challenge = room.gameState.skillChallenge;
-        if (!challenge || !challenge.isActive || challenge.id !== challengeId || player.currentAp < 1) {
-            if (player.currentAp < 1 && !player.isNpc) this.emitToRoom(player.id, 'actionError', 'Not enough AP.');
-            return;
-        }
-        player.currentAp -= 1;
-        
-        const d20 = this.rollDice('1d20');
-        const statBonus = player.stats[challenge.skill] || 0;
-        const total = d20 + statBonus;
-        const success = total >= challenge.dc;
-
-        this.logEvent(room.id, `${player.name} attempts to ${challenge.name}...`, 'action');
-        this.emitToRoom(room.id, 'attackRollResult', {
-            attacker: {id: player.id, name: player.name},
-            target: {name: "Skill Challenge"},
-            roll: d20,
-            bonus: statBonus,
-            total: total,
-            required: challenge.dc,
-            result: success ? 'SUCCESS' : 'FAILURE'
-        });
-        
-        setTimeout(() => {
-            if (success) {
-                challenge.successes++;
-                this.logEvent(room.id, `${player.name}'s attempt succeeded! (${challenge.successes}/${challenge.successThreshold})`, 'info');
-            } else {
-                challenge.failures++;
-                this.logEvent(room.id, `${player.name}'s attempt failed. (${challenge.failures}/${challenge.failureThreshold})`, 'info');
-            }
-
-            if (challenge.successes >= challenge.successThreshold) {
-                room.gameState.skillChallenge = null;
-                this.logEvent(room.id, challenge.success.message, 'loot');
-                 if(challenge.success.reward.type === 'loot') {
-                    for(let i = 0; i < challenge.success.reward.count; i++) {
-                        room.gameState.lootPool.push(this.drawCardFromDeck(room.id, 'treasure'));
-                    }
-                }
-            } else if (challenge.failures >= challenge.failureThreshold) {
-                room.gameState.skillChallenge = null;
-                 this.logEvent(room.id, challenge.failure.message, 'damage');
-                 if(challenge.failure.consequence.type === 'damage') {
-                     const damage = this.rollDice(challenge.failure.consequence.dice);
-                     this._applyDamageToPlayer(player, damage);
-                 }
-            }
-            this.emitGameState(room.id);
-        }, 2500);
     }
     
-    // --- 3.9. Chat & Voice Chat Relaying ---
-    handleChatMessage(socket, { channel, message }) {
+    // --- 3.7. Action Resolution ---
+    handlePlayerAction(socket, data) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-        if (!room || !player) return;
-        
-        const chatMessage = {
-            senderId: player.id,
-            senderName: player.name,
-            channel,
-            message,
-            timestamp: new Date().toISOString()
-        };
-        
-        room.chatLog.push(chatMessage);
-        this.emitToRoom(room.id, 'chatMessage', chatMessage);
+        if (!player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
+
+        const { action, cardId, targetId, weaponId } = data;
+
+        switch (action) {
+            case 'attack':
+                this._initiateAttack(socket, room, player, { weaponId: cardId, targetId });
+                break;
+            case 'resolve_attack':
+                 const result = this._resolveAttack(room, player, { weaponId: data.weaponId, targetId: data.targetId });
+                 if (result) io.to(room.id).emit('rollResult', result);
+                 this.emitGameState(room.id);
+                 break;
+            case 'guard':
+                const guardCost = gameData.actionCosts.guard;
+                if (player.currentAp >= guardCost) {
+                    player.currentAp -= guardCost;
+                    player.stats.shieldHp += player.equipment.armor?.guardBonus || 2;
+                }
+                this.emitGameState(room.id);
+                break;
+        }
     }
 
+    _initiateAttack(socket, room, player, { weaponId, targetId }) {
+        const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        if (!target) return;
+
+        const isUnarmed = weaponId === 'unarmed';
+        const weapon = isUnarmed ? null : player.equipment.weapon;
+        if (!isUnarmed && (!weapon || weapon.id !== weaponId)) return;
+
+        const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
+        if (player.currentAp < apCost) return;
+
+        const toHitBonus = isUnarmed ? player.stats.str : player.stats.damageBonus;
+        
+        socket.emit('showRollModal', {
+            action: 'attack',
+            weaponId,
+            targetId,
+            dice: '1d20',
+            bonus: toHitBonus,
+            targetAC: target.requiredRollToHit,
+            title: `Attack ${target.name}`
+        });
+    }
+    
+    _resolveAttack(room, attacker, { weaponId, targetId }) {
+        const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        if (!attacker || !target) return null;
+
+        const isUnarmed = weaponId === 'unarmed';
+        const weapon = isUnarmed ? null : attacker.equipment.weapon;
+        if (!isUnarmed && (!weapon || weapon.id !== weaponId)) return null;
+
+        const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
+        if (attacker.currentAp < apCost) return null;
+        attacker.currentAp -= apCost;
+
+        const d20 = this.rollDice('1d20');
+        const toHitBonus = isUnarmed ? attacker.stats.str : attacker.stats.damageBonus;
+        const totalRoll = d20 + toHitBonus;
+        const isCrit = d20 === 20;
+        const isMiss = d20 === 1;
+        const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
+
+        let damage = 0;
+        let damageRoll = 0;
+        let damageDice = '';
+
+        if (hit) {
+            damageDice = isUnarmed ? '1' : weapon.effect.dice;
+            damageRoll = isUnarmed ? 1 : this.rollDice(damageDice);
+            damage = damageRoll + attacker.stats.damageBonus;
+            if (isCrit) damage *= 2; // Simple crit rule
+            target.currentHp = Math.max(0, target.currentHp - damage);
+
+            if (target.currentHp <= 0) {
+                this._handleMonsterDefeat(room, target.id);
+            }
+        }
+        
+        return {
+            rollerId: attacker.id,
+            rollerName: attacker.name,
+            action: 'Attack',
+            targetName: target.name,
+            dice: '1d20',
+            roll: d20,
+            bonus: toHitBonus,
+            total: totalRoll,
+            targetAC: target.requiredRollToHit,
+            outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
+            damage,
+            damageRoll,
+            damageDice,
+            damageBonus: attacker.stats.damageBonus
+        };
+    }
+    
+    _resolveMonsterAttack(room, monsterId, targetId) {
+        const monster = room.gameState.board.monsters.find(m => m.id === monsterId);
+        const target = room.players[targetId];
+        if (!monster || !target) return null;
+        
+        const d20 = this.rollDice('1d20');
+        const isCrit = d20 === 20;
+        const isMiss = d20 === 1;
+        const targetAC = 10 + target.stats.shieldBonus;
+        const totalRoll = d20 + monster.attackBonus;
+        const hit = !isMiss && (isCrit || totalRoll >= targetAC);
+        
+        let damage = 0;
+        if (hit) {
+            let damageRoll = this.rollDice(monster.effect.dice);
+            damage = damageRoll;
+            if(isCrit) damage *= 2;
+            this._applyDamageToPlayer(target, damage);
+        }
+
+        return {
+            rollerId: monster.id,
+            rollerName: monster.name,
+            action: 'Attack',
+            targetName: target.name,
+            dice: '1d20',
+            roll: d20,
+            bonus: monster.attackBonus,
+            total: totalRoll,
+            targetAC: targetAC,
+            outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
+            damage
+        };
+    }
+
+    _handleMonsterDefeat(room, monsterId) {
+        room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== monsterId);
+        const lootChance = (room.gameState.customSettings.lootDropRate || 50) / 100;
+        if (Math.random() < lootChance) {
+            const loot = this.drawCardFromDeck(room.id, 'treasure');
+            if (loot) room.gameState.lootPool.push(loot);
+        }
+    }
+
+    _applyDamageToPlayer(player, damage) {
+        const shieldedDamage = Math.min(player.stats.shieldHp, damage);
+        player.stats.shieldHp -= shieldedDamage;
+        damage -= shieldedDamage;
+        player.stats.currentHp -= damage;
+
+        if (player.stats.currentHp <= 0) {
+            player.stats.currentHp = 0;
+            // Handle player death logic here if needed
+        }
+    }
 
     // --- 3.10. Disconnect Logic ---
     handleDisconnect(socket) {
@@ -1119,25 +645,10 @@ class GameManager {
         const room = this.rooms[roomId];
         if (!room) return;
         
-        this.logEvent(roomId, `${room.players[socket.id]?.name || 'A player'} has left the game.`);
-        delete room.players[socket.id];
+        // In a single-player game, a disconnect effectively ends the game.
+        // For simplicity, we just remove the room.
+        delete this.rooms[roomId];
         delete this.socketToRoom[socket.id];
-
-        if (Object.keys(room.players).filter(id => !room.players[id].isNpc).length === 0) {
-            // If all human players are gone, delete the room
-            console.log(`Room ${roomId} is empty. Deleting.`);
-            delete this.rooms[roomId];
-        } else if (room.hostId === socket.id) {
-            // If the host disconnects, assign a new host
-            const newHost = Object.values(room.players).find(p => !p.isNpc);
-            if(newHost) {
-                room.hostId = newHost.id;
-                this.logEvent(roomId, `${newHost.name} is the new host.`);
-            }
-            this.emitGameState(roomId);
-        } else {
-            this.emitGameState(roomId);
-        }
     }
 }
 
@@ -1151,7 +662,6 @@ io.on('connection', (socket) => {
     socket.on('equipItem', (data) => gameManager.equipItem(socket, data));
     socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));
     socket.on('endTurn', () => gameManager.endTurn(socket));
-    socket.on('chatMessage', (data) => gameManager.handleChatMessage(socket, data));
     
     socket.on('disconnect', () => gameManager.handleDisconnect(socket));
 });
