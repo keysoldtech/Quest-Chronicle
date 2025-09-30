@@ -625,8 +625,7 @@ class GameManager {
         if (attacker.currentAp < apCost) return;
         
         const d20 = this.rollDice('1d20');
-        const toHitBonus = isUnarmed ? attacker.stats.str : attacker.stats.damageBonus;
-        const totalRoll = d20 + toHitBonus;
+        const totalRoll = d20; // Hit roll is purely dice-based now
         const isCrit = d20 === 20;
         const isMiss = d20 === 1;
         const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
@@ -640,7 +639,7 @@ class GameManager {
             targetName: target.name,
             dice: '1d20',
             roll: d20,
-            bonus: toHitBonus,
+            bonus: 0, // No bonus is added to the roll
             total: totalRoll,
             targetAC: target.requiredRollToHit,
             outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
@@ -707,15 +706,14 @@ class GameManager {
         
         // --- HIT ROLL ---
         const d20 = this.rollDice('1d20');
-        const toHitBonus = isUnarmed ? attacker.stats.str : attacker.stats.damageBonus;
-        const totalRoll = d20 + toHitBonus;
+        const totalRoll = d20; // Hit roll is purely dice-based now
         const isCrit = d20 === 20;
         const isMiss = d20 === 1;
         const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
 
         io.to(room.id).emit('attackResult', {
             rollerId: attacker.id, rollerName: attacker.name, action: 'Attack', targetName: target.name,
-            dice: '1d20', roll: d20, bonus: toHitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
+            dice: '1d20', roll: d20, bonus: 0, total: totalRoll, targetAC: target.requiredRollToHit,
             outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
         });
         

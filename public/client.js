@@ -614,10 +614,6 @@ function switchMobileScreen(screenName) {
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
-    // Don't clear toasts for reconnect messages, which might stack with others
-    if (type !== 'error') {
-        container.innerHTML = '';
-    }
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;

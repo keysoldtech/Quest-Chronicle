@@ -192,10 +192,10 @@ const weaponCards = [
 
 // --- 7.4. Armor Cards ---
 const armorCards = [
-    { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], effect: { bonuses: { shieldBonus: 1, ap: 1 }, description: "Light and flexible, allowing for quick movements." } },
-    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], effect: { bonuses: { shieldBonus: 3, ap: -1 }, description: "Made of interlocking metal rings, it offers substantial protection but is cumbersome." } },
+    { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], effect: { bonuses: { shieldBonus: 1, ap: 1, hp: 2 }, description: "Light and flexible, allowing for quick movements." } },
+    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], effect: { bonuses: { shieldBonus: 3, ap: -1, hp: 4 }, description: "Made of interlocking metal rings, it offers substantial protection but is cumbersome." } },
     { name: "Plate Armor", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 4, hp: 5, dex: -2 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
-    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], effect: { bonuses: { shieldBonus: 2, dex: 1 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
+    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], effect: { bonuses: { shieldBonus: 2, dex: 1, hp: 3 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
     { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], effect: { bonuses: { shieldBonus: 2, hp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
 ];
 
@@ -226,17 +226,17 @@ const partyEventCards = [
 // --- 8.1. All Monsters List ---
 const allMonsters = {
     // Tier 1
-    goblin: { name: "Goblin", type: "Monster", maxHp: 7, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
-    giantRat: { name: "Giant Rat", type: "Monster", maxHp: 5, attackBonus: 3, requiredRollToHit: 12, effect: { dice: "1d4" }, ap: 1 },
-    skeleton: { name: "Skeleton", type: "Monster", maxHp: 13, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
+    goblin: { name: "Goblin", type: "Monster", maxHp: 10, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
+    giantRat: { name: "Giant Rat", type: "Monster", maxHp: 8, attackBonus: 3, requiredRollToHit: 12, effect: { dice: "1d4" }, ap: 1 },
+    skeleton: { name: "Skeleton", type: "Monster", maxHp: 18, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
     // Tier 2
-    orc: { name: "Orc", type: "Monster", maxHp: 15, attackBonus: 5, requiredRollToHit: 13, effect: { dice: "1d12" }, ap: 2 },
-    hobgoblin: { name: "Hobgoblin", type: "Monster", maxHp: 11, attackBonus: 3, requiredRollToHit: 18, effect: { dice: "1d8" }, ap: 2 },
-    bugbear: { name: "Bugbear", type: "Monster", maxHp: 27, attackBonus: 4, requiredRollToHit: 16, effect: { dice: "2d8" }, ap: 1 },
+    orc: { name: "Orc", type: "Monster", maxHp: 22, attackBonus: 5, requiredRollToHit: 13, effect: { dice: "1d12" }, ap: 2 },
+    hobgoblin: { name: "Hobgoblin", type: "Monster", maxHp: 16, attackBonus: 3, requiredRollToHit: 18, effect: { dice: "1d8" }, ap: 2 },
+    bugbear: { name: "Bugbear", type: "Monster", maxHp: 35, attackBonus: 4, requiredRollToHit: 16, effect: { dice: "2d8" }, ap: 1 },
     // Tier 3
-    troll: { name: "Troll", type: "Monster", maxHp: 84, attackBonus: 7, requiredRollToHit: 15, effect: { dice: "2d6" }, ap: 3 },
-    ogre: { name: "Ogre", type: "Monster", maxHp: 59, attackBonus: 6, requiredRollToHit: 11, effect: { dice: "2d8" }, ap: 2 },
-    beholder: { name: "Beholder", type: "Monster", maxHp: 180, attackBonus: 5, requiredRollToHit: 18, effect: { dice: "4d6" }, ap: 4 },
+    troll: { name: "Troll", type: "Monster", maxHp: 100, attackBonus: 7, requiredRollToHit: 15, effect: { dice: "2d6" }, ap: 3 },
+    ogre: { name: "Ogre", type: "Monster", maxHp: 75, attackBonus: 6, requiredRollToHit: 11, effect: { dice: "2d8" }, ap: 2 },
+    beholder: { name: "Beholder", type: "Monster", maxHp: 220, attackBonus: 5, requiredRollToHit: 18, effect: { dice: "4d6" }, ap: 4 },
 };
 
 // --- 8.2. Monster Tiers (for spawning) ---
