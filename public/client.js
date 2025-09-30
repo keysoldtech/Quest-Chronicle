@@ -11,6 +11,7 @@ let myId = '';
 let currentRoomState = {}; // The single, authoritative copy of the game state on the client.
 let selectedGameMode = null; // For the menu screen
 let actionState = null; // Manages multi-step actions like targeting
+let autoNarrateEnabled = false; // Toggles the attack narration modal
 let gameUIInitialized = false; // Flag to ensure game listeners are only attached once
 let endTurnModalShownThisTurn = false; // Prevent repeated "out of AP" popups
 
@@ -239,13 +240,25 @@ function renderGameplayState(myPlayer, gameState) {
 
                 if (!weaponName) return; // Safety check in case something is out of sync
 
-                // Show a single, unified confirmation/narration modal
-                const narrativeModal = get('narrative-modal');
-                narrativeModal.querySelector('.panel-header').textContent = 'Confirm Attack';
-                get('narrative-prompt').innerHTML = `Attacking <strong>${monster.name}</strong> with <strong>${weaponName}</strong>.`;
-                get('narrative-input').value = ''; // Clear previous narration
-                get('narrative-confirm-btn').textContent = 'Confirm Attack';
-                narrativeModal.classList.remove('hidden');
+                if (autoNarrateEnabled) {
+                    // Skip the modal and send the action directly
+                    socket.emit('playerAction', {
+                        action: 'attack',
+                        cardId: actionState.weaponId,
+                        targetId: actionState.targetId,
+                        description: '' // Empty description for auto-narrate
+                    });
+                    actionState = null;
+                    renderUI(); // Re-render to clear action state visuals
+                } else {
+                    // Show a single, unified confirmation/narration modal
+                    const narrativeModal = get('narrative-modal');
+                    narrativeModal.querySelector('.panel-header').textContent = 'Confirm Attack';
+                    get('narrative-prompt').innerHTML = `Attacking <strong>${monster.name}</strong> with <strong>${weaponName}</strong>.`;
+                    get('narrative-input').value = ''; // Clear previous narration
+                    get('narrative-confirm-btn').textContent = 'Confirm Attack';
+                    narrativeModal.classList.remove('hidden');
+                }
 
             } else if (isTargetable) {
                 // Handle targeting for abilities or cards
@@ -553,6 +566,28 @@ function initializeGameUIListeners() {
     document.querySelectorAll('#leave-game-btn, #mobile-leave-game-btn').forEach(btn => {
         btn.addEventListener('click', () => window.location.reload());
     });
+    
+    const handleAutoNarrateToggle = () => {
+        autoNarrateEnabled = !autoNarrateEnabled;
+        const statusText = `Auto-Narrate: ${autoNarrateEnabled ? 'ON' : 'OFF'}`;
+        const mobileIcon = autoNarrateEnabled ? 'auto_stories' : 'speaker_notes_off';
+        
+        // Desktop update
+        get('auto-narrate-label').textContent = statusText;
+        
+        // Mobile update
+        const mobileBtn = get('mobile-auto-narrate-btn');
+        mobileBtn.title = statusText;
+        get('mobile-auto-narrate-icon').textContent = mobileIcon;
+
+        // Common actions
+        showToast(statusText, 'info');
+        get('menu-dropdown').classList.add('hidden');
+        get('mobile-menu-dropdown').classList.add('hidden');
+    };
+
+    get('auto-narrate-btn').addEventListener('click', handleAutoNarrateToggle);
+    get('mobile-auto-narrate-btn').addEventListener('click', handleAutoNarrateToggle);
 
     const setupModal = (modalId, confirmBtnId, cancelBtnId, onConfirm) => {
         const modal = get(modalId);
