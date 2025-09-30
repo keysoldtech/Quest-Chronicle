@@ -55,10 +55,17 @@ class GameManager {
         return this.rooms[roomId];
     }
     
-    // REBUILT: Single point of emission for game state. This is the core of the new architecture.
+    // REBUILT: Single point of emission for game state.
     emitGameState(roomId) {
         if (this.rooms[roomId]) {
-            io.to(roomId).emit('gameStateUpdate', this.rooms[roomId]);
+            // Include static game data needed by the client for rendering.
+            const stateWithStaticData = {
+                ...this.rooms[roomId],
+                staticData: {
+                    classes: gameData.classes
+                }
+            };
+            io.to(roomId).emit('gameStateUpdate', stateWithStaticData);
         }
     }
 
@@ -81,6 +88,11 @@ class GameManager {
     
     rollDice(diceString) {
         if (!diceString || typeof diceString !== 'string') return 0;
+        // Handle cases like "1" for fixed damage
+        if (!diceString.includes('d')) {
+            const val = Number(diceString);
+            return isNaN(val) ? 0 : val;
+        }
         const [count, sides] = diceString.toLowerCase().split('d').map(Number);
         if (isNaN(count) || isNaN(sides)) return 0;
         let total = 0;
@@ -96,6 +108,7 @@ class GameManager {
             id,
             name,
             isNpc: false,
+            isDowned: false, // Player defeat state
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
@@ -123,6 +136,7 @@ class GameManager {
             gameState: {
                 phase: 'class_selection',
                 gameMode: gameMode || 'Beginner',
+                winner: null, // To determine game over state
                 customSettings: customSettings || defaultSettings,
                 decks: { /* Initialized during game start */ },
                 turnOrder: [],
@@ -289,6 +303,7 @@ class GameManager {
 
         if (!deck || deck.length === 0) return null;
 
+        // FIXED: If looking for a class-specific card and none are found, return null instead of a random one.
         if (playerClass && (deckName === 'spell' || deckName === 'weapon' || deckName === 'armor')) {
             const suitableCardIndex = deck.findIndex(card => 
                 !card.class || card.class.includes("Any") || card.class.includes(playerClass)
@@ -296,6 +311,7 @@ class GameManager {
             if (suitableCardIndex !== -1) {
                 return deck.splice(suitableCardIndex, 1)[0];
             }
+            return null; // No suitable card found
         }
         return deck.pop();
     }
@@ -342,6 +358,8 @@ class GameManager {
         // Ensure current HP doesn't exceed new max HP
         if (player.stats.currentHp) {
             newStats.currentHp = Math.min(player.stats.currentHp, newStats.maxHp);
+        } else {
+            newStats.currentHp = newStats.maxHp;
         }
         
         return newStats;
@@ -350,7 +368,7 @@ class GameManager {
     equipItem(socket, { cardId }) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-        if (!room || !player) return;
+        if (!room || !player || player.isDowned) return;
 
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
         if (cardIndex === -1) return;
@@ -362,10 +380,8 @@ class GameManager {
             return; // Not an equippable item type
         }
         
-        // Now that we know it's valid, splice it from the hand
         player.hand.splice(cardIndex, 1);
 
-        // Unequip old item and put it back in hand
         if (player.equipment[itemType]) {
             player.hand.push(player.equipment[itemType]);
         }
@@ -378,39 +394,36 @@ class GameManager {
     // --- 3.5. Turn Management (REBUILT) ---
     async startTurn(roomId) {
         const room = this.rooms[roomId];
-        if (!room) return;
+        if (!room || room.gameState.phase !== 'started') return;
     
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
         if (!player) return;
     
-        // Setup the player for their turn
         player.stats = this.calculatePlayerStats(player);
         player.currentAp = player.stats.ap;
     
-        // Announce the start of the turn to all clients
         this.emitGameState(roomId);
     
-        // If the current player is an NPC, orchestrate their turn automatically
         if (player.isNpc) {
-            await new Promise(res => setTimeout(res, 1500)); // Pause for dramatic effect
+            await new Promise(res => setTimeout(res, 1500));
     
             if (player.role === 'DM') {
                 await this.handleDmTurn(room);
-            } else { // NPC Explorer
+            } else {
                 this.handleNpcExplorerTurn(room, player);
             }
     
-            // After the NPC has acted, automatically end their turn.
-            this.endCurrentTurn(roomId);
+            // Automatically end their turn if the game is still going
+            if(room.gameState.phase === 'started') {
+                this.endCurrentTurn(roomId);
+            }
         }
-        // If the player is human, the server now waits for an 'endTurn' event from their client.
     }
 
     endTurn(socket) {
         const room = this.findRoomBySocket(socket);
         if (!room) return;
         const player = room.players[socket.id];
-        // Ensure it's actually the player's turn before ending it
         if (!player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
         
         this.endCurrentTurn(room.id);
@@ -418,32 +431,43 @@ class GameManager {
     
     endCurrentTurn(roomId) {
         const room = this.rooms[roomId];
-        if (!room || room.gameState.turnOrder.length === 0) return;
+        if (!room || room.gameState.turnOrder.length === 0 || room.gameState.phase !== 'started') return;
     
         const oldPlayerIndex = room.gameState.currentPlayerIndex;
-        // Only clear shield HP if a turn has actually passed (index is valid)
         if (oldPlayerIndex > -1) {
             const oldPlayer = room.players[room.gameState.turnOrder[oldPlayerIndex]];
             if (oldPlayer && oldPlayer.role === 'Explorer') {
-                oldPlayer.stats.shieldHp = 0; // Clear temporary shield
+                oldPlayer.stats.shieldHp = 0;
             }
         }
     
-        // Advance to the next player
-        room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
+        // Advance to the next non-downed player
+        let nextIndex = room.gameState.currentPlayerIndex;
+        let attempts = 0;
+        do {
+            nextIndex = (nextIndex + 1) % room.gameState.turnOrder.length;
+            attempts++;
+        } while (room.players[room.gameState.turnOrder[nextIndex]].isDowned && attempts <= room.gameState.turnOrder.length)
+
+        // Check if all players are downed
+        if (attempts > room.gameState.turnOrder.length) {
+            room.gameState.phase = 'game_over';
+            room.gameState.winner = 'Monsters';
+            this.emitGameState(roomId);
+            return;
+        }
+
+        room.gameState.currentPlayerIndex = nextIndex;
     
-        // Check if a new round is starting
         if (room.gameState.currentPlayerIndex === 0) {
             room.gameState.turnCount++;
         }
     
-        // Start the new turn
         this.startTurn(room.id);
     }
 
     // --- 3.6. AI Logic (NPC Turns) ---
     async handleDmTurn(room) {
-        // This function now ONLY contains the DM's actions, not turn management.
         if (room.gameState.turnCount === 1) {
              const playMonsterChance = 0.7;
              if (Math.random() < playMonsterChance) {
@@ -451,27 +475,31 @@ class GameManager {
              } else {
                  this.dmPlayWorldEvent(room);
              }
+             this.emitGameState(room.id);
         } else {
             if (room.gameState.board.monsters.length > 0) {
-                 for (const monster of [...room.gameState.board.monsters]) { // Use a copy in case one dies
+                 // EFFICIENT: Batch monster attacks
+                 const rollResults = [];
+                 for (const monster of [...room.gameState.board.monsters]) {
                     await new Promise(res => setTimeout(res, 1000));
                     const targetId = this._chooseMonsterTarget(room);
                     if (targetId) {
                          const result = this._resolveMonsterAttack(room, monster.id, targetId);
-                         if(result) {
-                             io.to(room.id).emit('rollResult', result);
-                             this.emitGameState(room.id); // Emit state after attack resolves
-                         }
+                         if(result) rollResults.push(result);
+                         if (room.gameState.phase === 'game_over') break; // Stop attacking if game ends
                     }
                 }
+                // Send all results and the final state at once
+                io.to(room.id).emit('multipleRollResults', rollResults);
+                this.emitGameState(room.id);
             } else {
                 this.dmPlayMonster(room);
+                this.emitGameState(room.id);
             }
         }
     }
     
      handleNpcExplorerTurn(room, player) {
-        // This function now ONLY contains the NPC's actions, not turn management.
         const monsters = room.gameState.board.monsters;
         let actionTaken = false;
 
@@ -481,14 +509,12 @@ class GameManager {
             const weaponApCost = weapon?.apCost || 2;
             const unarmedApCost = 1;
 
-            // Try to attack with weapon first, if possible
             if (weapon && player.currentAp >= weaponApCost) {
                 const result = this._resolveAttack(room, player, { weaponId: weapon.id, targetId: weakestMonster.id });
                 if(result) {
                     io.to(room.id).emit('rollResult', result);
                     actionTaken = true;
                 }
-            // If weapon attack didn't happen, try unarmed
             } else if (!actionTaken && player.currentAp >= unarmedApCost) {
                 const result = this._resolveAttack(room, player, { weaponId: 'unarmed', targetId: weakestMonster.id });
                 if(result) {
@@ -498,21 +524,19 @@ class GameManager {
             }
         }
 
-        // If no attack was made (e.g. no monsters, or not enough AP), try to guard.
         if (!actionTaken && player.currentAp >= 1) {
              player.currentAp -= 1;
              player.stats.shieldHp += player.equipment.armor?.guardBonus || 2;
              actionTaken = true;
         }
 
-        // If any action was taken, update clients.
         if (actionTaken) {
             this.emitGameState(room.id);
         }
     }
 
     _chooseMonsterTarget(room) {
-        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0);
+        const explorers = Object.values(room.players).filter(p => p.role === 'Explorer' && p.stats.currentHp > 0 && !p.isDowned);
         return explorers.length > 0 ? explorers[Math.floor(Math.random() * explorers.length)].id : null;
     }
 
@@ -524,7 +548,6 @@ class GameManager {
             monsterCard.currentHp = monsterCard.maxHp;
             monsterCard.statusEffects = [];
             room.gameState.board.monsters.push(monsterCard);
-            this.emitGameState(room.id); // Announce the change
         }
     }
     
@@ -532,8 +555,7 @@ class GameManager {
         const eventCard = this.drawCardFromDeck(room.id, 'worldEvent');
         if (eventCard) {
             room.gameState.worldEvents.currentEvent = eventCard;
-            room.gameState.worldEvents.duration = 2; // Example duration
-            this.emitGameState(room.id); // Announce the change
+            room.gameState.worldEvents.duration = 2;
         }
     }
     
@@ -541,7 +563,7 @@ class GameManager {
     handlePlayerAction(socket, data) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-        if (!player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
+        if (!player || player.isDowned || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
 
         const { action, cardId, targetId, weaponId } = data;
 
@@ -613,10 +635,11 @@ class GameManager {
         let damageDice = '';
 
         if (hit) {
-            damageDice = isUnarmed ? '1' : weapon.effect.dice;
-            damageRoll = isUnarmed ? 1 : this.rollDice(damageDice);
+            // FIXED: Unarmed attack now rolls 1d4
+            damageDice = isUnarmed ? '1d4' : weapon.effect.dice;
+            damageRoll = this.rollDice(damageDice);
             damage = damageRoll + attacker.stats.damageBonus;
-            if (isCrit) damage *= 2; // Simple crit rule
+            if (isCrit) damage *= 2;
             target.currentHp = Math.max(0, target.currentHp - damage);
 
             if (target.currentHp <= 0) {
@@ -659,7 +682,7 @@ class GameManager {
             let damageRoll = this.rollDice(monster.effect.dice);
             damage = damageRoll;
             if(isCrit) damage *= 2;
-            this._applyDamageToPlayer(target, damage);
+            this._applyDamageToPlayer(room, target, damage);
         }
 
         return {
@@ -684,10 +707,9 @@ class GameManager {
             const loot = this.drawCardFromDeck(room.id, 'treasure');
             if (loot) room.gameState.lootPool.push(loot);
         }
-        // The calling function (_resolveAttack) is responsible for emitting the game state
     }
 
-    _applyDamageToPlayer(player, damage) {
+    _applyDamageToPlayer(room, player, damage) {
         const shieldedDamage = Math.min(player.stats.shieldHp, damage);
         player.stats.shieldHp -= shieldedDamage;
         damage -= shieldedDamage;
@@ -695,7 +717,12 @@ class GameManager {
 
         if (player.stats.currentHp <= 0) {
             player.stats.currentHp = 0;
-            // Handle player death logic here if needed
+            player.isDowned = true;
+            // If the human player is downed, the game is over.
+            if (!player.isNpc) {
+                room.gameState.phase = 'game_over';
+                room.gameState.winner = 'Monsters';
+            }
         }
     }
 
@@ -705,8 +732,6 @@ class GameManager {
         const room = this.rooms[roomId];
         if (!room) return;
         
-        // In a single-player game, a disconnect effectively ends the game.
-        // For simplicity, we just remove the room.
         delete this.rooms[roomId];
         delete this.socketToRoom[socket.id];
     }
