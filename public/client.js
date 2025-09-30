@@ -125,7 +125,7 @@ function renderUI() {
     get('room-code').textContent = currentRoomState.id;
     get('mobile-room-code').textContent = currentRoomState.id;
     get('turn-counter-desktop').textContent = gameState.turnCount;
-    get('mobile-turn-counter-mobile').textContent = gameState.turnCount;
+    get('turn-counter-mobile').textContent = gameState.turnCount;
 
 
     // Player Lists
