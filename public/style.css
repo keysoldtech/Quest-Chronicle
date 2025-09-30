@@ -1568,6 +1568,7 @@ label {
     gap: 1rem;
     overflow-x: auto;
     padding-bottom: 1rem;
+    flex-grow: 1;
 }
 
 .class-card {
