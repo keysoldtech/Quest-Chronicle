@@ -6,7 +6,7 @@
 
 /* --- GLOBAL STYLES & TYPOGRAPHY --- */
 :root {
-    --font-title: 'MedievalSharp', cursive;
+    --font-title: var(--font-body);
     --font-body: 'Inter', sans-serif;
     
     --color-bg-dark: #12181b;
@@ -272,7 +272,11 @@ label {
 .btn:disabled { background-color: #3e444a; cursor: not-allowed; opacity: 0.7; }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.9rem; }
 .btn-xs { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
-.btn-icon { padding: 0.5rem; }
+.btn-icon {
+    padding: 0.5rem;
+    border-radius: 50%;
+    line-height: 1;
+}
 
 /* --- GAME AREA LAYOUT (DESKTOP) --- */
 .game-area {
@@ -717,21 +721,27 @@ label {
 .tab-buttons {
     display: flex;
     border-bottom: 1px solid var(--color-border);
+    gap: 0.5rem;
+    padding: 0.5rem 0.5rem 0 0.5rem;
 }
 .tab-btn {
     flex: 1;
-    padding: 0.75rem;
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    color: var(--color-text-secondary);
+    padding: 0.5rem 0.75rem;
+    background-color: var(--color-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text-primary);
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
-    position: relative;
 }
-.tab-btn.active { color: var(--color-special); border-bottom-color: var(--color-special); }
-.tab-btn:hover { background-color: rgba(255,255,255,0.05); }
+.tab-btn.active {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary-hover);
+}
+.tab-btn:hover:not(.active) {
+    background-color: var(--color-secondary-hover);
+}
 .tab-btn.highlight::after {
     content: '';
     position: absolute;
