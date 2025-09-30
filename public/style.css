@@ -1565,9 +1565,10 @@ label {
 /* ===== CLASS SELECTION (FIXED) ===== */
 .class-grid {
     display: flex;
+    flex-wrap: wrap; /* Allows items to wrap to the next line */
+    align-content: flex-start; /* Aligns wrapped lines to the start of the container */
     gap: 1rem;
-    overflow-x: auto;
-    padding-bottom: 1rem;
+    overflow-y: auto; /* Enables VERTICAL scrolling */
     flex-grow: 1;
 }
 
