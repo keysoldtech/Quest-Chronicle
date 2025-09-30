@@ -607,8 +607,8 @@ socket.on('connect', () => {
     const persistentId = sessionStorage.getItem('qc_playerId');
     const roomId = sessionStorage.getItem('qc_roomId');
 
-    // Only try to rejoin if we have a persistentId, a roomId, and the client still thinks it's in that room.
-    if (persistentId && roomId && currentRoomState && currentRoomState.id === roomId) {
+    // If we have session data, attempt to rejoin the previous game.
+    if (persistentId && roomId) {
         console.log(`Attempting to rejoin room ${roomId} with persistent ID ${persistentId}`);
         socket.emit('rejoinRoom', { roomId, playerId: persistentId });
     }
