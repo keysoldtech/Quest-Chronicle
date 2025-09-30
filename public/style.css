@@ -1593,7 +1593,6 @@ label {
     display: flex;
     flex-direction: column;
     width: 250px;
-    flex-shrink: 0;
 }
 
 .class-card:hover {
@@ -1654,5 +1653,18 @@ label {
     .card {
         width: 160px;
         height: 240px;
+    }
+
+    /* Desktop class selection scroll fix */
+    .character-panel .class-grid {
+        justify-content: center;
+        overflow-x: hidden !important;
+        padding: 10px;
+        gap: 0;
+    }
+    
+    .character-panel .class-card {
+        min-width: 200px;
+        margin: 10px;
     }
 }
