@@ -55,10 +55,17 @@ class GameManager {
         return this.rooms[roomId];
     }
     
-    // REBUILT: Single point of emission for game state. This is the core of the new architecture.
     emitGameState(roomId) {
         if (this.rooms[roomId]) {
             io.to(roomId).emit('gameStateUpdate', this.rooms[roomId]);
+        }
+    }
+
+    logEvent(roomId, message, type = 'system') {
+        const room = this.rooms[roomId];
+        if (room) {
+            room.gameLog.unshift({ turn: room.gameState.turnCount, message, type });
+            if (room.gameLog.length > 100) room.gameLog.pop();
         }
     }
 
@@ -134,7 +141,7 @@ class GameManager {
                 currentPartyEvent: null,
                 skillChallenge: { isActive: false },
             },
-            chatLog: []
+            gameLog: []
         };
     
         newPlayer.role = 'Explorer';
@@ -276,7 +283,15 @@ class GameManager {
     drawCardFromDeck(roomId, deckName, playerClass = null) {
         const room = this.rooms[roomId];
         if (!room) return null;
-        const deck = room.gameState.decks[deckName];
+
+        let deck;
+        if (deckName.includes('.')) {
+            const parts = deckName.split('.');
+            deck = parts.reduce((obj, key) => obj && obj[key], room.gameState.decks);
+        } else {
+            deck = room.gameState.decks[deckName];
+        }
+    
         if (!deck || deck.length === 0) return null;
 
         if (playerClass && (deckName === 'spell' || deckName === 'weapon' || deckName === 'armor')) {
@@ -369,6 +384,8 @@ class GameManager {
         player.stats = this.calculatePlayerStats(player);
         player.currentAp = player.stats.ap;
         
+        this.logEvent(roomId, `<strong>Turn ${room.gameState.turnCount}:</strong> ${player.name}'s turn begins.`, 'turn');
+
         if (player.isNpc && player.role === 'DM') {
             await this.handleDmTurn(room);
         } else {
@@ -391,8 +408,8 @@ class GameManager {
         player.stats.shieldHp = 0;
         
         room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
-        if (room.gameState.currentPlayerIndex === 0) {
-            room.gameState.turnCount++;
+        if (room.gameState.currentPlayerIndex === 0) { // New round starts after DM
+             room.gameState.turnCount++;
         }
         this.startTurn(room.id);
     }
@@ -458,6 +475,7 @@ class GameManager {
         if (!actionTaken && player.currentAp >= 1) {
              player.currentAp -= 1;
              player.stats.shieldHp += player.equipment.armor?.guardBonus || 2;
+             this.logEvent(room.id, `${player.name} takes a defensive stance.`, 'info');
              actionTaken = true;
         }
 
@@ -477,13 +495,16 @@ class GameManager {
     }
 
     dmPlayMonster(room) {
-        const { turnCount, decks } = room.gameState;
-        const tier = turnCount <= 3 ? 'tier1' : (turnCount <= 6 ? 'tier2' : 'tier3');
-        const monsterCard = this.drawCardFromDeck(room.id, `monster.${tier}`);
+        const { turnCount } = room.gameState;
+        const tierKey = turnCount <= 3 ? 'tier1' : (turnCount <= 6 ? 'tier2' : 'tier3');
+        const monsterCard = this.drawCardFromDeck(room.id, `monster.${tierKey}`);
         if (monsterCard) {
             monsterCard.currentHp = monsterCard.maxHp;
             monsterCard.statusEffects = [];
             room.gameState.board.monsters.push(monsterCard);
+            this.logEvent(room.id, `The Dungeon Master summons a ${monsterCard.name}!`, 'monster');
+        } else {
+            this.logEvent(room.id, `The Dungeon Master tried to summon a monster, but the deck was empty.`, 'error');
         }
     }
     
@@ -492,6 +513,9 @@ class GameManager {
         if (eventCard) {
             room.gameState.worldEvents.currentEvent = eventCard;
             room.gameState.worldEvents.duration = 2; // Example duration
+            this.logEvent(room.id, `A world event occurs: <strong>${eventCard.name}</strong>. ${eventCard.description}`, 'event');
+        } else {
+            this.logEvent(room.id, `The Dungeon Master tried to trigger an event, but the deck was empty.`, 'error');
         }
     }
     
@@ -512,6 +536,7 @@ class GameManager {
                 if (player.currentAp >= guardCost) {
                     player.currentAp -= guardCost;
                     player.stats.shieldHp += player.equipment.armor?.guardBonus || 2;
+                    this.logEvent(room.id, `${player.name} takes a defensive stance.`, 'info');
                 }
                 break;
         }
@@ -530,6 +555,9 @@ class GameManager {
         const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
         if (attacker.currentAp < apCost) return;
         attacker.currentAp -= apCost;
+        
+        const weaponName = isUnarmed ? 'Fists' : weapon.name;
+        this.logEvent(room.id, `${attacker.name} attacks ${target.name} with ${weaponName}.`, 'action');
 
         const d20 = this.rollDice('1d20');
         const toHitBonus = isUnarmed ? attacker.stats.str : attacker.stats.damageBonus;
@@ -538,11 +566,15 @@ class GameManager {
         if (hit) {
             let damage = isUnarmed ? (1 + attacker.stats.str) : (this.rollDice(weapon.effect.dice) + attacker.stats.damageBonus);
             if (d20 === 20) damage *= 2; // Simple crit rule
+            
+            this.logEvent(room.id, `<span class="log-hit">HIT!</span> Deals <strong>${damage}</strong> damage. ${target.name} has ${Math.max(0, target.currentHp - damage)} HP remaining.`, 'damage');
             target.currentHp -= damage;
 
             if (target.currentHp <= 0) {
-                this._handleMonsterDefeat(room, target.id);
+                this._handleMonsterDefeat(room, target.id, target.name);
             }
+        } else {
+            this.logEvent(room.id, `<span class="log-miss">MISS!</span>`, 'info');
         }
     }
     
@@ -551,22 +583,28 @@ class GameManager {
         const target = room.players[targetId];
         if (!monster || !target) return;
         
+        this.logEvent(room.id, `${monster.name} attacks ${target.name}.`, 'action');
         const d20 = this.rollDice('1d20');
         const hit = d20 === 20 || (d20 !== 1 && (d20 + monster.attackBonus) >= (10 + target.stats.shieldBonus));
         
         if (hit) {
             let damage = this.rollDice(monster.effect.dice);
             if(d20 === 20) damage *= 2;
+            this.logEvent(room.id, `<span class="log-hit">HIT!</span> Deals <strong>${damage}</strong> damage to ${target.name}.`, 'damage');
             this._applyDamageToPlayer(target, damage);
+        } else {
+             this.logEvent(room.id, `<span class="log-miss">MISS!</span>`, 'info');
         }
     }
 
-    _handleMonsterDefeat(room, monsterId) {
+    _handleMonsterDefeat(room, monsterId, monsterName) {
+        this.logEvent(room.id, `${monsterName} has been defeated!`, 'info');
         room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== monsterId);
         const lootChance = (room.gameState.customSettings.lootDropRate || 50) / 100;
         if (Math.random() < lootChance) {
             const loot = this.drawCardFromDeck(room.id, 'treasure');
             if (loot) room.gameState.lootPool.push(loot);
+            this.logEvent(room.id, `The party discovered some loot: ${loot.name}!`, 'loot');
         }
     }
 
@@ -578,7 +616,7 @@ class GameManager {
 
         if (player.stats.currentHp <= 0) {
             player.stats.currentHp = 0;
-            // Handle player death logic here if needed
+            this.logEvent(this.findRoomBySocket({ id: player.id })?.id, `${player.name} has been defeated!`, 'death');
         }
     }
 

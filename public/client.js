@@ -173,17 +173,20 @@ function renderGameplayState(myPlayer, gameState) {
     const get = id => document.getElementById(id);
     const isMyTurn = gameState.turnOrder[gameState.currentPlayerIndex] === myPlayer.id;
 
-    // Turn Indicator & AP
+    // Turn Indicator & Persistent Vitals
     const turnPlayer = currentRoomState.players[gameState.turnOrder[gameState.currentPlayerIndex]];
     const turnText = turnPlayer ? `${turnPlayer.name}'s Turn` : "Loading...";
     get('turn-indicator').textContent = turnText;
     get('mobile-turn-indicator').textContent = turnText;
-    get('ap-counter-desktop').classList.toggle('hidden', !isMyTurn);
-    get('ap-counter-mobile').classList.toggle('hidden', !isMyTurn);
-    if(isMyTurn) {
-        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.ap}`;
-        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.ap}`;
-    }
+
+    // HP is always relevant
+    get('hp-counter-desktop').innerHTML = `<span class="material-symbols-outlined">favorite</span>${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
+    get('hp-counter-mobile').innerHTML = `<span class="material-symbols-outlined">favorite</span>${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
+    
+    // AP is 'current' on your turn, otherwise shows potential
+    const apText = isMyTurn ? `${myPlayer.currentAp}/${myPlayer.stats.ap}` : `0/${myPlayer.stats.ap}`;
+    get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${apText}`;
+    get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${apText}`;
 
     // Action Bars
     get('fixed-action-bar').classList.toggle('hidden', !isMyTurn);
@@ -212,6 +215,12 @@ function renderGameplayState(myPlayer, gameState) {
 
     // Equipment & Hand
     renderHandAndEquipment(myPlayer, isMyTurn);
+
+    // Logs and Events
+    renderGameLog(get('game-log-content'), gameState.gameLog);
+    renderGameLog(get('mobile-game-log'), gameState.gameLog); // Also render for mobile
+    renderWorldEvents(get('world-events-container'), gameState.worldEvents);
+    renderWorldEvents(get('mobile-world-events-container'), gameState.worldEvents);
 }
 
 function renderCharacterPanel(desktopContainer, mobileContainer, player) {
@@ -282,6 +291,26 @@ function renderHandAndEquipment(player, isMyTurn) {
     mobileHand.innerHTML = hand.innerHTML;
 }
 
+function renderGameLog(logContainer, gameLog) {
+    if (!gameLog || gameLog.length === 0) {
+        logContainer.innerHTML = '<p class="empty-pool-text">No events have occurred yet.</p>';
+        return;
+    }
+    logContainer.innerHTML = gameLog.map(entry => 
+        `<div class="log-entry type-${entry.type}">
+            <span class="log-turn">T${entry.turn}:</span> ${entry.message}
+         </div>`
+    ).join('');
+}
+
+function renderWorldEvents(container, worldEvents) {
+    container.innerHTML = '';
+    if (worldEvents.currentEvent) {
+        container.appendChild(createCardElement(worldEvents.currentEvent));
+    } else {
+        container.innerHTML = '<p class="empty-pool-text">No active world event.</p>';
+    }
+}
 
 // --- 3. UI EVENT LISTENERS ---
 document.addEventListener('DOMContentLoaded', () => {

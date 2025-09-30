@@ -333,12 +333,11 @@ label {
     align-items: center;
     padding-bottom: 0.5rem;
 }
-.header-info { display: flex; align-items: baseline; gap: 1.5rem; }
-.ap-counter {
+.header-info { display: flex; align-items: baseline; gap: 1rem; }
+.hp-counter, .ap-counter {
     font-family: var(--font-body);
     font-weight: bold;
     font-size: 1.2rem;
-    color: var(--stat-color-ap);
     display: flex;
     align-items: center;
     gap: 0.25rem;
@@ -347,6 +346,9 @@ label {
     border-radius: 20px;
     border: 1px solid var(--color-border);
 }
+.hp-counter { color: var(--stat-color-hp); }
+.ap-counter { color: var(--stat-color-ap); }
+
 .header-controls { display: flex; align-items: center; gap: 1rem; }
 .dm-controls { display: flex; gap: 0.5rem; }
 .room-code-display {
@@ -666,7 +668,16 @@ label {
 
 .tab-content { display: none; flex-grow: 1; overflow: hidden; }
 .tab-content.active { display: flex; flex-direction: column; }
-.log-content-area { padding: 1rem; flex-grow: 1; overflow-y: auto; font-size: 0.9rem; }
+.log-content-area { padding: 1rem; flex-grow: 1; overflow-y: auto; font-size: 0.9rem; line-height: 1.6; }
+.log-entry { margin-bottom: 0.5rem; border-left: 3px solid var(--color-border); padding-left: 0.75rem; }
+.log-entry.type-turn { border-left-color: var(--color-special); font-weight: bold; }
+.log-entry.type-monster { border-left-color: var(--color-danger); }
+.log-entry.type-event { border-left-color: var(--color-dm); }
+.log-entry.type-action { border-left-color: var(--color-primary); }
+.log-entry.type-damage { border-left-color: var(--color-secondary); }
+.log-turn { font-weight: bold; color: var(--color-text-secondary); margin-right: 0.5rem; }
+.log-hit { color: var(--color-success); font-weight: bold; }
+.log-miss { color: var(--color-danger); font-weight: bold; }
 
 /* --- DESKTOP & MOBILE ACTION BARS --- */
 .fixed-action-bar, .mobile-action-bar {
@@ -985,9 +996,16 @@ label {
         top: 0;
         z-index: 100;
     }
-    .mobile-header-info { text-align: left; flex-grow: 1; display: flex; flex-direction: column; }
-    .mobile-header .turn-indicator-font { font-size: 1rem; }
-    .mobile-header .ap-counter { font-size: 0.9rem; padding: 0.1rem 0.5rem; width: fit-content; }
+    .mobile-header-info {
+        text-align: left;
+        flex-grow: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .mobile-header .turn-indicator-font { font-size: 1rem; margin-right: auto; }
+    .mobile-header .hp-counter,
+    .mobile-header .ap-counter { font-size: 0.9rem; padding: 0.1rem 0.5rem; }
     .mobile-header-controls { 
         flex-shrink: 0; 
         display: flex;
