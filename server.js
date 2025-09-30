@@ -14,8 +14,7 @@
 //    - 3.6. AI Logic (NPC Turns)
 //    - 3.7. Action Resolution (Attacks, Abilities, etc.)
 //    - 3.8. Event & Challenge Handling
-//    - 3.9. Voice Chat Relaying
-//    - 3.10. Disconnect Logic
+//    - 3.9. Chat & Disconnect Logic (REBUILT)
 // 4. SOCKET.IO CONNECTION HANDLING
 
 // --- 1. SERVER SETUP ---
@@ -109,6 +108,7 @@ class GameManager {
             name,
             isNpc: false,
             isDowned: false, // Player defeat state
+            disconnected: false, // For reconnect logic
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
@@ -162,7 +162,7 @@ class GameManager {
     joinRoom(socket, { roomId, playerName }) {
         const room = this.rooms[roomId];
         if (!room) return socket.emit('actionError', 'Room not found.');
-        if (Object.values(room.players).length > 0 && Object.values(room.players).some(p => !p.isNpc)) {
+        if (Object.values(room.players).length > 0 && Object.values(room.players).some(p => !p.isNpc && !p.disconnected)) {
              return socket.emit('actionError', 'This game already has a player.');
         }
 
@@ -810,13 +810,81 @@ class GameManager {
         }
     }
 
-    // --- 3.10. Disconnect Logic ---
+    // --- 3.9. Chat & Disconnect Logic (REBUILT) ---
+    handleChatMessage(socket, { channel, message }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        
+        if (!room || !player) {
+            socket.emit('actionError', 'Cannot send message: Not in a valid game session.');
+            return;
+        }
+
+        if (!message || message.trim().length === 0) {
+            return;
+        }
+
+        room.chatLog.push({
+            type: 'chat',
+            channel: channel,
+            playerName: player.name,
+            playerId: player.id,
+            text: message.trim()
+        });
+
+        this.emitGameState(room.id);
+    }
+    
+    rejoinRoom(socket, { roomId, playerName }) {
+        const room = this.rooms[roomId];
+        if (!room) {
+            socket.emit('actionError', 'Room to rejoin not found.');
+            return;
+        }
+
+        const playerToReconnect = Object.values(room.players).find(p => p.name === playerName && !p.isNpc && p.disconnected);
+
+        if (playerToReconnect) {
+            const oldId = playerToReconnect.id;
+            
+            playerToReconnect.id = socket.id;
+            playerToReconnect.disconnected = false;
+
+            room.players[socket.id] = playerToReconnect;
+            delete room.players[oldId];
+
+            if (room.hostId === oldId) {
+                room.hostId = socket.id;
+            }
+
+            const turnOrderIndex = room.gameState.turnOrder.indexOf(oldId);
+            if (turnOrderIndex > -1) {
+                room.gameState.turnOrder[turnOrderIndex] = socket.id;
+            }
+
+            this.socketToRoom[socket.id] = roomId;
+            socket.join(roomId);
+
+            console.log(`Player ${playerName} reconnected to room ${roomId}`);
+            this.emitGameState(roomId);
+        } else {
+            socket.emit('actionError', 'Could not find a disconnected character to rejoin.');
+        }
+    }
+    
     handleDisconnect(socket) {
         const roomId = this.socketToRoom[socket.id];
         const room = this.rooms[roomId];
         if (!room) return;
+
+        const player = room.players[socket.id];
+        if (player && !player.isNpc) {
+            console.log(`Player ${player.name} in room ${roomId} has disconnected.`);
+            player.disconnected = true;
+            // In a real-world scenario, you might add a timer here to clean up the room
+            // if the player doesn't reconnect within a certain time frame.
+        }
         
-        delete this.rooms[roomId];
         delete this.socketToRoom[socket.id];
     }
 }
@@ -827,10 +895,12 @@ const gameManager = new GameManager();
 io.on('connection', (socket) => {
     socket.on('createRoom', (data) => gameManager.createRoom(socket, data));
     socket.on('joinRoom', (data) => gameManager.joinRoom(socket, data));
+    socket.on('rejoinRoom', (data) => gameManager.rejoinRoom(socket, data));
     socket.on('chooseClass', (data) => gameManager.chooseClass(socket, data));
     socket.on('equipItem', (data) => gameManager.equipItem(socket, data));
     socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));
     socket.on('endTurn', () => gameManager.endTurn(socket));
+    socket.on('chatMessage', (data) => gameManager.handleChatMessage(socket, data));
     
     socket.on('disconnect', () => gameManager.handleDisconnect(socket));
 });

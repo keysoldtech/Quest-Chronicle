@@ -8,6 +8,7 @@
 // --- 1. GLOBAL SETUP & STATE ---
 const socket = io();
 let myId = '';
+let myPlayerName = '';
 let currentRoomState = {}; // The single, authoritative copy of the game state on the client.
 let selectedGameMode = null; // For the menu screen
 let selectedWeaponId = null; // For targeting UI
@@ -83,7 +84,12 @@ function createCardElement(card, options = {}) {
 function renderUI() {
     if (!currentRoomState || !currentRoomState.id) return;
     const myPlayer = currentRoomState.players[myId];
-    if (!myPlayer) return;
+    if (!myPlayer) {
+        // If my player is not in the list (e.g. after reconnect), wait for the next update.
+        // It might take a moment for the server to re-associate the new socket ID.
+        return;
+    }
+
 
     const { players, gameState, chatLog } = currentRoomState;
     const { phase } = gameState;
@@ -127,7 +133,8 @@ function renderUI() {
         const classText = p.class ? `<span class="player-class"> - ${p.class}</span>` : '';
         const hpDisplay = phase === 'started' && p.role === 'Explorer' ? `HP: ${p.stats.currentHp} / ${p.stats.maxHp}` : '';
         const downedText = p.isDowned ? '<span class="downed-text">[DOWNED]</span> ' : '';
-        li.innerHTML = `<div class="player-info"><span>${downedText}${npcTag}${p.name}${classText}${roleText}</span></div><div class="player-hp">${hpDisplay}</div>`;
+        const disconnectedText = p.disconnected ? '<span class="disconnected-text">[OFFLINE]</span> ' : '';
+        li.innerHTML = `<div class="player-info"><span>${disconnectedText}${downedText}${npcTag}${p.name}${classText}${roleText}</span></div><div class="player-hp">${hpDisplay}</div>`;
         playerList.appendChild(li);
         mobilePlayerList.appendChild(li.cloneNode(true));
     });
@@ -306,19 +313,33 @@ function renderHandAndEquipment(player, isMyTurn) {
 }
 
 function renderGameLog(chatLog) {
-    const logContainer = document.getElementById('game-log-content');
-    logContainer.innerHTML = '';
-    chatLog.forEach(msg => {
-        const p = document.createElement('p');
-        p.className = `chat-message ${msg.type || 'system'}`;
-        if (msg.type === 'narrative') {
-            p.innerHTML = `<strong>${msg.playerName}:</strong> <em>"${msg.text}"</em>`;
-        } else {
-             p.textContent = msg.text;
-        }
-        logContainer.appendChild(p);
+    const logContainers = [
+        document.getElementById('game-log-content'),
+        document.getElementById('chat-log'),
+        document.getElementById('mobile-chat-log')
+    ];
+
+    logContainers.forEach(container => {
+        if (!container) return;
+        container.innerHTML = '';
+        chatLog.forEach(msg => {
+            const p = document.createElement('p');
+            p.className = `chat-message ${msg.type || 'system'}`;
+
+            if (msg.type === 'narrative') {
+                p.innerHTML = `<strong>${escapeHTML(msg.playerName)}:</strong> <em>"${escapeHTML(msg.text)}"</em>`;
+            } else if (msg.type === 'chat') {
+                const senderClass = msg.playerId === myId ? 'self' : '';
+                const channelClass = msg.channel || 'game';
+                p.innerHTML = `[<span class="channel ${channelClass}">${channelClass.toUpperCase()}</span>] <strong class="sender ${senderClass}">${escapeHTML(msg.playerName)}:</strong> ${escapeHTML(msg.text)}`;
+            } else {
+                 p.textContent = msg.text;
+            }
+
+            container.appendChild(p);
+        });
+        container.scrollTop = container.scrollHeight;
     });
-    logContainer.scrollTop = logContainer.scrollHeight;
 }
 
 
@@ -348,8 +369,9 @@ document.addEventListener('DOMContentLoaded', () => {
     playerNameInput.addEventListener('input', validateCreateButton);
 
     createRoomBtn.addEventListener('click', () => {
+        myPlayerName = playerNameInput.value.trim();
         socket.emit('createRoom', { 
-            playerName: playerNameInput.value.trim(), 
+            playerName: myPlayerName, 
             gameMode: selectedGameMode, 
             customSettings: selectedGameMode === 'Custom' ? {
                 startWithWeapon: get('setting-weapon').checked,
@@ -363,9 +385,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     joinRoomBtn.addEventListener('click', () => {
+        myPlayerName = playerNameInput.value.trim();
         socket.emit('joinRoom', { 
             roomId: roomCodeInput.value.trim().toUpperCase(), 
-            playerName: playerNameInput.value.trim()
+            playerName: myPlayerName
         });
     });
 
@@ -410,10 +433,46 @@ function initializeGameUIListeners() {
             return;
         }
     });
+
+    // Chat form listeners
+    const chatForm = document.getElementById('chat-form');
+    chatForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = document.getElementById('chat-input');
+        const channel = document.getElementById('chat-channel');
+        if (input.value.trim()) {
+            socket.emit('chatMessage', { channel: channel.value, message: input.value.trim() });
+            input.value = '';
+        }
+    });
+
+    const mobileChatForm = document.getElementById('mobile-chat-form');
+    mobileChatForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = document.getElementById('mobile-chat-input');
+        const channel = document.getElementById('mobile-chat-channel');
+        if (input.value.trim()) {
+            socket.emit('chatMessage', { channel: channel.value, message: input.value.trim() });
+            input.value = '';
+        }
+    });
 }
 
 // --- 4. SOCKET EVENT HANDLERS ---
-socket.on('connect', () => { myId = socket.id; });
+socket.on('connect', () => { 
+    const oldId = myId;
+    myId = socket.id;
+    console.log(`Socket connected with ID: ${myId}`);
+    if (oldId && currentRoomState && currentRoomState.id && myPlayerName) {
+        console.log(`Attempting to rejoin room ${currentRoomState.id} as ${myPlayerName}`);
+        socket.emit('rejoinRoom', { roomId: currentRoomState.id, playerName: myPlayerName });
+    }
+});
+
+socket.on('disconnect', (reason) => {
+    console.log(`Socket disconnected: ${reason}.`);
+    showToast('Connection lost. Reconnecting...', 'error');
+});
 
 socket.on('gameStateUpdate', (newState) => {
     currentRoomState = newState;
@@ -540,6 +599,12 @@ socket.on('damageResult', (data) => {
 });
 
 // --- 5. HELPER FUNCTIONS ---
+function escapeHTML(str) {
+    const p = document.createElement('p');
+    p.appendChild(document.createTextNode(str));
+    return p.innerHTML;
+}
+
 function switchMobileScreen(screenName) {
     document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(n => n.classList.remove('active'));
@@ -549,7 +614,10 @@ function switchMobileScreen(screenName) {
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
-    container.innerHTML = ''; // Clear previous toasts
+    // Don't clear toasts for reconnect messages, which might stack with others
+    if (type !== 'error') {
+        container.innerHTML = '';
+    }
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
