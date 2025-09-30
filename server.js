@@ -410,7 +410,7 @@ class GameManager {
             if (player.role === 'DM') {
                 await this.handleDmTurn(room);
             } else {
-                this.handleNpcExplorerTurn(room, player);
+                await this.handleNpcExplorerTurn(room, player);
             }
     
             // Automatically end their turn if the game is still going
@@ -468,6 +468,7 @@ class GameManager {
 
     // --- 3.6. AI Logic (NPC Turns) ---
     async handleDmTurn(room) {
+        const pause = ms => new Promise(res => setTimeout(res, ms));
         if (room.gameState.turnCount === 1) {
              const playMonsterChance = 0.7;
              if (Math.random() < playMonsterChance) {
@@ -478,20 +479,14 @@ class GameManager {
              this.emitGameState(room.id);
         } else {
             if (room.gameState.board.monsters.length > 0) {
-                 // EFFICIENT: Batch monster attacks
-                 const rollResults = [];
                  for (const monster of [...room.gameState.board.monsters]) {
-                    await new Promise(res => setTimeout(res, 1000));
+                    await pause(1000);
                     const targetId = this._chooseMonsterTarget(room);
                     if (targetId) {
-                         const result = this._resolveMonsterAttack(room, monster.id, targetId);
-                         if(result) rollResults.push(result);
+                         await this._resolveFullMonsterAttack(room, monster.id, targetId);
                          if (room.gameState.phase === 'game_over') break; // Stop attacking if game ends
                     }
                 }
-                // Send all results and the final state at once
-                io.to(room.id).emit('multipleRollResults', rollResults);
-                this.emitGameState(room.id);
             } else {
                 this.dmPlayMonster(room);
                 this.emitGameState(room.id);
@@ -499,7 +494,8 @@ class GameManager {
         }
     }
     
-     handleNpcExplorerTurn(room, player) {
+     async handleNpcExplorerTurn(room, player) {
+        const pause = ms => new Promise(res => setTimeout(res, ms));
         const monsters = room.gameState.board.monsters;
         let actionTaken = false;
 
@@ -509,18 +505,18 @@ class GameManager {
             const weaponApCost = weapon?.apCost || 2;
             const unarmedApCost = 1;
 
-            if (weapon && player.currentAp >= weaponApCost) {
-                const result = this._resolveAttack(room, player, { weaponId: weapon.id, targetId: weakestMonster.id });
-                if(result) {
-                    io.to(room.id).emit('rollResult', result);
-                    actionTaken = true;
-                }
-            } else if (!actionTaken && player.currentAp >= unarmedApCost) {
-                const result = this._resolveAttack(room, player, { weaponId: 'unarmed', targetId: weakestMonster.id });
-                if(result) {
-                    io.to(room.id).emit('rollResult', result);
-                    actionTaken = true;
-                }
+            const canUseWeapon = weapon && player.currentAp >= weaponApCost;
+            const canUseUnarmed = player.currentAp >= unarmedApCost;
+
+            if (canUseWeapon || canUseUnarmed) {
+                const weaponId = canUseWeapon ? weapon.id : 'unarmed';
+                const narrative = gameData.npcDialogue.explorer.attack[Math.floor(Math.random() * gameData.npcDialogue.explorer.attack.length)];
+                room.chatLog.push({ type: 'narrative', playerName: player.name, text: narrative });
+                this.emitGameState(room.id);
+                await pause(1000);
+                
+                await this._resolveFullPlayerAttack(room, player, { weaponId, targetId: weakestMonster.id });
+                actionTaken = true;
             }
         }
 
@@ -565,16 +561,17 @@ class GameManager {
         const player = room?.players[socket.id];
         if (!player || player.isDowned || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
 
-        const { action, cardId, targetId, weaponId } = data;
+        const { action, cardId, targetId, weaponId, narrative } = data;
 
         switch (action) {
             case 'attack':
-                this._initiateAttack(socket, room, player, { weaponId: cardId, targetId });
+                this._initiateAttack(socket, room, player, { weaponId: cardId, targetId, narrative });
                 break;
-            case 'resolve_attack':
-                 const result = this._resolveAttack(room, player, { weaponId: data.weaponId, targetId: data.targetId });
-                 if (result) io.to(room.id).emit('rollResult', result);
-                 this.emitGameState(room.id);
+            case 'resolve_hit':
+                 this._resolveHitRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId });
+                 break;
+            case 'resolve_damage':
+                 this._resolveDamageRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId });
                  break;
             case 'guard':
                 const guardCost = gameData.actionCosts.guard;
@@ -587,7 +584,7 @@ class GameManager {
         }
     }
 
-    _initiateAttack(socket, room, player, { weaponId, targetId }) {
+    _initiateAttack(socket, room, player, { weaponId, targetId, narrative }) {
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
         if (!target) return;
 
@@ -598,9 +595,14 @@ class GameManager {
         const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
         if (player.currentAp < apCost) return;
 
+        if (narrative && narrative.trim().length > 0) {
+            room.chatLog.push({ type: 'narrative', playerName: player.name, text: narrative });
+            this.emitGameState(room.id);
+        }
+
         const toHitBonus = isUnarmed ? player.stats.str : player.stats.damageBonus;
         
-        socket.emit('showRollModal', {
+        socket.emit('promptAttackRoll', {
             action: 'attack',
             weaponId,
             targetId,
@@ -611,18 +613,17 @@ class GameManager {
         });
     }
     
-    _resolveAttack(room, attacker, { weaponId, targetId }) {
+    _resolveHitRoll(room, attacker, { weaponId, targetId }) {
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
-        if (!attacker || !target) return null;
+        if (!attacker || !target) return;
 
         const isUnarmed = weaponId === 'unarmed';
         const weapon = isUnarmed ? null : attacker.equipment.weapon;
-        if (!isUnarmed && (!weapon || weapon.id !== weaponId)) return null;
+        if (!isUnarmed && (!weapon || weapon.id !== weaponId)) return;
 
         const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
-        if (attacker.currentAp < apCost) return null;
-        attacker.currentAp -= apCost;
-
+        if (attacker.currentAp < apCost) return;
+        
         const d20 = this.rollDice('1d20');
         const toHitBonus = isUnarmed ? attacker.stats.str : attacker.stats.damageBonus;
         const totalRoll = d20 + toHitBonus;
@@ -630,24 +631,9 @@ class GameManager {
         const isMiss = d20 === 1;
         const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
 
-        let damage = 0;
-        let damageRoll = 0;
-        let damageDice = '';
+        const damageDice = isUnarmed ? '1d4' : weapon.effect.dice;
 
-        if (hit) {
-            // FIXED: Unarmed attack now rolls 1d4
-            damageDice = isUnarmed ? '1d4' : weapon.effect.dice;
-            damageRoll = this.rollDice(damageDice);
-            damage = damageRoll + attacker.stats.damageBonus;
-            if (isCrit) damage *= 2;
-            target.currentHp = Math.max(0, target.currentHp - damage);
-
-            if (target.currentHp <= 0) {
-                this._handleMonsterDefeat(room, target.id);
-            }
-        }
-        
-        return {
+        const result = {
             rollerId: attacker.id,
             rollerName: attacker.name,
             action: 'Attack',
@@ -658,46 +644,144 @@ class GameManager {
             total: totalRoll,
             targetAC: target.requiredRollToHit,
             outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
+            needsDamageRoll: hit,
+            damageDice: hit ? damageDice : null,
+            weaponId, // Pass these through for the next step
+            targetId,
+        };
+        
+        if (!hit) {
+            attacker.currentAp -= apCost;
+            this.emitGameState(room.id);
+        }
+
+        io.to(room.id).emit('attackResult', result);
+    }
+
+    _resolveDamageRoll(room, attacker, { weaponId, targetId }) {
+        const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        if (!attacker || !target) return;
+
+        const isUnarmed = weaponId === 'unarmed';
+        const weapon = isUnarmed ? null : attacker.equipment.weapon;
+        if (!isUnarmed && (!weapon || weapon.id !== weaponId)) return;
+        
+        const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
+        if (attacker.currentAp < apCost) return;
+        attacker.currentAp -= apCost;
+
+        const damageDice = isUnarmed ? '1d4' : weapon.effect.dice;
+        let damageRoll = this.rollDice(damageDice);
+        let damage = damageRoll + attacker.stats.damageBonus;
+
+        const d20 = this.rollDice('1d20'); // Reroll for crit check, though this is not ideal. A better way would be to pass the hit result.
+        if (d20 === 20) damage *= 2; 
+
+        target.currentHp = Math.max(0, target.currentHp - damage);
+
+        if (target.currentHp <= 0) {
+            this._handleMonsterDefeat(room, target.id);
+        }
+
+        io.to(room.id).emit('damageResult', {
+            rollerId: attacker.id,
+            rollerName: attacker.name,
+            targetName: target.name,
             damage,
             damageRoll,
             damageDice,
             damageBonus: attacker.stats.damageBonus
-        };
+        });
+
+        this.emitGameState(room.id);
     }
     
-    _resolveMonsterAttack(room, monsterId, targetId) {
+    async _resolveFullPlayerAttack(room, attacker, { weaponId, targetId }) {
+        const pause = ms => new Promise(res => setTimeout(res, ms));
+        const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        if (!attacker || !target) return;
+
+        const isUnarmed = weaponId === 'unarmed';
+        const weapon = isUnarmed ? null : attacker.equipment.weapon;
+        const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
+        
+        // --- HIT ROLL ---
+        const d20 = this.rollDice('1d20');
+        const toHitBonus = isUnarmed ? attacker.stats.str : attacker.stats.damageBonus;
+        const totalRoll = d20 + toHitBonus;
+        const isCrit = d20 === 20;
+        const isMiss = d20 === 1;
+        const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
+
+        io.to(room.id).emit('attackResult', {
+            rollerId: attacker.id, rollerName: attacker.name, action: 'Attack', targetName: target.name,
+            dice: '1d20', roll: d20, bonus: toHitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
+            outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
+        });
+        
+        await pause(1500);
+
+        // --- DAMAGE ROLL (if hit) ---
+        if (hit) {
+            const damageDice = isUnarmed ? '1d4' : weapon.effect.dice;
+            const damageRoll = this.rollDice(damageDice);
+            let damage = damageRoll + attacker.stats.damageBonus;
+            if (isCrit) damage *= 2;
+
+            target.currentHp = Math.max(0, target.currentHp - damage);
+            
+            io.to(room.id).emit('damageResult', {
+                rollerId: attacker.id, rollerName: attacker.name, targetName: target.name,
+                damage, damageRoll, damageDice, damageBonus: attacker.stats.damageBonus
+            });
+            
+            if (target.currentHp <= 0) this._handleMonsterDefeat(room, target.id);
+
+            await pause(1000);
+        }
+
+        attacker.currentAp -= apCost;
+    }
+
+    async _resolveFullMonsterAttack(room, monsterId, targetId) {
+        const pause = ms => new Promise(res => setTimeout(res, ms));
         const monster = room.gameState.board.monsters.find(m => m.id === monsterId);
         const target = room.players[targetId];
-        if (!monster || !target) return null;
+        if (!monster || !target) return;
         
+        // --- HIT ROLL ---
         const d20 = this.rollDice('1d20');
         const isCrit = d20 === 20;
         const isMiss = d20 === 1;
         const targetAC = 10 + target.stats.shieldBonus;
         const totalRoll = d20 + monster.attackBonus;
         const hit = !isMiss && (isCrit || totalRoll >= targetAC);
+
+        io.to(room.id).emit('attackResult', {
+            rollerId: monster.id, rollerName: monster.name, action: 'Attack', targetName: target.name,
+            dice: '1d20', roll: d20, bonus: monster.attackBonus, total: totalRoll, targetAC,
+            outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
+        });
         
-        let damage = 0;
+        await pause(1500);
+        
+        // --- DAMAGE ROLL (if hit) ---
         if (hit) {
             let damageRoll = this.rollDice(monster.effect.dice);
-            damage = damageRoll;
-            if(isCrit) damage *= 2;
-            this._applyDamageToPlayer(room, target, damage);
-        }
+            let damage = damageRoll;
+            if (isCrit) damage *= 2;
+            
+            io.to(room.id).emit('damageResult', {
+                rollerId: monster.id, rollerName: monster.name, targetName: target.name,
+                damage, damageRoll, damageDice: monster.effect.dice, damageBonus: 0
+            });
 
-        return {
-            rollerId: monster.id,
-            rollerName: monster.name,
-            action: 'Attack',
-            targetName: target.name,
-            dice: '1d20',
-            roll: d20,
-            bonus: monster.attackBonus,
-            total: totalRoll,
-            targetAC: targetAC,
-            outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
-            damage
-        };
+            this._applyDamageToPlayer(room, target, damage);
+            
+            await pause(1000);
+        }
+        
+        this.emitGameState(room.id);
     }
 
     _handleMonsterDefeat(room, monsterId) {

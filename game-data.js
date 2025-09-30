@@ -182,20 +182,20 @@ const spellCards = [
 
 // --- 7.3. Weapon Cards ---
 const weaponCards = [
-    { name: "Longsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian", "Any"], effect: { dice: "1d8", description: "A versatile and reliable martial weapon." } },
-    { name: "Greataxe", type: "Weapon", apCost: 2, class: ["Barbarian", "Warrior"], effect: { dice: "1d12", description: "A heavy, two-handed axe that deals devastating damage.", bonuses: { damageBonus: 1 } } },
-    { name: "Shortbow", type: "Weapon", apCost: 2, class: ["Ranger", "Rogue", "Any"], effect: { dice: "1d6", description: "A light and fast ranged weapon." } },
-    { name: "Dagger", type: "Weapon", apCost: 1, class: ["Rogue", "Mage", "Any"], effect: { dice: "1d4", description: "A light, concealable blade. Can be used for quick attacks." } },
-    { name: "Mace", type: "Weapon", apCost: 2, class: ["Cleric", "Warrior"], effect: { dice: "1d6", description: "A simple but effective bludgeoning weapon." } },
-    { name: "Greatsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian"], effect: { dice: "2d6", critBonusDice: "1d6", description: "A massive sword that hits hard and can cause grievous wounds on a critical hit." } }
+    { name: "Longsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian", "Any"], effect: { dice: "1d8", description: "A versatile and reliable martial weapon.", bonuses: { damageBonus: 1 } } },
+    { name: "Greataxe", type: "Weapon", apCost: 2, class: ["Barbarian", "Warrior"], effect: { dice: "1d12", description: "A heavy, two-handed axe that deals devastating damage.", bonuses: { damageBonus: 2, dex: -1 } } },
+    { name: "Shortbow", type: "Weapon", apCost: 2, class: ["Ranger", "Rogue", "Any"], effect: { dice: "1d6", description: "A light and fast ranged weapon.", bonuses: { dex: 1 } } },
+    { name: "Dagger", type: "Weapon", apCost: 1, class: ["Rogue", "Mage", "Any"], effect: { dice: "1d4", description: "A light, concealable blade. Can be used for quick attacks.", bonuses: { dex: 1 } } },
+    { name: "Mace", type: "Weapon", apCost: 2, class: ["Cleric", "Warrior"], effect: { dice: "1d6", description: "A simple but effective bludgeoning weapon.", bonuses: { str: 1 } } },
+    { name: "Greatsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian"], effect: { dice: "2d6", critBonusDice: "1d6", description: "A massive sword that hits hard and can cause grievous wounds on a critical hit.", bonuses: { damageBonus: 1, ap: -1 } } }
 ];
 
 // --- 7.4. Armor Cards ---
 const armorCards = [
     { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], effect: { bonuses: { shieldBonus: 1, ap: 1 }, description: "Light and flexible, allowing for quick movements." } },
-    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], effect: { bonuses: { shieldBonus: 3 }, description: "Made of interlocking metal rings, it offers substantial protection." } },
-    { name: "Plate Armor", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 4, hp: 5 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
-    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], effect: { bonuses: { shieldBonus: 2 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
+    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], effect: { bonuses: { shieldBonus: 3, ap: -1 }, description: "Made of interlocking metal rings, it offers substantial protection but is cumbersome." } },
+    { name: "Plate Armor", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 4, hp: 5, dex: -2 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
+    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], effect: { bonuses: { shieldBonus: 2, dex: 1 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
     { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], effect: { bonuses: { shieldBonus: 2, hp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
 ];
 

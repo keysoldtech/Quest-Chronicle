@@ -85,7 +85,7 @@ function renderUI() {
     const myPlayer = currentRoomState.players[myId];
     if (!myPlayer) return;
 
-    const { players, gameState } = currentRoomState;
+    const { players, gameState, chatLog } = currentRoomState;
     const { phase } = gameState;
     const get = id => document.getElementById(id);
 
@@ -108,6 +108,7 @@ function renderUI() {
     get('room-code').textContent = currentRoomState.id;
     get('mobile-room-code').textContent = currentRoomState.id;
     get('turn-counter').textContent = gameState.turnCount;
+    renderGameLog(chatLog);
 
     // Player Lists
     const playerList = get('player-list');
@@ -207,8 +208,8 @@ function renderGameplayState(myPlayer, gameState) {
             const cardEl = createCardElement(monster, { isTargetable: isMyTurn });
             cardEl.onclick = () => {
                 if (!isMyTurn || !selectedWeaponId) return;
-                socket.emit('playerAction', { action: 'attack', cardId: selectedWeaponId, targetId: monster.id });
-                selectedWeaponId = null;
+                showNarrativeModal(selectedWeaponId, monster.id);
+                selectedWeaponId = null; 
                 renderUI();
             };
             container.appendChild(cardEl);
@@ -281,6 +282,22 @@ function renderHandAndEquipment(player, isMyTurn) {
             container.appendChild(createCardElement(card, { isEquippable }));
         });
     });
+}
+
+function renderGameLog(chatLog) {
+    const logContainer = document.getElementById('game-log-content');
+    logContainer.innerHTML = '';
+    chatLog.forEach(msg => {
+        const p = document.createElement('p');
+        p.className = `chat-message ${msg.type || 'system'}`;
+        if (msg.type === 'narrative') {
+            p.innerHTML = `<strong>${msg.playerName}:</strong> <em>"${msg.text}"</em>`;
+        } else {
+             p.textContent = msg.text;
+        }
+        logContainer.appendChild(p);
+    });
+    logContainer.scrollTop = logContainer.scrollHeight;
 }
 
 
@@ -362,6 +379,15 @@ function initializeGameUIListeners() {
             socket.emit('playerAction', { action: 'guard' });
             return;
         }
+
+        const tabBtn = e.target.closest('.tab-btn');
+        if (tabBtn?.dataset?.tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tabBtn.classList.add('active');
+            document.getElementById(tabBtn.dataset.tab).classList.add('active');
+            return;
+        }
     });
 }
 
@@ -377,8 +403,8 @@ socket.on('actionError', (message) => {
     showToast(`Error: ${message}`, 'error');
 });
 
-socket.on('showRollModal', (data) => {
-    clearTimeout(rollModalCloseTimeout); // FIXED: Clear any lingering close timer
+socket.on('promptAttackRoll', (data) => {
+    clearTimeout(rollModalCloseTimeout);
     currentRollData = data;
     const get = id => document.getElementById(id);
     const modal = get('dice-roll-modal');
@@ -388,6 +414,7 @@ socket.on('showRollModal', (data) => {
     get('dice-roll-result-container').classList.add('hidden');
     get('dice-roll-confirm-btn').classList.remove('hidden');
     get('dice-roll-confirm-btn').disabled = false;
+    get('dice-roll-confirm-btn').textContent = "Roll to Hit";
     get('dice-roll-close-btn').classList.add('hidden');
     
     const animContainer = get('dice-animation-container');
@@ -400,56 +427,95 @@ socket.on('showRollModal', (data) => {
         get('dice-roll-confirm-btn').disabled = true;
         startDiceAnimation(diceSides);
         socket.emit('playerAction', { 
-            action: 'resolve_attack',
+            action: 'resolve_hit',
             weaponId: data.weaponId,
             targetId: data.targetId
         });
     };
 });
 
-// This function now handles rendering a single roll result.
-function handleRollResult(data) {
+socket.on('attackResult', (data) => {
+    let toastMsg = `${data.rollerName} ${data.action.toLowerCase()}s ${data.targetName}. They rolled ${data.total} (${data.roll}+${data.bonus}) and... ${data.outcome}!`;
+    showToast(toastMsg, data.outcome.toLowerCase().includes('miss') ? 'miss' : 'hit');
+
+    // If I was the one rolling, update my modal
     if (data.rollerId === myId && currentRollData) {
         stopDiceAnimation(data.roll);
         const get = id => document.getElementById(id);
         const resultLine = get('dice-roll-result-line');
         const detailsLine = get('dice-roll-details');
-        const closeBtn = get('dice-roll-close-btn');
 
         resultLine.textContent = `${data.outcome}! (${data.total})`;
         resultLine.className = `result-line ${data.outcome.toLowerCase().includes('miss') ? 'miss' : 'hit'}`;
         detailsLine.textContent = `You rolled a ${data.roll} + ${data.bonus} bonus.`;
-        if (data.damage > 0) {
-            detailsLine.textContent += ` You dealt ${data.damage} damage.`;
-        }
 
         get('dice-roll-result-container').classList.remove('hidden');
         get('dice-roll-confirm-btn').classList.add('hidden');
-        closeBtn.classList.remove('hidden');
+        
+        if (data.needsDamageRoll) {
+            // Re-purpose the modal for damage roll
+            setTimeout(() => {
+                get('dice-roll-title').textContent = "Roll for Damage";
+                get('dice-roll-description').textContent = `You hit! Now roll ${data.damageDice} for damage.`;
+                const damageDiceSides = parseInt(data.damageDice.split('d')[1]);
+                get('dice-animation-container').innerHTML = getDiceSVG(damageDiceSides);
+                get('dice-roll-result-container').classList.add('hidden');
+                get('dice-roll-confirm-btn').classList.remove('hidden');
+                get('dice-roll-confirm-btn').disabled = false;
+                get('dice-roll-confirm-btn').textContent = "Roll Damage";
+                
+                get('dice-roll-confirm-btn').onclick = () => {
+                    get('dice-roll-confirm-btn').disabled = true;
+                    startDiceAnimation(damageDiceSides);
+                    socket.emit('playerAction', {
+                        action: 'resolve_damage',
+                        weaponId: data.weaponId,
+                        targetId: data.targetId
+                    });
+                };
+            }, 1500);
+        } else {
+            // It's a miss, close the modal
+            const closeBtn = get('dice-roll-close-btn');
+            closeBtn.classList.remove('hidden');
+            const closeModal = () => {
+                get('dice-roll-modal').classList.add('hidden');
+                currentRollData = null;
+            };
+            closeBtn.onclick = closeModal;
+            clearTimeout(rollModalCloseTimeout);
+            rollModalCloseTimeout = setTimeout(closeModal, 4000);
+        }
+    }
+});
 
+socket.on('damageResult', (data) => {
+    let toastMsg = `${data.rollerName} dealt ${data.damage} damage to ${data.targetName}! (${data.damageRoll} + ${data.damageBonus} bonus)`;
+    showToast(toastMsg, 'hit');
+
+    if (data.rollerId === myId && currentRollData) {
+        stopDiceAnimation(data.damageRoll);
+        const get = id => document.getElementById(id);
+        const resultLine = get('dice-roll-result-line');
+        const detailsLine = get('dice-roll-details');
+        
+        resultLine.textContent = `${data.damage} Damage!`;
+        resultLine.className = 'result-line hit';
+        detailsLine.textContent = `You rolled ${data.damageRoll} + ${data.damageBonus} bonus.`;
+
+        get('dice-roll-result-container').classList.remove('hidden');
+        get('dice-roll-confirm-btn').classList.add('hidden');
+        
+        const closeBtn = get('dice-roll-close-btn');
+        closeBtn.classList.remove('hidden');
         const closeModal = () => {
             get('dice-roll-modal').classList.add('hidden');
             currentRollData = null;
         };
         closeBtn.onclick = closeModal;
-        // FIXED: Clear old timeout before setting a new one.
         clearTimeout(rollModalCloseTimeout);
         rollModalCloseTimeout = setTimeout(closeModal, 4000);
     }
-    
-    let toastMsg = `${data.rollerName} ${data.action.toLowerCase()}s ${data.targetName}. They rolled ${data.total} (${data.roll}+${data.bonus}) and... ${data.outcome}!`;
-    if(data.damage > 0) toastMsg += ` Dealt ${data.damage} damage.`;
-    showToast(toastMsg, data.outcome.toLowerCase().includes('miss') ? 'miss' : 'hit');
-}
-
-// Handles a single roll from a player
-socket.on('rollResult', handleRollResult);
-
-// Handles a batch of rolls (e.g., from DM's turn)
-socket.on('multipleRollResults', (results) => {
-    results.forEach((result, index) => {
-        setTimeout(() => handleRollResult(result), index * 1200); // Stagger toasts
-    });
 });
 
 // --- 5. HELPER FUNCTIONS ---
@@ -462,25 +528,60 @@ function switchMobileScreen(screenName) {
 
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
+    container.innerHTML = ''; // Clear previous toasts
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
     
-    // Animate in
     toast.style.opacity = '0';
     toast.style.transform = 'translateY(-20px)';
     container.appendChild(toast);
+    
     requestAnimationFrame(() => {
         toast.style.opacity = '1';
         toast.style.transform = 'translateY(0)';
     });
 
-    // Animate out and remove
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(-20px)';
         toast.addEventListener('transitionend', () => toast.remove());
     }, 5000);
+}
+
+function showNarrativeModal(weaponId, targetId) {
+    const get = id => document.getElementById(id);
+    const modal = get('narrative-modal');
+    const input = get('narrative-input');
+    const confirmBtn = get('narrative-confirm-btn');
+    const cancelBtn = get('narrative-cancel-btn');
+
+    input.value = '';
+    modal.classList.remove('hidden');
+    input.focus();
+
+    const onConfirm = () => {
+        socket.emit('playerAction', {
+            action: 'attack',
+            cardId: weaponId,
+            targetId: targetId,
+            narrative: input.value.trim()
+        });
+        cleanup();
+    };
+
+    const onCancel = () => {
+        cleanup();
+    };
+
+    const cleanup = () => {
+        modal.classList.add('hidden');
+        confirmBtn.replaceWith(confirmBtn.cloneNode(true)); // Remove listeners
+        cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+    };
+
+    confirmBtn.onclick = onConfirm;
+    cancelBtn.onclick = onCancel;
 }
 
 function showGameOverModal(winner) {
