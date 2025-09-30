@@ -143,21 +143,23 @@ function renderClassSelection(desktopContainer, mobileContainer) {
     const classData = gameData.classes; // Assuming gameData is available on client for this
     const classSelectionHTML = `
         <h2 class="panel-header">Choose Your Class</h2>
-        <div class="panel-content class-grid">
-            ${Object.entries(classData).map(([id, data]) => `
-                <div class="class-card" data-class-id="${id}">
-                    <h3>${id}</h3>
-                    <div class="class-stats">
-                        <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
-                        <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAp}</p>
+        <div class="panel-content">
+            <div class="class-grid">
+                ${Object.entries(classData).map(([id, data]) => `
+                    <div class="class-card" data-class-id="${id}">
+                        <h3>${id}</h3>
+                        <div class="class-stats">
+                            <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
+                            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAp}</p>
+                        </div>
+                        <div class="class-ability">
+                            <p><strong>${data.ability.name}</strong></p>
+                            <p class="ability-desc">${data.ability.description}</p>
+                        </div>
+                        <button class="select-class-btn" data-class-id="${id}">Select ${id}</button>
                     </div>
-                    <div class="class-ability">
-                        <p><strong>${data.ability.name}</strong></p>
-                        <p class="ability-desc">${data.ability.description}</p>
-                    </div>
-                    <button class="select-class-btn" data-class-id="${id}">Select ${id}</button>
-                </div>
-            `).join('')}
+                `).join('')}
+            </div>
         </div>`;
     
     desktopContainer.innerHTML = classSelectionHTML;
@@ -240,14 +242,16 @@ function renderHandAndEquipment(player, isMyTurn) {
     const mobileEquipped = get('mobile-equipped-items');
     equipped.innerHTML = ''; mobileEquipped.innerHTML = '';
     
-    // Unarmed/Fist option
-    const unarmedCard = createCardElement({ id: 'unarmed', name: 'Fists', type: 'Unarmed', effect: { description: 'Costs 1 AP.' } }, { isAttackable: isMyTurn });
-    unarmedCard.onclick = () => {
-        if (!isMyTurn) return;
-        selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
-        renderUI(); // Re-render to show selection
-    };
-    equipped.appendChild(unarmedCard);
+    // Unarmed/Fist option (only if no weapon is equipped)
+    if (!player.equipment.weapon) {
+        const unarmedCard = createCardElement({ id: 'unarmed', name: 'Fists', type: 'Unarmed', effect: { description: 'Costs 1 AP.' } }, { isAttackable: isMyTurn });
+        unarmedCard.onclick = () => {
+            if (!isMyTurn) return;
+            selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
+            renderUI(); // Re-render to show selection
+        };
+        equipped.appendChild(unarmedCard);
+    }
 
     // Equipped weapon
     if (player.equipment.weapon) {

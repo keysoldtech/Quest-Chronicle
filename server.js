@@ -154,7 +154,7 @@ class GameManager {
         newPlayer.role = 'Explorer';
         room.players[socket.id] = newPlayer;
         socket.join(roomId);
-        this.socketToRoom[socket.id] = roomId;
+        this.socketToRoom[socket.id] = newRoomId;
         
         this.emitGameState(roomId);
     }
@@ -407,17 +407,23 @@ class GameManager {
              } else {
                  this.dmPlayWorldEvent(room);
              }
+             this.emitGameState(room.id);
         } else {
              // Logic for subsequent turns (monster attacks)
             if (room.gameState.board.monsters.length > 0) {
-                 for (const monster of room.gameState.board.monsters) {
+                 for (const monster of [...room.gameState.board.monsters]) { // Iterate over a copy
+                    if (monster.currentHp <= 0) continue; // Skip defeated monsters
                     await new Promise(res => setTimeout(res, 1000)); // Pause between monster attacks
                     const targetId = this._chooseMonsterTarget(room);
-                    if (targetId) this._resolveMonsterAttack(room, monster.id, targetId);
+                    if (targetId) {
+                        this._resolveMonsterAttack(room, monster.id, targetId);
+                        this.emitGameState(room.id);
+                    }
                 }
             } else {
                 // If board is clear, play another monster
                 this.dmPlayMonster(room);
+                this.emitGameState(room.id);
             }
         }
         
@@ -429,22 +435,38 @@ class GameManager {
     }
     
      handleNpcExplorerTurn(room, player) {
-        // Simplified AI: Attack the weakest monster if possible, otherwise guard.
-        const monsters = room.gameState.board.monsters;
-        if (monsters.length > 0 && player.currentAp >= 1) {
+        // AI: 1. Attack weakest monster with best available weapon. 2. If can't attack, guard.
+        const monsters = room.gameState.board.monsters.filter(m => m.currentHp > 0);
+        let actionTaken = false;
+
+        if (monsters.length > 0) {
             const weakestMonster = monsters.sort((a, b) => a.currentHp - b.currentHp)[0];
             const weapon = player.equipment.weapon;
+
+            // Try to attack with equipped weapon
             if (weapon && player.currentAp >= (weapon.apCost || 2)) {
                  this._resolveAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: weapon.id });
-            } else {
+                 actionTaken = true;
+            // Else, try to attack with fists
+            } else if (player.currentAp >= 1) { 
                  this._resolveAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: 'unarmed' });
+                 actionTaken = true;
             }
-        } else if (player.currentAp >= 1) {
+        } 
+        
+        // If no attack was possible, guard if we have AP
+        if (!actionTaken && player.currentAp >= 1) {
              player.currentAp -= 1;
              player.stats.shieldHp += player.equipment.armor?.guardBonus || 2;
+             actionTaken = true;
         }
 
-        // End turn after action
+        // If any action was taken, update the clients
+        if (actionTaken) {
+            this.emitGameState(room.id);
+        }
+
+        // End turn and start the next one
         room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
         this.startTurn(room.id);
     }
