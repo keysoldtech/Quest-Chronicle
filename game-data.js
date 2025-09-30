@@ -130,24 +130,24 @@ const npcDialogue = {
 // --- 6. MAGICAL AFFIXES (for item generation) ---
 const magicalAffixes = {
     prefixes: [
-        { name: 'Hardened', tier: 1, bonuses: { shieldBonus: 1 }, types: ['armor'] },
-        { name: 'Reinforced', tier: 2, bonuses: { shieldBonus: 2 }, types: ['armor'] },
-        { name: 'Adamant', tier: 3, bonuses: { shieldBonus: 3 }, types: ['armor'] },
-        { name: 'Vicious', tier: 1, bonuses: { damageBonus: 1 }, types: ['weapon'] },
-        { name: 'Savage', tier: 2, bonuses: { damageBonus: 2 }, types: ['weapon'] },
-        { name: 'Bloodthirsty', tier: 3, bonuses: { damageBonus: 3 }, types: ['weapon'] },
-        { name: 'Agile', tier: 1, bonuses: { ap: 1 }, types: ['weapon', 'armor'] },
-        { name: 'Swift', tier: 2, bonuses: { ap: 2 }, types: ['weapon', 'armor'] },
+        { name: 'Hardened', tier: 1, bonuses: { shieldBonus: 1 } },
+        { name: 'Reinforced', tier: 2, bonuses: { shieldBonus: 2 } },
+        { name: 'Adamant', tier: 3, bonuses: { shieldBonus: 3 } },
+        { name: 'Vicious', tier: 1, bonuses: { damageBonus: 1 } },
+        { name: 'Savage', tier: 2, bonuses: { damageBonus: 2 } },
+        { name: 'Bloodthirsty', tier: 3, bonuses: { damageBonus: 3 } },
+        { name: 'Agile', tier: 1, bonuses: { ap: 1 } },
+        { name: 'Swift', tier: 2, bonuses: { ap: 2 } },
     ],
     suffixes: [
-        { name: 'of Fortitude', tier: 1, bonuses: { hp: 5, con: 1 }, types: ['armor'] },
-        { name: 'of Vigor', tier: 2, bonuses: { hp: 10, con: 2 }, types: ['armor'] },
-        { name: 'of the Titan', tier: 3, bonuses: { hp: 15, con: 3 }, types: ['armor'] },
-        { name: 'of Striking', tier: 1, bonuses: { damageBonus: 1, str: 1 }, types: ['weapon'] },
-        { name: 'of Ruin', tier: 2, bonuses: { damageBonus: 2, str: 2 }, types: ['weapon'] },
-        { name: 'of Annihilation', tier: 3, bonuses: { damageBonus: 3, str: 3 }, types: ['weapon'] },
-        { name: 'of the Sentinel', tier: 2, bonuses: { shieldBonus: 1, hp: 5 }, types: ['armor'] },
-        { name: 'of the Berserker', tier: 2, bonuses: { damageBonus: 1, hp: 5 }, types: ['weapon'] },
+        { name: 'of Fortitude', tier: 1, bonuses: { hp: 5, con: 1 } },
+        { name: 'of Vigor', tier: 2, bonuses: { hp: 10, con: 2 } },
+        { name: 'of the Titan', tier: 3, bonuses: { hp: 15, con: 3 } },
+        { name: 'of Striking', tier: 1, bonuses: { damageBonus: 1, str: 1 } },
+        { name: 'of Ruin', tier: 2, bonuses: { damageBonus: 2, str: 2 } },
+        { name: 'of Annihilation', tier: 3, bonuses: { damageBonus: 3, str: 3 } },
+        { name: 'of the Sentinel', tier: 2, bonuses: { shieldBonus: 1, hp: 5 } },
+        { name: 'of the Berserker', tier: 2, bonuses: { damageBonus: 1, hp: 5 } },
     ]
 };
 
@@ -182,28 +182,28 @@ const spellCards = [
 
 // --- 7.3. Weapon Cards ---
 const weaponCards = [
-    { name: "Longsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian", "Any"], effect: { dice: "1d8", description: "A versatile and reliable martial weapon." } },
-    { name: "Greataxe", type: "Weapon", apCost: 2, class: ["Barbarian", "Warrior"], effect: { dice: "1d12", description: "A heavy, two-handed axe that deals devastating damage.", bonuses: { damageBonus: 1 } } },
-    { name: "Shortbow", type: "Weapon", apCost: 2, class: ["Ranger", "Rogue", "Any"], effect: { dice: "1d6", description: "A light and fast ranged weapon." } },
-    { name: "Dagger", type: "Weapon", apCost: 1, class: ["Rogue", "Mage", "Any"], effect: { dice: "1d4", description: "A light, concealable blade. Can be used for quick attacks." } },
-    { name: "Mace", type: "Weapon", apCost: 2, class: ["Cleric", "Warrior"], effect: { dice: "1d6", description: "A simple but effective bludgeoning weapon." } },
-    { name: "Greatsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian"], effect: { dice: "2d6", critBonusDice: "1d6", description: "A massive sword that hits hard and can cause grievous wounds on a critical hit." } }
+    { name: "Longsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian", "Any"], range: 'melee', effect: { dice: "1d8", description: "A versatile and reliable martial weapon." } },
+    { name: "Greataxe", type: "Weapon", apCost: 2, class: ["Barbarian", "Warrior"], range: 'melee', effect: { dice: "1d12", description: "A heavy, two-handed axe that deals devastating damage.", bonuses: { damageBonus: 1 } } },
+    { name: "Shortbow", type: "Weapon", apCost: 2, class: ["Ranger", "Rogue", "Any"], range: 'ranged', effect: { dice: "1d6", description: "A light and fast ranged weapon." } },
+    { name: "Dagger", type: "Weapon", apCost: 1, class: ["Rogue", "Mage", "Any"], range: 'melee', effect: { dice: "1d4", description: "A light, concealable blade. Can be used for quick attacks." } },
+    { name: "Mace", type: "Weapon", apCost: 2, class: ["Cleric", "Warrior"], range: 'melee', effect: { dice: "1d6", description: "A simple but effective bludgeoning weapon." } },
+    { name: "Greatsword", type: "Weapon", apCost: 2, class: ["Warrior", "Barbarian"], range: 'melee', effect: { dice: "2d6", critBonusDice: "1d6", description: "A massive sword that hits hard and can cause grievous wounds on a critical hit." } }
 ];
 
 // --- 7.4. Armor Cards ---
 const armorCards = [
-    { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], effect: { bonuses: { shieldBonus: 1, ap: 1 }, description: "Light and flexible, allowing for quick movements." } },
-    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], effect: { bonuses: { shieldBonus: 3 }, description: "Made of interlocking metal rings, it offers substantial protection." } },
-    { name: "Plate Armor", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 4, hp: 5 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
-    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], effect: { bonuses: { shieldBonus: 2 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
-    { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], effect: { bonuses: { shieldBonus: 2, hp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
+    { name: "Leather Armor", type: "Armor", class: ["Rogue", "Ranger", "Any"], guardBonus: 2, effect: { bonuses: { shieldBonus: 1, ap: 1 }, description: "Light and flexible, allowing for quick movements." } },
+    { name: "Chain Mail", type: "Armor", class: ["Warrior", "Cleric", "Barbarian"], guardBonus: 4, effect: { bonuses: { shieldBonus: 3 }, description: "Made of interlocking metal rings, it offers substantial protection." } },
+    { name: "Plate Armor", type: "Armor", class: ["Warrior"], guardBonus: 5, effect: { bonuses: { shieldBonus: 4, hp: 5 }, description: "The heaviest armor, providing the best protection at the cost of mobility." } },
+    { name: "Studded Leather", type: "Armor", class: ["Rogue", "Ranger"], guardBonus: 3, effect: { bonuses: { shieldBonus: 2 }, description: "Reinforced with rivets, offering a good balance of protection and agility." } },
+    { name: "Scale Mail", type: "Armor", class: ["Cleric", "Warrior"], guardBonus: 3, effect: { bonuses: { shieldBonus: 2, hp: 3 }, description: "A coat and leggings of leather covered with overlapping pieces of metal." } }
 ];
 
 // --- 7.5. World Event Cards ---
 const worldEventCards = [
-    { name: "Echoes of the Past", tags: "Environmental / Magical", type: "World Event", description: "A wave of psychic energy washes over the area. Each Explorer must succeed on a DC 13 Wisdom save or be stunned for their next turn.", saveInfo: { save: "WIS", dc: 13 } },
-    { name: "Sudden Downpour", tags: "Environmental", type: "World Event", description: "A torrential rain begins, extinguishing all non-magical flames. Ranged weapon attacks are made with disadvantage.", saveInfo: null },
-    { name: "Whispers in the Dark", tags: "Psychological", type: "World Event", description: "Malevolent whispers claw at the edges of your minds. Each Explorer must succeed on a DC 12 Charisma save or take 2d6 psychic damage.", saveInfo: { save: "CHA", dc: 12 } },
+    { name: "Echoes of the Past", tags: "Environmental / Magical", type: "World Event", description: "A wave of psychic energy washes over the area. Each Explorer must succeed on a DC 13 Wisdom save or be stunned for their next turn.", effect: { type: 'save', stat: 'wis', dc: 13, consequence: { type: 'status', effect: 'Stunned', duration: 1 }} },
+    { name: "Sudden Downpour", tags: "Environmental", type: "World Event", description: "A torrential rain begins. For 2 rounds, all ranged weapon attacks are made with disadvantage.", effect: { type: 'global_modifier', modifier: 'disadvantage', attackType: 'ranged', duration: 2 } },
+    { name: "Whispers in the Dark", tags: "Psychological", type: "World Event", description: "Malevolent whispers claw at the edges of your minds. Each Explorer must succeed on a DC 12 Charisma save or take 2d6 psychic damage.", effect: { type: 'save', stat: 'cha', dc: 12, consequence: { type: 'damage', dice: '2d6' }}},
 ];
 
 // --- 7.6. Player Event Cards ---

@@ -1,4 +1,4 @@
-// REBUILT: Quest & Chronicle Client-Side Logic (v6.0.0)
+// REBUILT: Quest & Chronicle Client-Side Logic (v6.1.0)
 // This file has been completely rebuilt to use a unidirectional data flow model.
 // 1. The server is the single source of truth.
 // 2. The client receives the entire game state via a single `gameStateUpdate` event.
@@ -23,6 +23,7 @@ let gameUIInitialized = false; // Flag to ensure game listeners are only attache
  * @returns {HTMLElement} The card element.
  */
 function createCardElement(card, options = {}) {
+    if (!card) return document.createElement('div');
     const { isEquippable = false, isAttackable = false, isTargetable = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
@@ -89,12 +90,12 @@ function renderUI() {
     const myPlayer = currentRoomState.players[myId];
     if (!myPlayer) return;
 
-    const { players, gameState } = currentRoomState;
+    const { players, gameState, chatLog } = currentRoomState;
     const { phase } = gameState;
     const get = id => document.getElementById(id);
 
     // --- Phase 1: Show/Hide Major Screens ---
-    get('menu-screen').classList.toggle('active', phase === 'lobby');
+    get('menu-screen').classList.toggle('active', phase !== 'started' && phase !== 'class_selection');
     const isGameActive = phase === 'class_selection' || phase === 'started';
     get('game-screen').classList.toggle('active', isGameActive);
     
@@ -106,7 +107,7 @@ function renderUI() {
     // --- Phase 2: Render Common Game Elements ---
     get('room-code').textContent = currentRoomState.id;
     get('mobile-room-code').textContent = currentRoomState.id;
-    get('turn-counter').textContent = gameState.turnCount;
+    get('turn-counter-desktop').textContent = gameState.turnCount;
 
     // Player Lists
     const playerList = get('player-list');
@@ -127,6 +128,9 @@ function renderUI() {
         playerList.appendChild(li);
         mobilePlayerList.appendChild(li.cloneNode(true));
     });
+    
+    // Chat Log
+    renderChat(chatLog);
 
     // --- Phase 3: Phase-Specific Rendering ---
     const desktopCharacterPanel = get('character-panel-content');
@@ -135,7 +139,7 @@ function renderUI() {
     if (phase === 'class_selection') {
         switchMobileScreen('character');
         if (myPlayer.class) {
-            const waitingHTML = `<h2 class="panel-header">Class Chosen!</h2><p class="panel-content">Waiting for game to start...</p>`;
+            const waitingHTML = `<h2 class="panel-header">Class Chosen!</h2><p class="panel-content">Waiting for other players...</p>`;
             desktopCharacterPanel.innerHTML = waitingHTML;
             mobileCharacterPanel.innerHTML = `<div class="panel mobile-panel">${waitingHTML}</div>`;
         } else {
@@ -209,9 +213,9 @@ function renderGameplayState(myPlayer, gameState) {
             if (!isMyTurn || !selectedWeaponId) return;
             selectedTargetId = monster.id;
             const weaponName = selectedWeaponId === 'unarmed' ? 'Fists' : myPlayer.equipment.weapon?.name;
-            document.getElementById('narrative-prompt').textContent = `How do you attack with your ${weaponName}?`;
-            document.getElementById('narrative-modal').classList.remove('hidden');
-            document.getElementById('narrative-input').focus();
+            get('narrative-prompt').textContent = `How do you attack with your ${weaponName}?`;
+            get('narrative-modal').classList.remove('hidden');
+            get('narrative-input').focus();
         };
         board.appendChild(cardEl);
         mobileBoard.appendChild(cardEl.cloneNode(true));
@@ -221,8 +225,10 @@ function renderGameplayState(myPlayer, gameState) {
     renderHandAndEquipment(myPlayer, isMyTurn);
     renderGameLog(get('game-log-content'), gameState.gameLog);
     renderGameLog(get('mobile-game-log'), gameState.gameLog);
-    renderWorldEvents(get('world-events-container'), gameState.worldEvents);
-    renderWorldEvents(get('mobile-world-events-container'), gameState.worldEvents);
+    renderWorldEvents(get('world-events-container'), get('mobile-world-events-container'), gameState.worldEvents);
+    renderPartyEvent(get('party-event-container'), get('mobile-party-event-container'), gameState.currentPartyEvent);
+    renderLoot(get('party-loot-container'), get('mobile-party-loot-container'), gameState.lootPool);
+    renderSkillChallenge(get('skill-challenge-display'), get('mobile-skill-challenge-display'), gameState.skillChallenge, isMyTurn);
 }
 
 function renderCharacterPanel(desktopContainer, mobileContainer, player) {
@@ -257,17 +263,16 @@ function renderHandAndEquipment(player, isMyTurn) {
     const mobileEquipped = get('mobile-equipped-items');
     equipped.innerHTML = ''; mobileEquipped.innerHTML = '';
     
-    if (player.equipment.weapon === null) {
-        const unarmedCard = createCardElement({ id: 'unarmed', name: 'Fists', type: 'Unarmed', effect: { description: 'Costs 1 AP.' }, apCost: 1 }, { isAttackable: isMyTurn });
+    // Always show Fists if no weapon is equipped
+    if (!player.equipment.weapon) {
+        const unarmedCard = createCardElement({ id: 'unarmed', name: 'Fists', type: 'Weapon', category: 'Unarmed', effect: { description: 'Costs 1 AP.' }, apCost: 1 }, { isAttackable: isMyTurn });
         unarmedCard.onclick = () => {
             if (!isMyTurn) return;
             selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
             renderUI();
         };
         equipped.appendChild(unarmedCard);
-    }
-
-    if (player.equipment.weapon) {
+    } else {
         const weaponCard = createCardElement(player.equipment.weapon, { isAttackable: isMyTurn });
         weaponCard.onclick = () => {
             if (!isMyTurn) return;
@@ -276,6 +281,7 @@ function renderHandAndEquipment(player, isMyTurn) {
         };
         equipped.appendChild(weaponCard);
     }
+
     if (player.equipment.armor) {
         equipped.appendChild(createCardElement(player.equipment.armor));
     }
@@ -288,6 +294,7 @@ function renderHandAndEquipment(player, isMyTurn) {
         hand.appendChild(createCardElement(card, { isEquippable }));
     });
     
+    // Clone with event listeners
     mobileEquipped.innerHTML = equipped.innerHTML;
     mobileHand.innerHTML = hand.innerHTML;
 }
@@ -304,13 +311,84 @@ function renderGameLog(logContainer, gameLog) {
     ).join('');
 }
 
-function renderWorldEvents(container, worldEvents) {
-    container.innerHTML = '';
+function renderWorldEvents(desktopContainer, mobileContainer, worldEvents) {
+    desktopContainer.innerHTML = '';
     if (worldEvents.currentEvent) {
-        container.appendChild(createCardElement(worldEvents.currentEvent));
+        desktopContainer.appendChild(createCardElement(worldEvents.currentEvent));
     } else {
-        container.innerHTML = '<p class="empty-pool-text">No active world event.</p>';
+        desktopContainer.innerHTML = '<p class="empty-pool-text">No active world event.</p>';
     }
+    mobileContainer.innerHTML = desktopContainer.innerHTML;
+}
+
+function renderPartyEvent(desktopContainer, mobileContainer, partyEvent) {
+    desktopContainer.innerHTML = '';
+    if (partyEvent) {
+        desktopContainer.appendChild(createCardElement(partyEvent));
+    } else {
+        desktopContainer.innerHTML = '<p class="empty-pool-text">No active party event.</p>';
+    }
+    mobileContainer.innerHTML = desktopContainer.innerHTML;
+}
+
+function renderLoot(desktopContainer, mobileContainer, lootPool) {
+    desktopContainer.innerHTML = '';
+    if (lootPool.length > 0) {
+        lootPool.forEach(loot => desktopContainer.appendChild(createCardElement(loot)));
+    } else {
+        desktopContainer.innerHTML = '<p class="empty-pool-text">No discoveries yet.</p>';
+    }
+    mobileContainer.innerHTML = desktopContainer.innerHTML;
+}
+
+function renderSkillChallenge(desktopContainer, mobileContainer, challenge, isMyTurn) {
+    desktopContainer.innerHTML = '';
+    mobileContainer.innerHTML = '';
+    document.getElementById('action-skill-challenge-btn').classList.add('hidden');
+    document.getElementById('mobile-action-skill-challenge-btn').classList.add('hidden');
+
+    if (challenge && challenge.isActive) {
+        const challengeHTML = `
+            <h3 class="panel-header">${challenge.name}</h3>
+            <div class="challenge-content">
+                <p>${challenge.description}</p>
+                <p><strong>Check:</strong> DC ${challenge.dc} (${challenge.skill.toUpperCase()})</p>
+            </div>
+        `;
+        desktopContainer.innerHTML = challengeHTML;
+        mobileContainer.innerHTML = challengeHTML;
+        desktopContainer.classList.remove('hidden');
+        mobileContainer.classList.remove('hidden');
+
+        if(isMyTurn) {
+            document.getElementById('action-skill-challenge-btn').classList.remove('hidden');
+            document.getElementById('mobile-action-skill-challenge-btn').classList.remove('hidden');
+        }
+    } else {
+        desktopContainer.classList.add('hidden');
+        mobileContainer.classList.add('hidden');
+    }
+}
+
+
+function renderChat(chatLog) {
+    const desktopLog = document.getElementById('chat-log');
+    const mobileLog = document.getElementById('mobile-chat-log');
+    
+    const renderLog = (container) => {
+        container.innerHTML = chatLog.map(msg => {
+            const senderClass = msg.senderId === myId ? 'self' : '';
+            return `<div class="chat-message">
+                <span class="channel ${msg.channel}">${msg.channel.toUpperCase()}</span>
+                <span class="sender ${senderClass}">${msg.senderName}:</span>
+                <span class="message-text">${msg.message}</span>
+            </div>`;
+        }).join('');
+        container.scrollTop = container.scrollHeight;
+    };
+
+    renderLog(desktopLog);
+    renderLog(mobileLog);
 }
 
 // --- 3. UI EVENT LISTENERS ---
@@ -363,6 +441,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initializeGameUIListeners() {
     const get = id => document.getElementById(id);
+    
+    // Chat Toggle
+    get('chat-toggle-btn').addEventListener('click', () => {
+        get('chat-overlay').classList.toggle('hidden');
+        get('menu-dropdown').classList.add('hidden');
+        get('menu-toggle-btn').classList.remove('chat-notification');
+    });
+    get('chat-close-btn').addEventListener('click', () => get('chat-overlay').classList.add('hidden'));
+
+    // Chat Submission
+    const handleChatSubmit = (form, channelInput, msgInput) => {
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = msgInput.value.trim();
+            if (message) {
+                socket.emit('chatMessage', { channel: channelInput.value, message });
+                msgInput.value = '';
+            }
+        });
+    };
+    handleChatSubmit(get('chat-form'), get('chat-channel'), get('chat-input'));
+    handleChatSubmit(get('mobile-chat-form'), get('mobile-chat-channel'), get('mobile-chat-input'));
+
+    // Menu Toggle
+    get('menu-toggle-btn').addEventListener('click', () => get('menu-dropdown').classList.toggle('hidden'));
+    get('mobile-menu-toggle-btn').addEventListener('click', () => get('mobile-menu-dropdown').classList.toggle('hidden'));
+    
+    // Leave Game
+    document.querySelectorAll('#leave-game-btn, #mobile-leave-game-btn').forEach(btn => {
+        btn.addEventListener('click', () => window.location.reload());
+    });
+
 
     // Event delegation for dynamically created elements
     document.body.addEventListener('click', (e) => {
@@ -385,14 +495,17 @@ function initializeGameUIListeners() {
         }
         
         const guardBtn = e.target.closest('#action-guard-btn, #mobile-action-guard-btn');
-        if (guardBtn) {
-            socket.emit('playerAction', { action: 'guard' });
-            return;
-        }
+        if (guardBtn) { socket.emit('playerAction', { action: 'guard' }); return; }
+        
+        const respiteBtn = e.target.closest('#action-brief-respite-btn, #mobile-action-brief-respite-btn');
+        if(respiteBtn) { socket.emit('playerAction', { action: 'briefRespite' }); return; }
+        
+        const restBtn = e.target.closest('#action-full-rest-btn, #mobile-action-full-rest-btn');
+        if(restBtn) { socket.emit('playerAction', { action: 'fullRest' }); return; }
 
         const challengeBtn = e.target.closest('#action-skill-challenge-btn, #mobile-action-skill-challenge-btn');
         if (challengeBtn) {
-            socket.emit('playerAction', { action: 'skillChallenge', challengeId: 'sc-01' }); // Hardcoded for now
+            socket.emit('playerAction', { action: 'skillChallenge', challengeId: currentRoomState.gameState.skillChallenge.id });
             return;
         }
     });
@@ -422,17 +535,9 @@ function initializeGameUIListeners() {
 socket.on('connect', () => { myId = socket.id; });
 
 socket.on('gameStateUpdate', (newState) => {
-    if (typeof gameData === 'undefined') {
-        window.gameData = {
-            classes: {
-                Barbarian: { stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Unchecked Assault', description: 'Discard a Spell card to add +6 damage to your next successful weapon attack this turn.' } },
-                Cleric:    { stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Aid', description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
-                Mage:      { stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, ability: { name: 'Mystic Recall', description: 'Draw one card from the Spell deck.' } },
-                Ranger:    { stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, ability: { name: 'Hunters Mark', description: 'Mark a monster. All attacks against it deal +2 damage for one round.' } },
-                Rogue:     { stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, ability: { name: 'Evasion', description: 'For one round, all attacks against you have disadvantage (DM rerolls hits).' } },
-                Warrior:   { stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, ability: { name: 'Weapon Surge', description: 'Discard a Spell card to add +4 damage to your next successful weapon attack this turn.' } },
-            }
-        };
+    // This is a one-time operation to load static data if it's not present.
+    if (typeof window.gameData === 'undefined') {
+        window.gameData = { classes: newState.staticDataForClient.classes };
     }
     currentRoomState = newState;
     requestAnimationFrame(renderUI);
@@ -440,6 +545,15 @@ socket.on('gameStateUpdate', (newState) => {
 
 socket.on('actionError', (message) => {
     alert(`Error: ${message}`);
+});
+
+socket.on('chatMessage', (msg) => {
+    currentRoomState.chatLog.push(msg);
+    renderChat(currentRoomState.chatLog);
+    // Show notification if chat is closed
+    if(document.getElementById('chat-overlay').classList.contains('hidden')) {
+        document.getElementById('menu-toggle-btn').classList.add('chat-notification');
+    }
 });
 
 socket.on('attackRollResult', (data) => showRollResult(data));
