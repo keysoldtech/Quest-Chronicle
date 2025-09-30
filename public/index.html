@@ -191,7 +191,6 @@
                 
                 <div id="fixed-action-bar" class="fixed-action-bar hidden">
                     <button id="action-cancel-btn" class="btn btn-secondary hidden">Cancel Action</button>
-                    <button id="action-narrate-toggle-btn" class="btn btn-icon action-narrate-toggle-btn" title="Manual Narration ON"><span class="material-symbols-outlined">edit</span></button>
                     <button id="action-skill-challenge-btn" class="btn btn-special hidden">Challenge (1AP)</button>
                     <button id="action-guard-btn" class="btn btn-secondary">Guard (1AP)</button>
                     <button id="action-brief-respite-btn" class="btn btn-secondary">Respite (1AP)</button>
@@ -298,7 +297,6 @@
     
                 <div class="mobile-footer">
                     <div id="mobile-action-bar" class="mobile-action-bar hidden">
-                        <button id="mobile-action-narrate-toggle-btn" class="btn btn-sm btn-icon action-narrate-toggle-btn" title="Manual Narration ON"><span class="material-symbols-outlined">edit</span></button>
                         <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge</button>
                         <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard</button>
                         <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite</button>
@@ -342,22 +340,11 @@
                 <textarea id="narrative-input" class="input-field" rows="3" placeholder="e.g., I lunge forward, bringing my sword down in a wide arc... (Optional)"></textarea>
                 <div class="modal-actions">
                     <button id="narrative-cancel-btn" class="btn btn-secondary">Cancel</button>
-                    <button id="narrative-confirm-btn" class="btn btn-primary">Confirm</button>
+                    <button id="narrative-confirm-btn" class="btn btn-primary">Confirm Attack</button>
                 </div>
             </div>
         </div>
     
-        <div id="attack-confirm-modal" class="modal-overlay hidden">
-            <div class="modal-content">
-                <h2 class="panel-header">Confirm Attack</h2>
-                <p id="attack-confirm-prompt">Are you sure you want to attack?</p>
-                <div class="modal-actions">
-                    <button id="attack-confirm-cancel-btn" class="btn btn-secondary">Cancel</button>
-                    <button id="attack-confirm-confirm-btn" class="btn btn-primary">Confirm</button>
-                </div>
-            </div>
-        </div>
-
         <div id="end-turn-confirm-modal" class="modal-overlay hidden">
             <div class="modal-content">
                 <h2 class="panel-header">End Your Turn?</h2>

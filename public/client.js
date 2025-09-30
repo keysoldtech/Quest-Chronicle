@@ -12,7 +12,6 @@ let currentRoomState = {}; // The single, authoritative copy of the game state o
 let selectedGameMode = null; // For the menu screen
 let actionState = null; // Manages multi-step actions like targeting
 let gameUIInitialized = false; // Flag to ensure game listeners are only attached once
-let autoNarrate = false; // Player preference for auto-describing attacks
 let endTurnModalShownThisTurn = false; // Prevent repeated "out of AP" popups
 
 // --- 2. CORE RENDERING ENGINE ---
@@ -230,24 +229,24 @@ function renderGameplayState(myPlayer, gameState) {
         const isTargetable = actionState && (actionState.type === 'attack' || actionState.effect?.target === 'any-monster' || (actionState.ability?.target === 'monster'));
         const cardEl = createCardElement(monster, { isTargetable });
         
-        // This is the core attack logic flow
         cardEl.onclick = () => {
             if (!isMyTurn || !actionState) return;
 
             if (actionState.type === 'attack') {
                 actionState.targetId = monster.id;
-                const weapon = myPlayer.equipment.weapon || { id: 'unarmed', name: 'Fists' };
-            
-                if (autoNarrate) {
-                    const autoDesc = `${myPlayer.name} attacks ${monster.name} with ${weapon.name}.`;
-                    actionState.description = autoDesc;
-                    get('attack-confirm-prompt').innerHTML = `Attack <strong>${monster.name}</strong> with <strong>${weapon.name}</strong>?`;
-                    get('attack-confirm-modal').classList.remove('hidden');
-                } else {
-                    get('narrative-prompt').textContent = `How do you attack ${monster.name} with your ${weapon.name}?`;
-                    get('narrative-input').value = ''; 
-                    get('narrative-modal').classList.remove('hidden');
-                }
+                const weapon = myPlayer.equipment.weapon; // This is the equipped weapon object
+                const weaponName = (actionState.weaponId === 'unarmed') ? 'Fists' : weapon?.name;
+
+                if (!weaponName) return; // Safety check in case something is out of sync
+
+                // Show a single, unified confirmation/narration modal
+                const narrativeModal = get('narrative-modal');
+                narrativeModal.querySelector('.panel-header').textContent = 'Confirm Attack';
+                get('narrative-prompt').innerHTML = `Attacking <strong>${monster.name}</strong> with <strong>${weaponName}</strong>.`;
+                get('narrative-input').value = ''; // Clear previous narration
+                get('narrative-confirm-btn').textContent = 'Confirm Attack';
+                narrativeModal.classList.remove('hidden');
+
             } else if (isTargetable) {
                 // Handle targeting for abilities or cards
                 socket.emit('playerAction', { 
@@ -555,30 +554,11 @@ function initializeGameUIListeners() {
         btn.addEventListener('click', () => window.location.reload());
     });
 
-    const autoNarrateToggleBtns = document.querySelectorAll('.action-narrate-toggle-btn');
-    autoNarrateToggleBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            autoNarrate = !autoNarrate;
-            autoNarrateToggleBtns.forEach(b => {
-                b.classList.toggle('active', autoNarrate);
-                const icon = b.querySelector('.material-symbols-outlined');
-                icon.textContent = autoNarrate ? 'auto_stories' : 'edit';
-                b.title = autoNarrate ? 'Auto-Narration ON' : 'Manual Narration ON';
-            });
-            showToast(`Auto-Narration is now ${autoNarrate ? 'ON' : 'OFF'}.`, 'info', 2000);
-        });
-    });
-
     const setupModal = (modalId, confirmBtnId, cancelBtnId, onConfirm) => {
         const modal = get(modalId);
         get(confirmBtnId).addEventListener('click', () => {
-            if (!actionState && modalId !== 'end-turn-confirm-modal') return;
             onConfirm();
             modal.classList.add('hidden');
-            if (modalId !== 'end-turn-confirm-modal') {
-                 actionState = null;
-                 renderUI();
-            }
         });
         get(cancelBtnId).addEventListener('click', () => {
             modal.classList.add('hidden');
@@ -588,21 +568,18 @@ function initializeGameUIListeners() {
     };
 
     setupModal('narrative-modal', 'narrative-confirm-btn', 'narrative-cancel-btn', () => {
-        if (!actionState || actionState.type !== 'attack') return;
+        if (!actionState || actionState.type !== 'attack') {
+            actionState = null;
+            renderUI();
+            return;
+        }
         socket.emit('playerAction', {
             action: 'attack', cardId: actionState.weaponId,
             targetId: actionState.targetId,
             description: get('narrative-input').value.trim()
         });
-    });
-
-    setupModal('attack-confirm-modal', 'attack-confirm-confirm-btn', 'attack-confirm-cancel-btn', () => {
-        if (!actionState || actionState.type !== 'attack') return;
-        socket.emit('playerAction', {
-            action: 'attack', cardId: actionState.weaponId,
-            targetId: actionState.targetId,
-            description: actionState.description
-        });
+        actionState = null;
+        renderUI();
     });
 
     // Wire up the end turn modal

@@ -496,14 +496,6 @@ body {
 #action-cancel-btn { background-color: var(--color-danger); }
 #action-cancel-btn:hover { background-color: var(--color-danger-hover); }
 
-.action-narrate-toggle-btn {
-    background-color: var(--color-secondary);
-}
-.action-narrate-toggle-btn.active {
-    background-color: var(--color-dm);
-    box-shadow: 0 0 8px var(--color-dm);
-}
-
 .mobile-action-bar { 
     display: flex;
     align-items: center;
