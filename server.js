@@ -59,9 +59,16 @@ class GameManager {
         return this.rooms[roomId];
     }
     
-    emitGameState(roomId) {
-        if (this.rooms[roomId]) {
-            io.to(roomId).emit('gameStateUpdate', this.rooms[roomId]);
+    emitGameState(roomId, includeStaticData = false) {
+        const room = this.rooms[roomId];
+        if (room) {
+            // To save bandwidth, we only send the full static data on the first load.
+            // All subsequent updates omit it.
+            const payload = deepClone(room);
+            if (!includeStaticData && payload.staticDataForClient) {
+                delete payload.staticDataForClient;
+            }
+            io.to(roomId).emit('gameStateUpdate', payload);
         }
     }
 
@@ -135,6 +142,8 @@ class GameManager {
             hostId: socket.id,
             players: { [socket.id]: newPlayer },
             chatLog: [],
+            // BUG FIX: Add static data here so the first emit sends it to the client.
+            staticDataForClient: { classes: gameData.classes },
             gameState: {
                 phase: 'class_selection',
                 gameMode: gameMode || 'Beginner',
@@ -157,7 +166,8 @@ class GameManager {
         socket.join(newRoomId);
         this.socketToRoom[socket.id] = newRoomId;
     
-        this.emitGameState(newRoomId);
+        // BUG FIX: The `true` flag sends the static data.
+        this.emitGameState(newRoomId, true);
     }
     
     joinRoom(socket, { roomId, playerName }) {
@@ -172,7 +182,7 @@ class GameManager {
         socket.join(roomId);
         this.socketToRoom[socket.id] = roomId;
         
-        this.emitGameState(roomId);
+        this.emitGameState(roomId, true); // Send full state with static data to joining player
     }
 
     // --- 3.3. Game Lifecycle (The New Core Orchestrator) ---
@@ -408,6 +418,12 @@ class GameManager {
         player.currentAp = player.stats.ap;
         
         this.logEvent(roomId, `<strong>Turn ${room.gameState.turnCount}:</strong> ${player.name}'s turn begins.`, 'turn');
+        
+        // Handle start-of-turn events
+        if (player.role === 'Explorer') {
+            this.handlePlayerEventTrigger(room, player);
+        }
+
         this.emitGameState(roomId);
         await new Promise(res => setTimeout(res, 100)); // Brief delay to let client render turn change
 
@@ -431,7 +447,6 @@ class GameManager {
         room.gameState.currentPlayerIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
         if (room.gameState.currentPlayerIndex === 0) { 
              room.gameState.turnCount++;
-             // Every new round, DM might play an event
              if(Math.random() < 0.3) {
                  this.dmPlayPartyEvent(room);
              }
@@ -443,9 +458,7 @@ class GameManager {
     async handleDmTurn(room) {
         await new Promise(res => setTimeout(res, 1000));
         
-        // Main DM action logic
         if (room.gameState.board.monsters.length > 0) {
-            // Monsters attack
             for (const monster of [...room.gameState.board.monsters]) {
                if (monster.currentHp <= 0) continue;
                await new Promise(res => setTimeout(res, 1500));
@@ -455,7 +468,6 @@ class GameManager {
                }
            }
         } else {
-            // If no monsters, play a monster or a world event
              if (Math.random() < 0.75) {
                 this.dmPlayMonster(room);
             } else {
@@ -473,14 +485,21 @@ class GameManager {
         const monsters = room.gameState.board.monsters.filter(m => m.currentHp > 0);
         let actionTaken = false;
 
-        // Simple AI decision tree
-        if (player.stats.currentHp < player.stats.maxHp / 2) {
+        // Use class ability
+        const classAbility = gameData.classes[player.class]?.ability;
+        if (classAbility && player.currentAp >= classAbility.apCost) {
+            if (Math.random() < 0.3) { // 30% chance to use ability
+                this.applyEffect(room, {type: 'ability', abilityName: classAbility.name}, player, null);
+                player.currentAp -= classAbility.apCost;
+                actionTaken = true;
+            }
+        }
+        
+        if (!actionTaken && player.stats.currentHp < player.stats.maxHp / 2) {
             const healingSpell = player.hand.find(c => c.effect.type === 'heal');
             if (healingSpell && player.currentAp >= (healingSpell.apCost || 1)) {
+                 this.applyEffect(room, healingSpell.effect, player, player);
                  player.currentAp -= (healingSpell.apCost || 1);
-                 const healing = this.rollDice(healingSpell.effect.dice);
-                 player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healing);
-                 this.logEvent(room.id, `${player.name} uses ${healingSpell.name} to heal for ${healing} HP.`, 'info');
                  actionTaken = true;
             }
         }
@@ -523,58 +542,67 @@ class GameManager {
 
         const { action, cardId, targetId, description, challengeId } = data;
 
-        switch (action) {
-            case 'attack':
-                this.initiateAttack(room, { attackerId: player.id, targetId, weaponId: cardId, description });
-                break;
-            case 'guard':
-                const guardCost = gameData.actionCosts.guard;
-                if (player.currentAp >= guardCost) {
-                    player.currentAp -= guardCost;
+        const actionHandlers = {
+            'attack': () => this.initiateAttack(room, { attackerId: player.id, targetId, weaponId: cardId, description }),
+            'guard': () => {
+                if (player.currentAp >= gameData.actionCosts.guard) {
+                    player.currentAp -= gameData.actionCosts.guard;
                     player.stats.shieldHp += (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
                     this.logEvent(room.id, `${player.name} takes a defensive stance.`, 'info');
-                    this.emitGameState(room.id);
                 }
-                break;
-            case 'briefRespite':
-                 const respiteCost = gameData.actionCosts.briefRespite;
-                 if (player.currentAp >= respiteCost) {
-                     player.currentAp -= respiteCost;
-                     const healing = this.rollDice(`${gameData.classes[player.class].healthDice}d4`);
-                     player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healing);
-                     this.logEvent(room.id, `${player.name} takes a brief respite, healing for ${healing} HP.`, 'info');
-                     this.emitGameState(room.id);
+            },
+            'briefRespite': () => {
+                if (player.currentAp >= gameData.actionCosts.briefRespite) {
+                    player.currentAp -= gameData.actionCosts.briefRespite;
+                    this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d4` }, player, player);
+                    this.logEvent(room.id, `${player.name} takes a brief respite.`, 'info');
+                }
+            },
+            'fullRest': () => {
+                 if (player.currentAp >= gameData.actionCosts.fullRest) {
+                     player.currentAp -= gameData.actionCosts.fullRest;
+                     this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d8` }, player, player);
+                     this.logEvent(room.id, `${player.name} takes a full rest.`, 'info');
                  }
-                 break;
-            case 'fullRest':
-                 const restCost = gameData.actionCosts.fullRest;
-                 if (player.currentAp >= restCost) {
-                     player.currentAp -= restCost;
-                     const healing = this.rollDice(`${gameData.classes[player.class].healthDice}d8`);
-                     player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healing);
-                     this.logEvent(room.id, `${player.name} takes a full rest, healing for ${healing} HP.`, 'info');
-                     this.emitGameState(room.id);
-                 }
-                 break;
-            case 'skillChallenge':
-                 this.resolveSkillChallenge(room, player, challengeId);
-                 break;
+            },
+            'useCard': () => {
+                const cardIndex = player.hand.findIndex(c => c.id === cardId);
+                if (cardIndex === -1) return;
+                const card = player.hand[cardIndex];
+                if (player.currentAp >= (card.apCost || 1)) {
+                    player.currentAp -= (card.apCost || 1);
+                    player.hand.splice(cardIndex, 1);
+                    const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
+                    this.applyEffect(room, card.effect, player, target);
+                    this.logEvent(room.id, `${player.name} uses ${card.name}.`, 'action');
+                }
+            },
+            'useAbility': () => {
+                const ability = gameData.classes[player.class]?.ability;
+                if (ability && player.currentAp >= ability.apCost) {
+                    player.currentAp -= ability.apCost;
+                    const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
+                    this.applyEffect(room, {type: 'ability', abilityName: ability.name, ...ability}, player, target);
+                    this.logEvent(room.id, `${player.name} uses ${ability.name}!`, 'action');
+                }
+            },
+            'skillChallenge': () => this.resolveSkillChallenge(room, player, challengeId),
+        };
+
+        if (actionHandlers[action]) {
+            actionHandlers[action]();
+            this.emitGameState(room.id);
         }
     }
     
     async initiateAttack(room, { attackerId, targetId, weaponId, description, isMonster = false }) {
         const attacker = isMonster ? room.gameState.board.monsters.find(m => m.id === attackerId) : room.players[attackerId];
-        let target;
-        if(isMonster){
-            target = room.players[targetId]
-        } else {
-             target = room.gameState.board.monsters.find(m => m.id === targetId);
-        }
+        const target = isMonster ? room.players[targetId] : room.gameState.board.monsters.find(m => m.id === targetId);
     
         if (!attacker || !target) return;
     
         const isUnarmed = weaponId === 'unarmed';
-        const weapon = isUnarmed ? null : attacker.equipment?.weapon;
+        const weapon = isUnarmed ? null : (isMonster ? null : attacker.equipment?.weapon);
         if (!isMonster && !isUnarmed && (!weapon || weapon.id !== weaponId)) return;
     
         const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
@@ -591,7 +619,7 @@ class GameManager {
     
         const d20 = this.rollDice('1d20');
         const toHitBonus = isMonster ? attacker.attackBonus : (isUnarmed ? attacker.stats.str : (attacker.stats.damageBonus + (weapon.range === 'ranged' ? attacker.stats.dex : attacker.stats.str)));
-        const targetAC = isMonster ? target.stats.shieldBonus + 10 : target.requiredRollToHit;
+        const targetAC = isMonster ? (target.stats.shieldBonus + 10) : target.requiredRollToHit;
         const isCrit = d20 === 20;
         const isMiss = d20 === 1;
         const hit = isCrit || (!isMiss && (d20 + toHitBonus) >= targetAC);
@@ -612,7 +640,13 @@ class GameManager {
             let damageRoll = this.rollDice(damageDice);
             const damageBonus = isMonster ? 0 : (isUnarmed ? attacker.stats.str : (attacker.stats.damageBonus + (weapon.range === 'ranged' ? 0 : attacker.stats.str)));
             let totalDamage = damageRoll + damageBonus;
-            if (isCrit) totalDamage *= 2;
+            
+            if (isCrit) {
+                totalDamage *= 2;
+                if (!isMonster && weapon?.effect?.critBonusDice) {
+                    totalDamage += this.rollDice(weapon.effect.critBonusDice);
+                }
+            }
     
             this.emitToRoom(room.id, 'damageRollResult', {
                 attacker: { id: attacker.id, name: attacker.name },
@@ -624,20 +658,62 @@ class GameManager {
             });
             await new Promise(res => setTimeout(res, 2500));
             
-            this.logEvent(room.id, `<span class="log-hit">${isCrit ? 'CRITICAL HIT!' : 'HIT!'}</span> Deals <strong>${totalDamage}</strong> damage.`, 'damage');
-    
-            if (isMonster) { // Monster attacking player
-                this._applyDamageToPlayer(target, totalDamage);
-            } else { // Player attacking monster
-                target.currentHp -= totalDamage;
-                if (target.currentHp <= 0) {
-                    this._handleMonsterDefeat(room, target.id, target.name);
-                }
-            }
+            this.applyEffect(room, { type: 'damage', value: totalDamage }, attacker, target, isCrit);
         } else {
             this.logEvent(room.id, `<span class="log-miss">MISS!</span>`, 'info');
         }
         this.emitGameState(room.id);
+    }
+
+    applyEffect(room, effect, source, target, isCrit = false) {
+        if (!effect || !source) return;
+
+        const logHitOrHeal = (value, type, targetName) => {
+            const message = type === 'damage' 
+                ? `<span class="log-hit">${isCrit ? 'CRITICAL HIT!' : 'HIT!'}</span> Deals <strong>${value}</strong> damage to ${targetName}.`
+                : `Heals <strong>${value}</strong> HP for ${targetName}.`;
+            this.logEvent(room.id, message, 'damage');
+        };
+
+        switch (effect.type) {
+            case 'damage': {
+                const damageValue = effect.value !== undefined ? effect.value : this.rollDice(effect.dice);
+                logHitOrHeal(damageValue, 'damage', target.name);
+                if (target.isNpc) { // Monster
+                    target.currentHp -= damageValue;
+                    if (target.currentHp <= 0) this._handleMonsterDefeat(room, target.id, target.name);
+                } else { // Player
+                    this._applyDamageToPlayer(target, damageValue);
+                }
+                break;
+            }
+            case 'heal': {
+                const healValue = this.rollDice(effect.dice);
+                target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healValue);
+                logHitOrHeal(healValue, 'heal', target.name);
+                break;
+            }
+            case 'buff':
+            case 'debuff':
+            case 'stat_modifier': {
+                target.statusEffects.push({
+                    id: `eff-${Date.now()}`,
+                    name: effect.name || 'Stat Change',
+                    ...effect
+                });
+                target.stats = this.calculatePlayerStats(target);
+                break;
+            }
+            case 'ability': {
+                // Handle specific class abilities
+                if (effect.abilityName === 'Mystic Recall') {
+                    const card = this.drawCardFromDeck(room.id, 'spell');
+                    if (card) source.hand.push(card);
+                }
+                // Other abilities can be added here
+                break;
+            }
+        }
     }
     
     _handleMonsterDefeat(room, monsterId, monsterName) {
@@ -652,9 +728,7 @@ class GameManager {
             }
         }
         
-        // Check if all monsters are defeated
         if (room.gameState.board.monsters.length === 0) {
-            // Potentially trigger a skill challenge
             if (Math.random() < 0.4) {
                 this.dmTriggerSkillChallenge(room);
             }
@@ -727,7 +801,19 @@ class GameManager {
             room.gameState.worldEvents.currentEvent = eventCard;
             room.gameState.worldEvents.duration = 2; // Example duration
             this.logEvent(room.id, `A world event occurs: <strong>${eventCard.name}</strong>. ${eventCard.description}`, 'event');
+            // Apply mechanical effects
+            Object.values(room.players).forEach(p => this.applyEffect(room, eventCard.effect, null, p));
             this.emitGameState(room.id);
+        }
+    }
+
+    handlePlayerEventTrigger(room, player) {
+        if (Math.random() < 0.15) { // 15% chance for a player event
+            const eventCard = this.drawCardFromDeck(room.id, 'playerEvent');
+            if (eventCard) {
+                this.logEvent(room.id, `An event befalls ${player.name}: <strong>${eventCard.name}</strong>. ${eventCard.outcome}`, 'event');
+                this.applyEffect(room, eventCard.effect, null, player);
+            }
         }
     }
 
@@ -736,17 +822,8 @@ class GameManager {
         if (eventCard) {
             room.gameState.currentPartyEvent = eventCard;
             this.logEvent(room.id, `A party event occurs: <strong>${eventCard.name}</strong>. ${eventCard.outcome}`, 'event');
-            // Apply effect
-            Object.values(room.players).forEach(p => {
-                if(p.role === 'Explorer') {
-                    if (eventCard.effect.type === 'heal') {
-                        const healing = this.rollDice(eventCard.effect.dice);
-                        p.stats.currentHp = Math.min(p.stats.maxHp, p.stats.currentHp + healing);
-                    }
-                    if (eventCard.effect.type === 'stat_change') {
-                        p[eventCard.effect.stat] = (p[eventCard.effect.stat] || 0) + eventCard.effect.value;
-                    }
-                }
+            Object.values(room.players).filter(p => p.role === 'Explorer').forEach(p => {
+                this.applyEffect(room, eventCard.effect, null, p);
             });
             this.emitGameState(room.id);
         }
@@ -781,7 +858,7 @@ class GameManager {
         });
 
         setTimeout(() => {
-            room.gameState.skillChallenge = null; // Challenge is resolved
+            room.gameState.skillChallenge = null;
             if(success) {
                 this.logEvent(room.id, challenge.success.message, 'loot');
                  if(challenge.success.reward.type === 'loot') {
@@ -839,8 +916,6 @@ class GameManager {
         delete this.socketToRoom[socket.id];
 
         if (Object.keys(room.players).length === 0 || room.hostId === socket.id) {
-            // If the host leaves or the room is empty, close it.
-            this.logEvent(roomId, `The game room has been closed.`);
             delete this.rooms[roomId];
         } else {
             this.emitGameState(roomId);
