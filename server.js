@@ -170,10 +170,12 @@ class GameManager {
     joinRoom(socket, { roomId, playerName }) {
         const room = this.rooms[roomId];
         if (!room) return socket.emit('actionError', 'Room not found.');
-
-        // LATE JOIN LOGIC: If a game is in progress, join as a spectator.
-        const humanPlayerExists = Object.values(room.players).some(p => !p.isNpc && !p.disconnected);
-        if (humanPlayerExists && room.gameState.phase !== 'class_selection') {
+    
+        const isGameInProgress = room.gameState.phase !== 'class_selection';
+        const humanPlayersCount = Object.values(room.players).filter(p => !p.isNpc).length;
+    
+        // Game is in progress, join as a spectator
+        if (isGameInProgress) {
             const newSpectator = this.createPlayerObject(socket.id, playerName);
             newSpectator.role = null;
             newSpectator.status = 'spectator';
@@ -184,12 +186,14 @@ class GameManager {
             this.emitGameState(roomId);
             return;
         }
-
-        // Standard join logic if no human player exists yet.
-        if (humanPlayerExists) {
-            return socket.emit('actionError', 'This game already has a player.');
+    
+        // Game is in lobby (class_selection) phase
+        // Check if the lobby is full (e.g., max 1 human player for this game version)
+        if (humanPlayersCount >= 1) {
+             return socket.emit('actionError', 'This game already has a player.');
         }
-
+    
+        // Lobby is not full, join as an explorer
         const newPlayer = this.createPlayerObject(socket.id, playerName);
         newPlayer.role = 'Explorer';
         room.players[socket.id] = newPlayer;
@@ -1009,7 +1013,7 @@ class GameManager {
 
         if (ability.cost && ability.cost.type === 'discard') {
             const discardedCard = this._discardCardFromHand(player, ability.cost.cardType);
-            if (!discardedCard) {
+            if (!discardCard) {
                 return socket.emit('actionError', `You need to discard a ${ability.cost.cardType} card.`);
             }
             room.chatLog.push({ type: 'system', text: `${player.name} discards ${discardedCard.name} to use ${ability.name}.` });
