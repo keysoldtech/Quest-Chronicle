@@ -45,6 +45,11 @@ function deepClone(obj) {
     return JSON.parse(JSON.stringify(obj));
 }
 
+function getDialogue(type) {
+    const lines = gameData.npcDialogue.explorer[type];
+    return lines ? lines[Math.floor(Math.random() * lines.length)] : '';
+}
+
 // --- 3. GAME STATE MANAGEMENT (GameManager Class) ---
 class GameManager {
     // --- 3.1. Constructor & Core Utilities ---
@@ -178,7 +183,7 @@ class GameManager {
         newPlayer.role = 'Explorer';
         room.players[socket.id] = newPlayer;
         socket.join(roomId);
-        this.socketToRoom[socket.id] = roomId;
+        this.socketToRoom[socket.id] = newPlayer.id; // Correctly map socket id to player id
         
         this.emitGameState(roomId, true); // Send full state with static data to joining player
     }
@@ -418,6 +423,7 @@ class GameManager {
         
         player.equipment[itemType] = cardToEquip;
         player.stats = this.calculatePlayerStats(player);
+        this.logEvent(room.id, `${player.name} equips ${cardToEquip.name}.`, 'system');
         this.emitGameState(room.id);
     }
     
@@ -452,6 +458,8 @@ class GameManager {
             } catch (error) {
                 console.error(`Unhandled error during NPC turn for ${player.name}:`, error);
                 this.logEvent(room.id, `A critical error occurred during ${player.name}'s turn. Advancing turn.`, 'error');
+            } finally {
+                // Ensure turn always advances
                 await this.advanceToNextTurn(room.id);
             }
         }
@@ -475,6 +483,11 @@ class GameManager {
         const previousPlayer = room.players[previousPlayerId];
         if (previousPlayer) {
             previousPlayer.stats.shieldHp = 0;
+            // Also handle expiring status effects
+            previousPlayer.statusEffects = previousPlayer.statusEffects.filter(eff => {
+                if(eff.duration) eff.duration--;
+                return !eff.duration || eff.duration > 0;
+            });
         }
     
         // Advance to the next player in the turn order
@@ -483,6 +496,7 @@ class GameManager {
         // Check if it's the start of a new round (DM's turn)
         if (room.gameState.currentPlayerIndex === 0) { 
             room.gameState.turnCount++;
+            this.logEvent(room.id, `A new round begins.`, 'system');
             // On subsequent rounds, the DM might play a party event
             if (room.gameState.turnCount > 1 && Math.random() < 0.3) {
                 this.dmPlayPartyEvent(room);
@@ -496,99 +510,117 @@ class GameManager {
     async handleDmTurn(room) {
         await new Promise(res => setTimeout(res, 1000));
         
-        // Special logic for the very first turn of the game
-        if (room.gameState.turnCount === 1) {
-            const actionRoll = Math.random();
-            if (actionRoll < 0.33) {
+        // Priority 1: If the board is empty, summon a monster to apply pressure.
+        if (room.gameState.board.monsters.length === 0 && room.gameState.turnCount > 1) {
+            this.logEvent(room.id, "The DM senses a lull and calls forth a new challenger!", 'event');
+            this.dmPlayMonster(room);
+            await new Promise(res => setTimeout(res, 1500));
+            return; // End DM turn after summoning to an empty board
+        }
+
+        // Priority 2: Have any existing monsters attack
+        if (room.gameState.board.monsters.length > 0) {
+            this.logEvent(room.id, `The monsters retaliate!`, 'event');
+            for (const monster of [...room.gameState.board.monsters]) {
+               if (monster.currentHp <= 0) continue;
+               await new Promise(res => setTimeout(res, 1500));
+               const targetId = this._chooseMonsterTarget(room);
+               if (targetId) {
+                   await this.initiateAttack(room, { attackerId: monster.id, targetId: targetId, isMonster: true });
+               }
+           }
+        }
+
+        // Priority 3: Decide the DM's main environmental/summoning action
+        await new Promise(res => setTimeout(res, 1000));
+        const actionRoll = Math.random();
+
+        if (room.gameState.turnCount === 1) { // Special first turn logic
+             if (actionRoll < 0.6) {
                 this.logEvent(room.id, "The DM prepares to unleash a monster...", 'event');
                 this.dmPlayMonster(room);
-            } else if (actionRoll < 0.66) {
+            } else {
                 this.logEvent(room.id, "The DM consults the winds of fate...", 'event');
                 this.dmPlayWorldEvent(room);
-            } else {
-                this.logEvent(room.id, "A dark omen! The DM unleashes a monster and a world event!", 'event');
-                this.dmPlayMonster(room);
-                await new Promise(res => setTimeout(res, 1000)); // Pause between actions
-                this.dmPlayWorldEvent(room);
             }
-        } else {
-            // Standard DM turn logic for subsequent turns
-            if (room.gameState.board.monsters.length > 0) {
-                for (const monster of [...room.gameState.board.monsters]) {
-                   if (monster.currentHp <= 0) continue;
-                   await new Promise(res => setTimeout(res, 1500));
-                   const targetId = this._chooseMonsterTarget(room);
-                   if (targetId) {
-                       await this.initiateAttack(room, { attackerId: monster.id, targetId: targetId, isMonster: true });
-                   }
-               }
+        } else { // Standard logic for subsequent turns
+            if (room.gameState.board.monsters.length < 4 && actionRoll < 0.75) {
+                this.logEvent(room.id, `The DM calls for reinforcements...`, 'event');
+                this.dmPlayMonster(room);
             } else {
-                 if (Math.random() < 0.75) {
-                    this.dmPlayMonster(room);
-                } else {
-                    this.dmPlayWorldEvent(room);
-                }
+                this.logEvent(room.id, `The environment shifts...`, 'event');
+                this.dmPlayWorldEvent(room);
             }
         }
         
         await new Promise(res => setTimeout(res, 1500));
-        await this.advanceToNextTurn(room.id);
     }
     
      async handleNpcExplorerTurn(room, player) {
-        try {
-            await new Promise(res => setTimeout(res, 1000));
+        await new Promise(res => setTimeout(res, 1000));
+        let ap = player.currentAp;
+
+        while (ap > 0) {
             const monsters = room.gameState.board.monsters.filter(m => m.currentHp > 0);
-            let actionTaken = false;
-    
-            // Use class ability
+            let actionTakenThisLoop = false;
+
+            // Priority 1: Use ability if advantageous
             const classAbility = gameData.classes[player.class]?.ability;
-            if (classAbility && player.currentAp >= classAbility.apCost) {
-                if (Math.random() < 0.3) { // 30% chance to use ability
-                    this.logEvent(room.id, `${player.name} uses their ability: ${classAbility.name}!`, 'action');
-                    this.applyEffect(room, {type: 'ability', abilityName: classAbility.name}, player, null);
-                    player.currentAp -= classAbility.apCost;
-                    actionTaken = true;
-                }
+            if (classAbility && ap >= classAbility.apCost && Math.random() < 0.3) {
+                this.logEvent(room.id, `${player.name} uses their ability: ${classAbility.name}!`, 'action');
+                this.applyEffect(room, {type: 'ability', abilityName: classAbility.name}, player, null);
+                ap -= classAbility.apCost;
+                actionTakenThisLoop = true;
             }
-            
-            if (!actionTaken && player.stats.currentHp < player.stats.maxHp / 2) {
+
+            // Priority 2: Heal if low on health
+            if (!actionTakenThisLoop && player.stats.currentHp < player.stats.maxHp / 2) {
                 const healingSpell = player.hand.find(c => c.effect.type === 'heal');
-                if (healingSpell && player.currentAp >= (healingSpell.apCost || 1)) {
-                     this.logEvent(room.id, `${player.name} uses ${healingSpell.name} to heal themselves.`, 'action');
+                if (healingSpell && ap >= (healingSpell.apCost || 1)) {
+                     this.logEvent(room.id, `${player.name} exclaims, "${getDialogue('heal')}"`, 'action');
                      this.applyEffect(room, healingSpell.effect, player, player);
-                     player.currentAp -= (healingSpell.apCost || 1);
+                     ap -= (healingSpell.apCost || 1);
                      player.hand.splice(player.hand.findIndex(c => c.id === healingSpell.id), 1);
-                     actionTaken = true;
+                     actionTakenThisLoop = true;
                 }
             }
-    
-            if (!actionTaken && monsters.length > 0) {
+
+            // Priority 3: Attack if there are monsters
+            if (!actionTakenThisLoop && monsters.length > 0) {
                 const weakestMonster = monsters.sort((a, b) => a.currentHp - b.currentHp)[0];
                 const weapon = player.equipment.weapon;
-    
-                if (weapon && player.currentAp >= (weapon.apCost || 2)) {
+                const weaponApCost = weapon?.apCost || 2;
+                const unarmedApCost = 1;
+
+                if (weapon && ap >= weaponApCost) {
+                     this.logEvent(room.id, `${player.name} shouts, "${getDialogue('attack')}"`, 'system');
                      await this.initiateAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: weapon.id });
-                     actionTaken = true;
-                } else if (player.currentAp >= 1) { 
+                     ap -= weaponApCost;
+                     actionTakenThisLoop = true;
+                } else if (ap >= unarmedApCost) { 
+                     this.logEvent(room.id, `${player.name} shouts, "${getDialogue('attack')}"`, 'system');
                      await this.initiateAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: 'unarmed' });
-                     actionTaken = true;
+                     ap -= unarmedApCost;
+                     actionTakenThisLoop = true;
                 }
             } 
             
-            if (!actionTaken && player.currentAp >= 1) {
-                 player.currentAp -= 1;
+            // Default Action: Guard if nothing else to do
+            if (!actionTakenThisLoop && ap >= 1) {
+                 ap -= 1;
                  player.stats.shieldHp += (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
-                 this.logEvent(room.id, `${player.name} takes a defensive stance.`, 'info');
+                 this.logEvent(room.id, `${player.name} takes a defensive stance, gaining ${player.stats.shieldHp} shield.`, 'info');
+                 actionTakenThisLoop = true;
+            }
+
+            // If no action could be taken, break the loop to prevent infinite loops
+            if (!actionTakenThisLoop) {
+                break;
             }
             
+            player.currentAp = ap;
             this.emitGameState(room.id);
             await new Promise(res => setTimeout(res, 1000));
-        } catch (error) {
-            console.error(`Error during NPC turn for ${player.name}:`, error);
-            this.logEvent(room.id, `An error occurred during ${player.name}'s turn. Advancing to next turn.`, 'error');
-        } finally {
-            await this.advanceToNextTurn(room.id);
         }
     }
 
@@ -610,22 +642,23 @@ class GameManager {
             'guard': () => {
                 if (player.currentAp >= gameData.actionCosts.guard) {
                     player.currentAp -= gameData.actionCosts.guard;
-                    player.stats.shieldHp += (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
-                    this.logEvent(room.id, `${player.name} takes a defensive stance.`, 'info');
+                    const shieldGain = (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
+                    player.stats.shieldHp += shieldGain;
+                    this.logEvent(room.id, `${player.name} takes a defensive stance, gaining ${shieldGain} shield.`, 'info');
                 }
             },
             'briefRespite': () => {
                 if (player.currentAp >= gameData.actionCosts.briefRespite) {
                     player.currentAp -= gameData.actionCosts.briefRespite;
+                    this.logEvent(room.id, `${player.name} takes a brief respite to recover.`, 'info');
                     this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d4` }, player, player);
-                    this.logEvent(room.id, `${player.name} takes a brief respite.`, 'info');
                 }
             },
             'fullRest': () => {
                  if (player.currentAp >= gameData.actionCosts.fullRest) {
                      player.currentAp -= gameData.actionCosts.fullRest;
+                     this.logEvent(room.id, `${player.name} takes a full rest to recover.`, 'info');
                      this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d8` }, player, player);
-                     this.logEvent(room.id, `${player.name} takes a full rest.`, 'info');
                  }
             },
             'useCard': () => {
@@ -636,9 +669,17 @@ class GameManager {
                     player.currentAp -= (card.apCost || 1);
                     player.hand.splice(cardIndex, 1);
                     const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
-                    this.applyEffect(room, card.effect, player, target);
                     this.logEvent(room.id, `${player.name} uses ${card.name}.`, 'action');
+                    this.applyEffect(room, card.effect, player, target);
                 }
+            },
+            'claimLoot': () => {
+                const lootIndex = room.gameState.lootPool.findIndex(c => c.id === cardId);
+                if (lootIndex === -1) return;
+                
+                const lootCard = room.gameState.lootPool.splice(lootIndex, 1)[0];
+                player.hand.push(lootCard);
+                this.logEvent(room.id, `${player.name} claims the ${lootCard.name}!`, 'loot');
             },
             'useAbility': () => {
                 const ability = gameData.classes[player.class]?.ability;
@@ -658,13 +699,13 @@ class GameManager {
                     }
             
                     player.hand.splice(cardToDiscardIndex, 1); // Discard the card
-                    this.logEvent(room.id, `${player.name} discards ${cardToDiscard.name}.`, 'info');
+                    this.logEvent(room.id, `${player.name} discards ${cardToDiscard.name} to power their ability.`, 'info');
                 }
             
                 player.currentAp -= ability.apCost;
                 const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
-                this.applyEffect(room, {type: 'ability', abilityName: ability.name, ...ability}, player, target);
                 this.logEvent(room.id, `${player.name} uses ${ability.name}!`, 'action');
+                this.applyEffect(room, {type: 'ability', abilityName: ability.name, ...ability}, player, target);
             },
             'skillChallenge': () => this.resolveSkillChallenge(room, player, challengeId),
         };
@@ -697,11 +738,21 @@ class GameManager {
         this.emitGameState(room.id);
         await new Promise(res => setTimeout(res, 500));
     
-        const d20 = this.rollDice('1d20');
+        let d20 = this.rollDice('1d20');
+        
+        // Handle Divine Aid buff
+        const divineAidBuff = !isMonster ? attacker.statusEffects.find(e => e.type === 'buff_next_roll') : null;
+        if (divineAidBuff) {
+            const bonusRoll = this.rollDice(divineAidBuff.bonuses.dice);
+            d20 += bonusRoll;
+            this.logEvent(room.id, `${attacker.name}'s Divine Aid adds a +${bonusRoll} to their roll!`, 'info');
+            attacker.statusEffects = attacker.statusEffects.filter(e => e.id !== divineAidBuff.id); // Consume buff
+        }
+        
         const toHitBonus = isMonster ? attacker.attackBonus : (isUnarmed ? attacker.stats.str : (attacker.stats.damageBonus + (weapon.range === 'ranged' ? attacker.stats.dex : attacker.stats.str)));
         const targetAC = isMonster ? (target.stats.shieldBonus + 10) : target.requiredRollToHit;
-        const isCrit = d20 === 20;
-        const isMiss = d20 === 1;
+        const isCrit = d20 >= 20; // Allow for buffed rolls to crit
+        const isMiss = d20 <= 1; // Only a natural 1 is a miss
         const hit = isCrit || (!isMiss && (d20 + toHitBonus) >= targetAC);
     
         this.emitToRoom(room.id, 'attackRollResult', {
@@ -728,12 +779,18 @@ class GameManager {
                 }
             }
     
-            // Check for and apply temporary attack buffs
+            // Handle temp attack buffs (Unchecked Assault, Hunter's Mark, etc.)
             const attackBuff = !isMonster ? attacker.statusEffects.find(e => e.type === 'buff_next_attack') : null;
             if (attackBuff) {
                 totalDamage += attackBuff.bonuses.damageBonus;
                 this.logEvent(room.id, `${attacker.name}'s ${attackBuff.name} adds +${attackBuff.bonuses.damageBonus} damage!`, 'info');
                 attacker.statusEffects = attacker.statusEffects.filter(e => e.id !== attackBuff.id); // Consume the buff
+            }
+
+            const markDebuff = target.statusEffects.find(e => e.type === 'debuff_marked');
+            if(markDebuff){
+                totalDamage += markDebuff.bonuses.damageTaken;
+                this.logEvent(room.id, `The target is marked and takes +${markDebuff.bonuses.damageTaken} extra damage!`, 'info');
             }
 
             this.emitToRoom(room.id, 'damageRollResult', {
@@ -748,7 +805,7 @@ class GameManager {
             
             this.applyEffect(room, { type: 'damage', value: totalDamage }, attacker, target, isCrit);
         } else {
-            this.logEvent(room.id, `<span class="log-miss">MISS!</span>`, 'info');
+            this.logEvent(room.id, `${attacker.name}'s attack against ${target.name} <span class="log-miss">MISSES!</span>`, 'info');
         }
         this.emitGameState(room.id);
     }
@@ -758,8 +815,8 @@ class GameManager {
 
         const logHitOrHeal = (value, type, targetName) => {
             const message = type === 'damage' 
-                ? `<span class="log-hit">${isCrit ? 'CRITICAL HIT!' : 'HIT!'}</span> Deals <strong>${value}</strong> damage to ${targetName}.`
-                : `Heals <strong>${value}</strong> HP for ${targetName}.`;
+                ? `${source.name} deals <strong>${value}</strong> damage to ${targetName}. <span class="log-hit">${isCrit ? 'CRITICAL!' : ''}</span>`
+                : `${source.name} heals <strong>${value}</strong> HP for ${targetName}.`;
             this.logEvent(room.id, message, 'damage');
         };
 
@@ -767,7 +824,7 @@ class GameManager {
             case 'damage': {
                 const damageValue = effect.value !== undefined ? effect.value : this.rollDice(effect.dice);
                 logHitOrHeal(damageValue, 'damage', target.name);
-                if (target.isNpc) { // Monster
+                if (target.type === 'Monster') {
                     target.currentHp -= damageValue;
                     if (target.currentHp <= 0) this._handleMonsterDefeat(room, target.id, target.name);
                 } else { // Player
@@ -789,13 +846,17 @@ class GameManager {
                     name: effect.name || 'Stat Change',
                     ...effect
                 });
+                this.logEvent(room.id, `${target.name} is affected by ${effect.name || 'a status effect'}.`, 'info');
                 target.stats = this.calculatePlayerStats(target);
                 break;
             }
             case 'ability': {
                 if (effect.abilityName === 'Mystic Recall') {
                     const card = this.drawCardFromDeck(room.id, 'spell', source.class);
-                    if (card) source.hand.push(card);
+                    if (card) {
+                        source.hand.push(card);
+                        this.logEvent(room.id, `${source.name} recalls a new spell: ${card.name}.`, 'info');
+                    }
                 }
                 if (effect.abilityName === 'Unchecked Assault') {
                     source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Unchecked Assault', type: 'buff_next_attack', bonuses: { damageBonus: 6 }, duration: 1 });
@@ -804,6 +865,18 @@ class GameManager {
                 if (effect.abilityName === 'Weapon Surge') {
                     source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Weapon Surge', type: 'buff_next_attack', bonuses: { damageBonus: 4 }, duration: 1 });
                     this.logEvent(room.id, `${source.name} is empowered for their next attack!`, 'info');
+                }
+                if(effect.abilityName === 'Divine Aid') {
+                    source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Divine Aid', type: 'buff_next_roll', bonuses: { dice: '1d4' }, duration: 1 });
+                    this.logEvent(room.id, `${source.name} is guided by a divine presence for their next roll.`, 'info');
+                }
+                if(effect.abilityName === 'Hunters Mark' && target) {
+                    target.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Hunters Mark', type: 'debuff_marked', bonuses: { damageTaken: 2 }, duration: 2 });
+                     this.logEvent(room.id, `${target.name} has been marked by ${source.name}!`, 'info');
+                }
+                if(effect.abilityName === 'Evasion') {
+                    source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Evasion', type: 'buff_evasion', duration: 2 });
+                    this.logEvent(room.id, `${source.name} becomes preternaturally elusive.`, 'info');
                 }
                 break;
             }
@@ -823,6 +896,7 @@ class GameManager {
         }
         
         if (room.gameState.board.monsters.length === 0) {
+            this.logEvent(room.id, `All monsters have been defeated!`, 'system');
             if (Math.random() < 0.4) {
                 this.dmTriggerSkillChallenge(room);
             }
@@ -863,6 +937,9 @@ class GameManager {
 
     _applyDamageToPlayer(player, damage) {
         const shieldedDamage = Math.min(player.stats.shieldHp, damage);
+        if (shieldedDamage > 0) {
+            this.logEvent(this.findRoomBySocket({ id: player.id })?.id, `${player.name}'s shield absorbs ${shieldedDamage} damage.`, 'info');
+        }
         player.stats.shieldHp -= shieldedDamage;
         damage -= shieldedDamage;
         player.stats.currentHp -= damage;
@@ -1009,8 +1086,18 @@ class GameManager {
         delete room.players[socket.id];
         delete this.socketToRoom[socket.id];
 
-        if (Object.keys(room.players).length === 0 || room.hostId === socket.id) {
+        if (Object.keys(room.players).filter(id => !room.players[id].isNpc).length === 0) {
+            // If all human players are gone, delete the room
+            console.log(`Room ${roomId} is empty. Deleting.`);
             delete this.rooms[roomId];
+        } else if (room.hostId === socket.id) {
+            // If the host disconnects, assign a new host
+            const newHost = Object.values(room.players).find(p => !p.isNpc);
+            if(newHost) {
+                room.hostId = newHost.id;
+                this.logEvent(roomId, `${newHost.name} is the new host.`);
+            }
+            this.emitGameState(roomId);
         } else {
             this.emitGameState(roomId);
         }
