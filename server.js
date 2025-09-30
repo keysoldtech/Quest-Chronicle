@@ -188,9 +188,10 @@ class GameManager {
         }
     
         // Game is in lobby (class_selection) phase
-        // Check if the lobby is full (e.g., max 1 human player for this game version)
-        if (humanPlayersCount >= 1) {
-             return socket.emit('actionError', 'This game already has a player.');
+        // FIX: Allow multiple players (e.g., up to 4) to join the lobby.
+        const MAX_PLAYERS = 4;
+        if (humanPlayersCount >= MAX_PLAYERS) {
+             return socket.emit('actionError', 'This game lobby is full.');
         }
     
         // Lobby is not full, join as an explorer
