@@ -226,17 +226,17 @@ const partyEventCards = [
 // --- 8.1. All Monsters List ---
 const allMonsters = {
     // Tier 1
-    goblin: { name: "Goblin", type: "Monster", maxHp: 10, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
-    giantRat: { name: "Giant Rat", type: "Monster", maxHp: 8, attackBonus: 3, requiredRollToHit: 12, effect: { dice: "1d4" }, ap: 1 },
-    skeleton: { name: "Skeleton", type: "Monster", maxHp: 18, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
+    goblin: { name: "Goblin", type: "Monster", maxHp: 40, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
+    giantRat: { name: "Giant Rat", type: "Monster", maxHp: 38, attackBonus: 3, requiredRollToHit: 12, effect: { dice: "1d4" }, ap: 1 },
+    skeleton: { name: "Skeleton", type: "Monster", maxHp: 48, attackBonus: 4, requiredRollToHit: 13, effect: { dice: "1d6" }, ap: 1 },
     // Tier 2
-    orc: { name: "Orc", type: "Monster", maxHp: 22, attackBonus: 5, requiredRollToHit: 13, effect: { dice: "1d12" }, ap: 2 },
-    hobgoblin: { name: "Hobgoblin", type: "Monster", maxHp: 16, attackBonus: 3, requiredRollToHit: 18, effect: { dice: "1d8" }, ap: 2 },
-    bugbear: { name: "Bugbear", type: "Monster", maxHp: 35, attackBonus: 4, requiredRollToHit: 16, effect: { dice: "2d8" }, ap: 1 },
+    orc: { name: "Orc", type: "Monster", maxHp: 52, attackBonus: 5, requiredRollToHit: 13, effect: { dice: "1d12" }, ap: 2 },
+    hobgoblin: { name: "Hobgoblin", type: "Monster", maxHp: 46, attackBonus: 3, requiredRollToHit: 18, effect: { dice: "1d8" }, ap: 2 },
+    bugbear: { name: "Bugbear", type: "Monster", maxHp: 65, attackBonus: 4, requiredRollToHit: 16, effect: { dice: "2d8" }, ap: 1 },
     // Tier 3
-    troll: { name: "Troll", type: "Monster", maxHp: 100, attackBonus: 7, requiredRollToHit: 15, effect: { dice: "2d6" }, ap: 3 },
-    ogre: { name: "Ogre", type: "Monster", maxHp: 75, attackBonus: 6, requiredRollToHit: 11, effect: { dice: "2d8" }, ap: 2 },
-    beholder: { name: "Beholder", type: "Monster", maxHp: 220, attackBonus: 5, requiredRollToHit: 18, effect: { dice: "4d6" }, ap: 4 },
+    troll: { name: "Troll", type: "Monster", maxHp: 130, attackBonus: 7, requiredRollToHit: 15, effect: { dice: "2d6" }, ap: 3 },
+    ogre: { name: "Ogre", type: "Monster", maxHp: 105, attackBonus: 6, requiredRollToHit: 11, effect: { dice: "2d8" }, ap: 2 },
+    beholder: { name: "Beholder", type: "Monster", maxHp: 250, attackBonus: 5, requiredRollToHit: 18, effect: { dice: "4d6" }, ap: 4 },
 };
 
 // --- 8.2. Monster Tiers (for spawning) ---

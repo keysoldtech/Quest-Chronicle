@@ -886,6 +886,26 @@ label {
     color: var(--color-text-primary);
 }
 
+/* Narrative Modal Specifics */
+#narrative-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+#narrative-input {
+    width: 95%;
+    max-width: 400px;
+    margin: 1rem 0;
+    box-sizing: border-box;
+}
+
+#narrative-modal .modal-actions {
+    width: 95%;
+    justify-content: space-around;
+}
+
 /* Tutorial Modal */
 .tutorial-content {
     max-width: 600px;
@@ -965,8 +985,9 @@ label {
     border-radius: 8px;
     border: 1px solid var(--color-border);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    width: 90%;
-    max-width: 400px;
+    max-width: 90%;
+    word-wrap: break-word;
+    box-sizing: border-box;
     pointer-events: auto;
     transition: opacity 0.5s ease, transform 0.3s ease;
 }
@@ -1302,6 +1323,7 @@ label {
     display: none;
     width: 100%;
     height: 100vh;
+    overflow-x: hidden;
 }
 
 .screen.active {

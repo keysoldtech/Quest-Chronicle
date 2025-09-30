@@ -1,4 +1,4 @@
-// REBUILT: Quest & Chronicle Client-Side Logic (v6.0.3)
+// REBUILT: Quest & Chronicle Client-Side Logic (v6.0.4)
 // This file has been completely rebuilt to use a unidirectional data flow model.
 // 1. The server is the single source of truth.
 // 2. The client receives the entire game state via a single `gameStateUpdate` event.
