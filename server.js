@@ -138,11 +138,11 @@ class GameManager {
             hostId: socket.id,
             players: { [socket.id]: newPlayer },
             voiceChatPeers: [],
+            settings: { ...defaultSettings, ...(customSettings || {}) },
             gameState: {
                 phase: 'class_selection',
                 gameMode: gameMode || 'Beginner',
                 winner: null, // To determine game over state
-                customSettings: customSettings || defaultSettings,
                 decks: { /* Initialized during game start */ },
                 turnOrder: [],
                 currentPlayerIndex: -1,
@@ -284,7 +284,7 @@ class GameManager {
 
     _giveCardToPlayer(room, player, card) {
         if (!card) return;
-        if (player.hand.length >= room.gameState.customSettings.maxHandSize) {
+        if (player.hand.length >= room.settings.maxHandSize) {
             room.chatLog.push({ type: 'system', text: `${player.name}'s hand is full! A drawn card was discarded.` });
             // Optionally add to a discard pile
             return;
@@ -293,7 +293,8 @@ class GameManager {
     }
 
     dealStartingLoadout(room, player) {
-        const { gameMode, customSettings } = room.gameState;
+        const { gameMode } = room.gameState;
+        const customSettings = room.settings;
         
         const dealAndEquip = (type) => {
             const card = this.drawCardFromDeck(room.id, type, player.class);
@@ -964,7 +965,7 @@ class GameManager {
         const monsterName = room.gameState.board.monsters.find(m => m.id === monsterId)?.name || 'A monster';
         room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== monsterId);
         room.chatLog.push({ type: 'system', text: `${monsterName} has been defeated!` });
-        const lootChance = (room.gameState.customSettings.lootDropRate || 50) / 100;
+        const lootChance = (room.settings.lootDropRate || 50) / 100;
         if (Math.random() < lootChance) {
             const loot = this.drawCardFromDeck(room.id, 'treasure');
             if (loot) room.gameState.lootPool.push(loot);
