@@ -1115,23 +1115,39 @@ label {
 
     .mobile-header {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.5rem;
+        flex-direction: column; /* Stacks the two tiers vertically */
+        padding: 5px 0;
         background-color: var(--color-surface);
         border-bottom: 1px solid var(--color-border);
         position: sticky;
         top: 0;
         z-index: 100;
     }
-    .mobile-header-info {
-        text-align: left;
-        flex-grow: 1;
+    
+    .header-tier {
         display: flex;
-        flex-direction: row;
         align-items: center;
-        gap: 0.5rem;
+        padding: 0 10px;
+        min-height: 25px;
     }
+    .top-tier {
+        justify-content: space-between;
+        margin-bottom: 5px;
+        font-size: 0.9em;
+        font-weight: bold;
+    }
+    .bottom-tier {
+        justify-content: space-around;
+        gap: 0.75rem;
+    }
+    .resource-stack {
+        flex-grow: 1;
+        max-width: 35%;
+    }
+    .action-button {
+        flex-shrink: 0;
+    }
+
     .mobile-header .turn-indicator-font {
         font-size: 0.9rem;
         white-space: nowrap;
@@ -1140,12 +1156,7 @@ label {
         max-width: 100px;
     }
     .mobile-header .ap-counter { font-size: 0.9rem; padding: 0.1rem 0.5rem; width: fit-content; }
-    .mobile-header-controls { 
-        flex-shrink: 0; 
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
+    
     .room-code-display.mobile p { font-size: 1rem; }
 
     .player-health-bar-container.mobile {
