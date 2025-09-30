@@ -520,6 +520,24 @@ function initializeGameUIListeners() {
     handleChatSubmit(get('chat-form'), get('chat-channel'), get('chat-input'));
     handleChatSubmit(get('mobile-chat-form'), get('mobile-chat-channel'), get('mobile-chat-input'));
 
+    const mobileLogToggle = document.querySelector('.mobile-log-toggle');
+    if (mobileLogToggle) {
+        mobileLogToggle.addEventListener('click', (e) => {
+            const btn = e.target.closest('.log-toggle-btn');
+            if (!btn) return;
+
+            const logType = btn.dataset.log;
+
+            document.querySelectorAll('.log-toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            document.getElementById('mobile-chat-log').classList.toggle('hidden', logType !== 'chat');
+            document.getElementById('mobile-game-log').classList.toggle('hidden', logType !== 'log');
+            document.getElementById('mobile-chat-form').classList.toggle('hidden', logType !== 'chat');
+        });
+    }
+
+
     get('menu-toggle-btn').addEventListener('click', () => get('menu-dropdown').classList.toggle('hidden'));
     get('mobile-menu-toggle-btn').addEventListener('click', () => get('mobile-menu-dropdown').classList.toggle('hidden'));
     

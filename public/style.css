@@ -511,13 +511,21 @@ body {
     background-color: var(--color-surface); 
     padding: 0.5rem; 
     gap: 0.5rem; 
-    justify-content: space-evenly; 
+    justify-content: space-evenly;
+    border-bottom: none;
 }
-.mobile-action-bar .btn { flex-grow: 1; flex-basis: 0; padding: 0.75rem 0.25rem; font-size: 0.8rem; min-width: 0; }
-.mobile-action-bar .action-narrate-toggle-btn {
-    padding: 0.5rem;
+.mobile-action-bar .btn:not(.btn-icon) {
+    flex-grow: 1;
+    flex-basis: 0;
+    padding: 0.75rem 0.25rem;
+    font-size: 0.8rem;
+    min-width: 0;
+}
+.mobile-action-bar .btn.btn-icon {
     flex-grow: 0;
-    flex-basis: auto;
+    flex-shrink: 0;
+    padding: 0.6rem;
+    line-height: 1;
 }
 
 
@@ -583,7 +591,7 @@ body {
     pointer-events: none; 
 }
 .toast-roll-overlay { 
-    background-color: var(--color-surface-light); 
+    background-color: rgba(36, 48, 54, 0.95);
     color: var(--color-text-primary); 
     padding: 0; 
     border-radius: 8px; 
@@ -602,8 +610,18 @@ body {
 .toast-roll-content .panel-header { margin: -1rem -1rem 0.75rem -1rem; font-size: 1.2rem; padding: 0.5rem 1rem; }
 .result-line { font-size: 1.8rem; font-weight: bold; margin-bottom: 0.5rem; font-family: var(--font-title); text-shadow: 0 0 5px currentColor; }
 .roll-details { color: var(--color-text-secondary); font-size: 1rem; }
-.toast-message { background-color: var(--color-surface-light); padding: 0.75rem 1.25rem; border-radius: 20px; box-shadow: var(--shadow-md); opacity: 0; transition: all 0.3s ease; }
-.toast-message.type-error { background-color: var(--color-danger); color: white; }
+.toast-message { 
+    background-color: rgba(36, 48, 54, 0.95);
+    padding: 0.75rem 1.25rem; 
+    border-radius: 20px; 
+    box-shadow: var(--shadow-md); 
+    opacity: 0; 
+    transition: all 0.3s ease; 
+}
+.toast-message.type-error { 
+    background-color: rgba(220, 53, 69, 0.95);
+    color: white; 
+}
 .toast-message.visible { opacity: 1; transform: translateY(0); }
 
 /* ===== CLASS SELECTION ===== */
@@ -632,14 +650,44 @@ body {
     .mobile-header .hp-counter, .mobile-header .ap-counter, .mobile-header .turn-counter { font-size: 0.9rem; padding: 0.1rem 0.5rem; }
     .mobile-header-controls { flex-shrink: 0; display: flex; align-items: center; gap: 0.75rem; }
     .room-code-display.mobile p { font-size: 1rem; }
-    .mobile-main { flex-grow: 1; overflow-y: auto; padding: 0.5rem; }
+    .mobile-main { flex-grow: 1; overflow-y: auto; padding: 0.5rem; padding-bottom: 110px; }
     .mobile-screen { display: none; flex-direction: column; gap: 0.5rem; }
     .mobile-screen.active { display: flex; }
     .mobile-panel { width: 100%; }
     .mobile-panel .card-container-row { padding: 0.5rem; }
-    .mobile-bottom-nav { display: flex; border-top: 1px solid var(--color-border); background-color: var(--color-surface); position: sticky; bottom: 0; z-index: 100; }
+    .mobile-footer { position: sticky; bottom: 0; left: 0; right: 0; z-index: 100; background-color: var(--color-surface); }
+    .mobile-bottom-nav { display: flex; border-top: 1px solid var(--color-border); background-color: var(--color-surface); }
     .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0.5rem 0; background: none; border: none; color: var(--color-text-secondary); font-size: 0.75rem; border-top: 3px solid transparent; cursor: pointer; position: relative; }
     .nav-btn.active { color: var(--color-special); border-top-color: var(--color-special); }
     .chat-overlay { width: 100%; height: 100%; top: 0; right: 0; border-radius: 0; }
     .menu-container { padding: 20px; }
+
+    .toast-container {
+        bottom: auto;
+        top: 4.5rem; /* Position below the sticky mobile header */
+    }
+
+    /* Mobile Log/Chat Toggle */
+    .mobile-log-toggle {
+        display: flex;
+        background-color: var(--color-bg-dark);
+        border-radius: 6px;
+        padding: 4px;
+        margin-left: auto;
+    }
+    .log-toggle-btn {
+        background: none;
+        border: none;
+        color: var(--color-text-secondary);
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: all 0.2s ease-in-out;
+    }
+    .log-toggle-btn.active {
+        background-color: var(--color-surface-light);
+        color: var(--color-text-primary);
+    }
 }

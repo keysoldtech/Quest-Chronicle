@@ -277,10 +277,14 @@
                         <div class="panel mobile-panel" style="flex: 1; display: flex; flex-direction: column;">
                            <div class="chat-header">
                                 <h2 class="panel-header">Chat & Log</h2>
+                                <div class="mobile-log-toggle">
+                                    <button class="log-toggle-btn" data-log="chat">Chat</button>
+                                    <button class="log-toggle-btn active" data-log="log">Game Log</button>
+                                </div>
                             </div>
-                            <div id="mobile-chat-log" class="chat-log"></div>
+                            <div id="mobile-chat-log" class="chat-log hidden"></div>
                             <div id="mobile-game-log" class="log-content-area"></div>
-                            <form id="mobile-chat-form" class="chat-form">
+                            <form id="mobile-chat-form" class="chat-form hidden">
                                 <select id="mobile-chat-channel" class="select-field">
                                     <option value="game">Game</option>
                                     <option value="party">Party</option>
@@ -292,22 +296,24 @@
                     </div>
                 </main>
     
-                <div id="mobile-action-bar" class="mobile-action-bar hidden">
-                    <button id="mobile-action-narrate-toggle-btn" class="btn btn-sm btn-icon action-narrate-toggle-btn" title="Manual Narration ON"><span class="material-symbols-outlined">edit</span></button>
-                    <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge</button>
-                    <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard (1AP)</button>
-                    <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite (1AP)</button>
-                    <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest (2AP)</button>
-                    <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
+                <div class="mobile-footer">
+                    <div id="mobile-action-bar" class="mobile-action-bar hidden">
+                        <button id="mobile-action-narrate-toggle-btn" class="btn btn-sm btn-icon action-narrate-toggle-btn" title="Manual Narration ON"><span class="material-symbols-outlined">edit</span></button>
+                        <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge</button>
+                        <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard</button>
+                        <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite</button>
+                        <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest</button>
+                        <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
+                    </div>
+                    
+                    <nav class="mobile-bottom-nav">
+                        <button class="nav-btn active" data-screen="game"><span class="material-symbols-outlined">swords</span>Game</button>
+                        <button class="nav-btn" data-screen="character"><span class="material-symbols-outlined">person</span>Character</button>
+                        <button class="nav-btn" data-screen="party"><span class="material-symbols-outlined">groups</span>Party</button>
+                        <button class="nav-btn" data-screen="info"><span class="material-symbols-outlined">public</span>Info</button>
+                        <button class="nav-btn" data-screen="log"><span class="material-symbols-outlined">chat</span>Log</button>
+                    </nav>
                 </div>
-                
-                <nav class="mobile-bottom-nav">
-                    <button class="nav-btn active" data-screen="game"><span class="material-symbols-outlined">swords</span>Game</button>
-                    <button class="nav-btn" data-screen="character"><span class="material-symbols-outlined">person</span>Character</button>
-                    <button class="nav-btn" data-screen="party"><span class="material-symbols-outlined">groups</span>Party</button>
-                    <button class="nav-btn" data-screen="info"><span class="material-symbols-outlined">public</span>Info</button>
-                    <button class="nav-btn" data-screen="log"><span class="material-symbols-outlined">chat</span>Log</button>
-                </nav>
             </div>
     
         </div>
