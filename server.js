@@ -754,6 +754,9 @@ class GameManager {
         const isCrit = d20 >= 20; // Allow for buffed rolls to crit
         const isMiss = d20 <= 1; // Only a natural 1 is a miss
         const hit = isCrit || (!isMiss && (d20 + toHitBonus) >= targetAC);
+        const resultText = isCrit ? 'CRITICAL HIT' : (hit ? 'HIT' : 'MISS');
+    
+        this.logEvent(room.id, `${attacker.name}'s roll: ${d20} + ${toHitBonus} = <strong>${d20 + toHitBonus}</strong> vs DC ${targetAC}. <span class="log-${hit ? 'hit' : 'miss'}">${resultText}!</span>`, 'info');
     
         this.emitToRoom(room.id, 'attackRollResult', {
             attacker: { id: attacker.id, name: attacker.name },
@@ -762,7 +765,7 @@ class GameManager {
             bonus: toHitBonus,
             total: d20 + toHitBonus,
             required: targetAC,
-            result: isCrit ? 'CRITICAL HIT' : (hit ? 'HIT' : 'MISS')
+            result: resultText
         });
         await new Promise(res => setTimeout(res, 2500));
     
@@ -804,8 +807,6 @@ class GameManager {
             await new Promise(res => setTimeout(res, 2500));
             
             this.applyEffect(room, { type: 'damage', value: totalDamage }, attacker, target, isCrit);
-        } else {
-            this.logEvent(room.id, `${attacker.name}'s attack against ${target.name} <span class="log-miss">MISSES!</span>`, 'info');
         }
         this.emitGameState(room.id);
     }
@@ -955,11 +956,25 @@ class GameManager {
         const { turnCount } = room.gameState;
         const tierKey = turnCount <= 3 ? 'tier1' : (turnCount <= 6 ? 'tier2' : 'tier3');
         const monsterCard = this.drawCardFromDeck(room.id, `monster.${tierKey}`);
+        
         if (monsterCard) {
+            // --- MONSTER SCALING LOGIC ---
+            const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
+            const playerCount = humanPlayers.length || 1; // Default to 1 to avoid zero division
+            
+            // Scale HP: +25% HP for each player beyond the first
+            const hpBonus = Math.floor(monsterCard.maxHp * 0.25 * (playerCount - 1));
+            monsterCard.maxHp += hpBonus;
             monsterCard.currentHp = monsterCard.maxHp;
+
+            // Scale Attack: +1 attack for every 2 players
+            const attackBonus = Math.floor((playerCount) / 2);
+            monsterCard.attackBonus += attackBonus;
+            // --- END SCALING ---
+
             monsterCard.statusEffects = [];
             room.gameState.board.monsters.push(monsterCard);
-            this.logEvent(room.id, `The Dungeon Master summons a ${monsterCard.name}!`, 'monster');
+            this.logEvent(room.id, `The Dungeon Master summons a toughened ${monsterCard.name}!`, 'monster');
             this.emitGameState(room.id);
         } else {
             this.logEvent(room.id, `The DM tried to summon a monster, but the deck was empty.`, 'error');
