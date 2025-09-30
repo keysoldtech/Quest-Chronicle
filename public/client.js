@@ -245,13 +245,13 @@ function renderGameplayState(myPlayer, gameState) {
     });
 
     // Player Character Panel (Desktop) & Mobile Screen
-    renderCharacterPanel(get('character-panel-content'), get('mobile-screen-character'), myPlayer);
+    renderCharacterPanel(get('character-panel-content'), get('mobile-screen-character'), myPlayer, isMyTurn);
 
     // Equipment & Hand
     renderHandAndEquipment(myPlayer, isMyTurn);
 }
 
-function renderCharacterPanel(desktopContainer, mobileContainer, player) {
+function renderCharacterPanel(desktopContainer, mobileContainer, player, isMyTurn) {
     const { stats, class: className } = player;
     const classData = currentRoomState.staticData.classes[className];
     const statsHTML = `
@@ -264,9 +264,10 @@ function renderCharacterPanel(desktopContainer, mobileContainer, player) {
                  <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-damage)">swords</span><span class="stat-label">Damage Bonus</span><span class="stat-value">+${stats.damageBonus}</span></div>
                  <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-shield)">security</span><span class="stat-label">Shield Bonus</span><span class="stat-value">+${stats.shieldBonus}</span></div>
             </div>
-            ${classData ? `<div class="class-ability-card">
-                <p class="ability-title">${classData.ability.name}</p>
+            ${classData && classData.ability ? `<div class="class-ability-card">
+                <p class="ability-title">${classData.ability.name} (${classData.ability.apCost} AP)</p>
                 <p class="ability-desc">${classData.ability.description}</p>
+                <button class="btn btn-sm btn-special ability-button" data-ability-name="${classData.ability.name}" ${isMyTurn ? '' : 'disabled'}>Use Ability</button>
             </div>` : ''}
         </div>`;
 
@@ -418,6 +419,15 @@ function initializeGameUIListeners() {
             return;
         }
 
+        const abilityBtn = e.target.closest('.ability-button');
+        if (abilityBtn?.dataset?.abilityName) {
+            socket.emit('playerAction', { 
+                action: 'useAbility', 
+                abilityName: abilityBtn.dataset.abilityName 
+            });
+            return;
+        }
+
         const navBtn = e.target.closest('.nav-btn');
         if (navBtn?.dataset?.screen) {
             switchMobileScreen(navBtn.dataset.screen);
@@ -436,6 +446,18 @@ function initializeGameUIListeners() {
         const guardBtn = e.target.closest('#action-guard-btn, #mobile-action-guard-btn');
         if (guardBtn) {
             socket.emit('playerAction', { action: 'guard' });
+            return;
+        }
+
+        const respiteBtn = e.target.closest('#action-brief-respite-btn, #mobile-action-brief-respite-btn');
+        if (respiteBtn) {
+            socket.emit('playerAction', { action: 'respite' });
+            return;
+        }
+
+        const restBtn = e.target.closest('#action-full-rest-btn, #mobile-action-full-rest-btn');
+        if (restBtn) {
+            socket.emit('playerAction', { action: 'rest' });
             return;
         }
 
@@ -515,6 +537,10 @@ socket.on('gameStateUpdate', (newState) => {
 
 socket.on('actionError', (message) => {
     showToast(`Error: ${message}`, 'error');
+});
+
+socket.on('showToast', (data) => {
+    showToast(data.message, data.type || 'info');
 });
 
 socket.on('apZeroPrompt', () => {
