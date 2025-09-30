@@ -393,11 +393,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     get('game-over-leave-btn').addEventListener('click', () => {
+        sessionStorage.removeItem('qc_playerId');
+        sessionStorage.removeItem('qc_roomId');
         window.location.reload();
+    });
+
+    // End Turn Modal Listeners
+    get('end-turn-confirm-btn').addEventListener('click', () => {
+        socket.emit('endTurn');
+        get('end-turn-confirm-modal').classList.add('hidden');
+    });
+    get('end-turn-cancel-btn').addEventListener('click', () => {
+        get('end-turn-confirm-modal').classList.add('hidden');
     });
 });
 
 function initializeGameUIListeners() {
+    const get = id => document.getElementById(id);
     // Event delegation for dynamically created elements
     document.body.addEventListener('click', (e) => {
         const classBtn = e.target.closest('.select-class-btn');
@@ -414,8 +426,11 @@ function initializeGameUIListeners() {
         
         const endTurnBtn = e.target.closest('#action-end-turn-btn, #mobile-action-end-turn-btn');
         if (endTurnBtn) {
-             socket.emit('endTurn');
-             return;
+            const modal = get('end-turn-confirm-modal');
+            modal.querySelector('h2').textContent = 'End Your Turn?';
+            modal.querySelector('p').textContent = 'Are you sure you want to end your turn?';
+            modal.classList.remove('hidden');
+            return;
         }
         
         const guardBtn = e.target.closest('#action-guard-btn, #mobile-action-guard-btn');
@@ -429,28 +444,36 @@ function initializeGameUIListeners() {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             tabBtn.classList.add('active');
-            document.getElementById(tabBtn.dataset.tab).classList.add('active');
+            get(tabBtn.dataset.tab).classList.add('active');
+            return;
+        }
+        
+        const leaveBtn = e.target.closest('#leave-game-btn, #mobile-leave-game-btn');
+        if (leaveBtn) {
+            sessionStorage.removeItem('qc_playerId');
+            sessionStorage.removeItem('qc_roomId');
+            window.location.reload();
             return;
         }
     });
 
     // Chat form listeners
-    const chatForm = document.getElementById('chat-form');
+    const chatForm = get('chat-form');
     chatForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const input = document.getElementById('chat-input');
-        const channel = document.getElementById('chat-channel');
+        const input = get('chat-input');
+        const channel = get('chat-channel');
         if (input.value.trim()) {
             socket.emit('chatMessage', { channel: channel.value, message: input.value.trim() });
             input.value = '';
         }
     });
 
-    const mobileChatForm = document.getElementById('mobile-chat-form');
+    const mobileChatForm = get('mobile-chat-form');
     mobileChatForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        const input = document.getElementById('mobile-chat-input');
-        const channel = document.getElementById('mobile-chat-channel');
+        const input = get('mobile-chat-input');
+        const channel = get('mobile-chat-channel');
         if (input.value.trim()) {
             socket.emit('chatMessage', { channel: channel.value, message: input.value.trim() });
             input.value = '';
@@ -460,14 +483,25 @@ function initializeGameUIListeners() {
 
 // --- 4. SOCKET EVENT HANDLERS ---
 socket.on('connect', () => { 
-    const oldId = myId;
     myId = socket.id;
     console.log(`Socket connected with ID: ${myId}`);
-    if (oldId && currentRoomState && currentRoomState.id && myPlayerName) {
-        console.log(`Attempting to rejoin room ${currentRoomState.id} as ${myPlayerName}`);
-        socket.emit('rejoinRoom', { roomId: currentRoomState.id, playerName: myPlayerName });
+
+    const persistentId = sessionStorage.getItem('qc_playerId');
+    const roomId = sessionStorage.getItem('qc_roomId');
+
+    // Only try to rejoin if we have a persistentId, a roomId, and the client still thinks it's in that room.
+    if (persistentId && roomId && currentRoomState && currentRoomState.id === roomId) {
+        console.log(`Attempting to rejoin room ${roomId} with persistent ID ${persistentId}`);
+        socket.emit('rejoinRoom', { roomId, playerId: persistentId });
     }
 });
+
+socket.on('playerIdentity', ({ playerId, roomId }) => {
+    console.log(`Received identity: ${playerId} for room ${roomId}`);
+    sessionStorage.setItem('qc_playerId', playerId);
+    sessionStorage.setItem('qc_roomId', roomId);
+});
+
 
 socket.on('disconnect', (reason) => {
     console.log(`Socket disconnected: ${reason}.`);
@@ -481,6 +515,13 @@ socket.on('gameStateUpdate', (newState) => {
 
 socket.on('actionError', (message) => {
     showToast(`Error: ${message}`, 'error');
+});
+
+socket.on('apZeroPrompt', () => {
+    const modal = document.getElementById('end-turn-confirm-modal');
+    modal.querySelector('h2').textContent = 'Out of AP';
+    modal.querySelector('p').textContent = 'You have 0 AP remaining. End your turn?';
+    modal.classList.remove('hidden');
 });
 
 socket.on('promptAttackRoll', (data) => {
@@ -550,7 +591,8 @@ socket.on('attackResult', (data) => {
                     socket.emit('playerAction', {
                         action: 'resolve_damage',
                         weaponId: data.weaponId,
-                        targetId: data.targetId
+                        targetId: data.targetId,
+                        isCrit: data.isCrit // Pass crit status back to server
                     });
                 };
             }, 1500);

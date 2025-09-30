@@ -1153,7 +1153,7 @@ label {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 100px;
+        max-width: 40%;
     }
     .mobile-header .ap-counter { font-size: 0.9rem; padding: 0.1rem 0.5rem; width: fit-content; }
     

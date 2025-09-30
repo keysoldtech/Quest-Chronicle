@@ -103,12 +103,15 @@ class GameManager {
 
     // --- 3.2. Room & Player Management ---
     createPlayerObject(id, name) {
+        const playerId = `player_${Math.random().toString(36).substr(2, 9)}`;
         return {
-            id,
+            id, // The temporary socket ID
+            playerId, // The persistent ID for reconnects
             name,
             isNpc: false,
             isDowned: false, // Player defeat state
             disconnected: false, // For reconnect logic
+            cleanupTimer: null, // For removing disconnected players
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
@@ -156,6 +159,9 @@ class GameManager {
         socket.join(newRoomId);
         this.socketToRoom[socket.id] = newRoomId;
     
+        // Send the persistent ID to the client for session storage
+        socket.emit('playerIdentity', { playerId: newPlayer.playerId, roomId: newRoomId });
+
         this.emitGameState(newRoomId);
     }
     
@@ -172,6 +178,9 @@ class GameManager {
         socket.join(roomId);
         this.socketToRoom[socket.id] = roomId;
         
+        // Send the persistent ID to the client for session storage
+        socket.emit('playerIdentity', { playerId: newPlayer.playerId, roomId: roomId });
+
         this.emitGameState(roomId);
     }
 
@@ -560,6 +569,13 @@ class GameManager {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
         if (!player || player.isDowned || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
+        
+        // P0 FIX: Halt any new player-initiated action if they have no AP.
+        // Resolution steps of an attack are not "new" actions and are allowed to proceed.
+        if (player.currentAp <= 0 && data.action !== 'resolve_hit' && data.action !== 'resolve_damage') {
+            socket.emit('apZeroPrompt');
+            return; // Halt the action immediately.
+        }
 
         const { action, cardId, targetId, weaponId, narrative } = data;
 
@@ -571,13 +587,16 @@ class GameManager {
                  this._resolveHitRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId });
                  break;
             case 'resolve_damage':
-                 this._resolveDamageRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId });
+                 this._resolveDamageRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId, isCrit: data.isCrit });
                  break;
             case 'guard':
                 const guardCost = gameData.actionCosts.guard;
                 if (player.currentAp >= guardCost) {
                     player.currentAp -= guardCost;
                     player.stats.shieldHp += player.equipment.armor?.guardBonus || 2;
+                    if (player.currentAp <= 0) {
+                        socket.emit('apZeroPrompt');
+                    }
                 }
                 this.emitGameState(room.id);
                 break;
@@ -645,6 +664,7 @@ class GameManager {
             targetAC: target.requiredRollToHit,
             outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
             needsDamageRoll: hit,
+            isCrit: isCrit, // Pass crit status to client
             damageDice: hit ? damageDice : null,
             weaponId, // Pass these through for the next step
             targetId,
@@ -652,13 +672,17 @@ class GameManager {
         
         if (!hit) {
             attacker.currentAp -= apCost;
+            if (attacker.currentAp <= 0) {
+                const socket = io.sockets.sockets.get(attacker.id);
+                if (socket) socket.emit('apZeroPrompt');
+            }
             this.emitGameState(room.id);
         }
 
         io.to(room.id).emit('attackResult', result);
     }
 
-    _resolveDamageRoll(room, attacker, { weaponId, targetId }) {
+    _resolveDamageRoll(room, attacker, { weaponId, targetId, isCrit }) {
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
         if (!attacker || !target) return;
 
@@ -674,8 +698,7 @@ class GameManager {
         let damageRoll = this.rollDice(damageDice);
         let damage = damageRoll + attacker.stats.damageBonus;
 
-        const d20 = this.rollDice('1d20'); // Reroll for crit check, though this is not ideal. A better way would be to pass the hit result.
-        if (d20 === 20) damage *= 2; 
+        if (isCrit) damage *= 2; 
 
         target.currentHp = Math.max(0, target.currentHp - damage);
 
@@ -692,6 +715,11 @@ class GameManager {
             damageDice,
             damageBonus: attacker.stats.damageBonus
         });
+        
+        if (attacker.currentAp <= 0) {
+            const socket = io.sockets.sockets.get(attacker.id);
+            if (socket) socket.emit('apZeroPrompt');
+        }
 
         this.emitGameState(room.id);
     }
@@ -836,18 +864,24 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
-    rejoinRoom(socket, { roomId, playerName }) {
+    rejoinRoom(socket, { roomId, playerId }) {
         const room = this.rooms[roomId];
         if (!room) {
             socket.emit('actionError', 'Room to rejoin not found.');
             return;
         }
 
-        const playerToReconnect = Object.values(room.players).find(p => p.name === playerName && !p.isNpc && p.disconnected);
+        const playerToReconnect = Object.values(room.players).find(p => p.playerId === playerId && p.disconnected);
 
         if (playerToReconnect) {
             const oldId = playerToReconnect.id;
             
+            // Clear the cleanup timer
+            if (playerToReconnect.cleanupTimer) {
+                clearTimeout(playerToReconnect.cleanupTimer);
+                playerToReconnect.cleanupTimer = null;
+            }
+
             playerToReconnect.id = socket.id;
             playerToReconnect.disconnected = false;
 
@@ -866,7 +900,7 @@ class GameManager {
             this.socketToRoom[socket.id] = roomId;
             socket.join(roomId);
 
-            console.log(`Player ${playerName} reconnected to room ${roomId}`);
+            console.log(`Player ${playerToReconnect.name} reconnected to room ${roomId}`);
             this.emitGameState(roomId);
         } else {
             socket.emit('actionError', 'Could not find a disconnected character to rejoin.');
@@ -882,8 +916,22 @@ class GameManager {
         if (player && !player.isNpc) {
             console.log(`Player ${player.name} in room ${roomId} has disconnected.`);
             player.disconnected = true;
-            // In a real-world scenario, you might add a timer here to clean up the room
-            // if the player doesn't reconnect within a certain time frame.
+            
+            const persistentPlayerId = player.playerId;
+            player.cleanupTimer = setTimeout(() => {
+                const roomForCleanup = this.rooms[roomId];
+                if (roomForCleanup) {
+                    const playerKeyToDelete = Object.keys(roomForCleanup.players).find(key => roomForCleanup.players[key].playerId === persistentPlayerId);
+                    if (playerKeyToDelete && roomForCleanup.players[playerKeyToDelete].disconnected) {
+                        console.log(`Cleaning up disconnected player ${roomForCleanup.players[playerKeyToDelete].name} from room ${roomId}`);
+                        delete roomForCleanup.players[playerKeyToDelete];
+                        // If no human players left, maybe end the game or handle host migration
+                        this.emitGameState(roomId);
+                    }
+                }
+            }, 300000); // 5 minutes (300,000 ms)
+
+            this.emitGameState(roomId);
         }
         
         delete this.socketToRoom[socket.id];
