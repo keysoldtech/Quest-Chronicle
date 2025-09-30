@@ -125,7 +125,28 @@ class GameManager {
     }
 
     createRoom(socket, { playerName, gameMode, customSettings }) {
-        const newPlayer = this.createPlayerObject(socket.id, playerName);
+        // --- SURGICAL REVERSION: Player object creation moved inline for stability ---
+        const playerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+        const newPlayer = {
+            id: socket.id,
+            playerId: playerId,
+            name: playerName,
+            status: 'active', // Explicitly 'active' for the host, per bug fix request.
+            isNpc: false,
+            isDowned: false,
+            disconnected: false,
+            cleanupTimer: null,
+            isGuaranteedCrit: false,
+            role: null,
+            class: null,
+            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+            currentAp: 0,
+            hand: [], // Explicitly initialized as an empty array.
+            equipment: { weapon: null, armor: null }, // Using stable, single-slot equipment structure.
+            statusEffects: [], // Explicitly initialized as an empty array.
+        };
+        // --- END REVERSION ---
+
         const newRoomId = this.generateRoomId();
     
         const defaultSettings = {
@@ -1014,7 +1035,7 @@ class GameManager {
 
         if (ability.cost && ability.cost.type === 'discard') {
             const discardedCard = this._discardCardFromHand(player, ability.cost.cardType);
-            if (!discardCard) {
+            if (!discardedCard) {
                 return socket.emit('actionError', `You need to discard a ${ability.cost.cardType} card.`);
             }
             room.chatLog.push({ type: 'system', text: `${player.name} discards ${discardedCard.name} to use ${ability.name}.` });
