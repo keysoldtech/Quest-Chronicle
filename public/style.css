@@ -284,7 +284,7 @@ label {
 .game-area-desktop {
     display: grid;
     grid-template-columns: 275px 275px 1fr 350px;
-    grid-template-rows: auto 1fr 275px auto;
+    grid-template-rows: auto 1fr auto auto;
     grid-template-areas:
         "header header header header"
         "players character board info"
@@ -611,7 +611,7 @@ label {
 .hand-panel { flex-direction: column; }
 .player-hand-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-border); background-color: rgba(0,0,0,0.2); }
 .player-hand-header .panel-header { background: none; border: none; flex-grow: 1; }
-.hand-and-equipped-container { display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; }
+.hand-and-equipped-container { display: flex; flex-direction: column; flex-grow: 1; }
 .equipped-items-container { padding: 0.5rem 1rem; border-bottom: 1px solid var(--color-border); }
 .equipped-items-container .sub-header-font { text-align: center; color: var(--color-text-primary); }
 .equipped-items-container .card-container-row { padding: 0.5rem 0; }
@@ -1229,6 +1229,15 @@ label {
     .lobby-container .title-font {
         font-size: 2.5rem;
     }
+    
+    .class-grid {
+        flex-direction: column;
+        overflow-x: hidden;
+        padding-bottom: 0;
+    }
+    .class-grid .class-card {
+        width: 100%;
+    }
 }
 
 /* --- ANIMATION OVERLAY --- */
@@ -1618,16 +1627,6 @@ label {
 
 /* ===== DESKTOP SCALING & SCROLLING FIXES ===== */
 @media (min-width: 1024px) {
-    /* Correctly allow vertical scrolling in the hand/equipped panel to prevent clipping */
-    .hand-and-equipped-container {
-        overflow-y: auto;
-    }
-
-    /* To prevent the hand from collapsing when the equipped section grows */
-    .player-hand-container {
-        min-height: 265px; /* card height + padding */
-    }
-
     /* Reduce card size slightly on desktop to fit more content */
     .card {
         width: 160px;
