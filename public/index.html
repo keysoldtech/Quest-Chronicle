@@ -117,6 +117,17 @@
                 <header class="game-header">
                     <div class="header-info">
                          <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
+                         <div id="header-player-stats" class="hidden">
+                             <div class="player-health-bar-container">
+                                 <span class="material-symbols-outlined">favorite</span>
+                                 <div class="progress-bar-wrapper">
+                                     <div class="progress-bar health">
+                                         <div id="player-health-bar" class="progress-bar-fill"></div>
+                                     </div>
+                                     <span id="player-health-text" class="progress-bar-text"></span>
+                                 </div>
+                             </div>
+                         </div>
                          <p id="ap-counter-desktop" class="ap-counter hidden"></p>
                          <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                     </div>
@@ -209,9 +220,20 @@
                 <header class="mobile-header">
                     <div class="mobile-header-info">
                          <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
+                         <div id="mobile-header-player-stats" class="hidden">
+                             <div class="player-health-bar-container mobile">
+                                 <div class="progress-bar-wrapper">
+                                     <div class="progress-bar health">
+                                         <div id="mobile-player-health-bar" class="progress-bar-fill"></div>
+                                     </div>
+                                     <span id="mobile-player-health-text" class="progress-bar-text"></span>
+                                 </div>
+                             </div>
+                         </div>
                          <p id="ap-counter-mobile" class="ap-counter hidden"></p>
                     </div>
                      <div class="mobile-header-controls">
+                        <p class="turn-counter mobile">Turn <span id="mobile-turn-counter">0</span></p>
                         <div class="room-code-display mobile">
                             <span>Code</span>
                             <p id="mobile-room-code">----</p>

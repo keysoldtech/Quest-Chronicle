@@ -108,6 +108,7 @@ function renderUI() {
     get('room-code').textContent = currentRoomState.id;
     get('mobile-room-code').textContent = currentRoomState.id;
     get('turn-counter').textContent = gameState.turnCount;
+    get('mobile-turn-counter').textContent = gameState.turnCount;
     renderGameLog(chatLog);
 
     // Player Lists
@@ -183,6 +184,26 @@ function renderClassSelection(desktopContainer, mobileContainer) {
 function renderGameplayState(myPlayer, gameState) {
     const get = id => document.getElementById(id);
     const isMyTurn = gameState.turnOrder[gameState.currentPlayerIndex] === myPlayer.id && !myPlayer.isDowned;
+
+    // Health bars
+    const headerStats = get('header-player-stats');
+    const mobileHeaderStats = get('mobile-header-player-stats');
+    if (gameState.phase === 'started' && myPlayer.stats.maxHp > 0) {
+        const healthPercent = (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100;
+        
+        // Desktop
+        get('player-health-bar').style.width = `${healthPercent}%`;
+        get('player-health-text').textContent = `${myPlayer.stats.currentHp} / ${myPlayer.stats.maxHp}`;
+        headerStats.classList.remove('hidden');
+
+        // Mobile
+        get('mobile-player-health-bar').style.width = `${healthPercent}%`;
+        get('mobile-player-health-text').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
+        mobileHeaderStats.classList.remove('hidden');
+    } else {
+        headerStats.classList.add('hidden');
+        mobileHeaderStats.classList.add('hidden');
+    }
 
     // Turn Indicator & AP
     const turnPlayer = currentRoomState.players[gameState.turnOrder[gameState.currentPlayerIndex]];
