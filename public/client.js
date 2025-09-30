@@ -1,4 +1,4 @@
-// REBUILT: Quest & Chronicle Client-Side Logic (v6.0.0)
+// REBUILT: Quest & Chronicle Client-Side Logic (v6.0.3)
 // This file has been completely rebuilt to use a unidirectional data flow model.
 // 1. The server is the single source of truth.
 // 2. The client receives the entire game state via a single `gameStateUpdate` event.
@@ -489,7 +489,7 @@ socket.on('promptAttackRoll', (data) => {
     const get = id => document.getElementById(id);
     const modal = get('dice-roll-modal');
     get('dice-roll-title').textContent = data.title;
-    get('dice-roll-description').textContent = `You need to roll a ${data.dice} + ${data.bonus} against a target of ${data.targetAC}.`;
+    get('dice-roll-description').textContent = `You need to roll a ${data.dice} + ${data.bonus} to beat a target of ${data.targetAC}.`;
     
     get('dice-roll-result-container').classList.add('hidden');
     get('dice-roll-confirm-btn').classList.remove('hidden');
@@ -527,7 +527,7 @@ socket.on('attackResult', (data) => {
 
         resultLine.textContent = `${data.outcome}! (${data.total})`;
         resultLine.className = `result-line ${data.outcome.toLowerCase().includes('miss') ? 'miss' : 'hit'}`;
-        detailsLine.textContent = `You rolled a ${data.roll} + ${data.bonus} bonus.`;
+        detailsLine.textContent = `You rolled a ${data.roll} + ${data.bonus} accuracy bonus.`;
 
         get('dice-roll-result-container').classList.remove('hidden');
         get('dice-roll-confirm-btn').classList.add('hidden');
@@ -535,7 +535,7 @@ socket.on('attackResult', (data) => {
         if (data.needsDamageRoll) {
             // Re-purpose the modal for damage roll
             setTimeout(() => {
-                get('dice-roll-title').textContent = "Roll for Damage";
+                get('dice-roll-title').textContent = "Damage Roll";
                 get('dice-roll-description').textContent = `You hit! Now roll ${data.damageDice} for damage.`;
                 const damageDiceSides = parseInt(data.damageDice.split('d')[1]);
                 get('dice-animation-container').innerHTML = getDiceSVG(damageDiceSides);

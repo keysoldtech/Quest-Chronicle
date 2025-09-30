@@ -600,7 +600,7 @@ class GameManager {
             this.emitGameState(room.id);
         }
 
-        const toHitBonus = isUnarmed ? player.stats.str : player.stats.damageBonus;
+        const toHitBonus = player.stats.str; // Use STR for accuracy bonus
         
         socket.emit('promptAttackRoll', {
             action: 'attack',
@@ -609,7 +609,7 @@ class GameManager {
             dice: '1d20',
             bonus: toHitBonus,
             targetAC: target.requiredRollToHit,
-            title: `Attack ${target.name}`
+            title: `Attack: Hit Check`
         });
     }
     
@@ -624,8 +624,9 @@ class GameManager {
         const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
         if (attacker.currentAp < apCost) return;
         
+        const toHitBonus = attacker.stats.str;
         const d20 = this.rollDice('1d20');
-        const totalRoll = d20; // Hit roll is purely dice-based now
+        const totalRoll = d20 + toHitBonus;
         const isCrit = d20 === 20;
         const isMiss = d20 === 1;
         const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
@@ -639,7 +640,7 @@ class GameManager {
             targetName: target.name,
             dice: '1d20',
             roll: d20,
-            bonus: 0, // No bonus is added to the roll
+            bonus: toHitBonus,
             total: totalRoll,
             targetAC: target.requiredRollToHit,
             outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
@@ -705,15 +706,16 @@ class GameManager {
         const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
         
         // --- HIT ROLL ---
+        const toHitBonus = attacker.stats.str;
         const d20 = this.rollDice('1d20');
-        const totalRoll = d20; // Hit roll is purely dice-based now
+        const totalRoll = d20 + toHitBonus;
         const isCrit = d20 === 20;
         const isMiss = d20 === 1;
         const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
 
         io.to(room.id).emit('attackResult', {
             rollerId: attacker.id, rollerName: attacker.name, action: 'Attack', targetName: target.name,
-            dice: '1d20', roll: d20, bonus: 0, total: totalRoll, targetAC: target.requiredRollToHit,
+            dice: '1d20', roll: d20, bonus: toHitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
             outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
         });
         
@@ -739,6 +741,7 @@ class GameManager {
         }
 
         attacker.currentAp -= apCost;
+        this.emitGameState(room.id); // Emit state to update HP and AP
     }
 
     async _resolveFullMonsterAttack(room, monsterId, targetId) {
