@@ -361,7 +361,7 @@
         <div id="end-turn-confirm-modal" class="modal-overlay hidden">
             <div class="modal-content">
                 <h2 class="panel-header">End Your Turn?</h2>
-                <p>Are you sure you want to end your turn?</p>
+                <p id="end-turn-prompt">Are you sure you want to end your turn?</p>
                 <div class="modal-actions">
                     <button id="end-turn-cancel-btn" class="btn btn-secondary">Cancel</button>
                     <button id="end-turn-confirm-btn" class="btn btn-danger">Confirm</button>
@@ -371,6 +371,18 @@
     
         <div id="your-turn-popup" class="your-turn-popup hidden">YOUR TURN</div>
     
+        <div id="dice-roll-modal" class="modal-overlay hidden">
+            <div class="modal-content dice-modal-content">
+                <h2 id="dice-roll-title" class="panel-header">Rolling...</h2>
+                <div id="dice-spinner-container" class="dice-spinner-container">
+                    <div class="dice-spinner"></div>
+                </div>
+                <div id="dice-result-container" class="hidden">
+                    <p id="dice-roll-result-line" class="result-line"></p>
+                    <p id="dice-roll-details" class="roll-details"></p>
+                </div>
+            </div>
+        </div>
     </div>
     <div id="toast-container"></div>
     

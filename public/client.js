@@ -13,6 +13,7 @@ let selectedGameMode = null; // For the menu screen
 let actionState = null; // Manages multi-step actions like targeting
 let gameUIInitialized = false; // Flag to ensure game listeners are only attached once
 let autoNarrate = false; // Player preference for auto-describing attacks
+let endTurnModalShownThisTurn = false; // Prevent repeated "out of AP" popups
 
 // --- 2. CORE RENDERING ENGINE ---
 
@@ -124,7 +125,7 @@ function renderUI() {
     get('room-code').textContent = currentRoomState.id;
     get('mobile-room-code').textContent = currentRoomState.id;
     get('turn-counter-desktop').textContent = gameState.turnCount;
-    get('turn-counter-mobile').textContent = gameState.turnCount;
+    get('mobile-turn-counter-mobile').textContent = gameState.turnCount;
 
 
     // Player Lists
@@ -270,6 +271,14 @@ function renderGameplayState(myPlayer, gameState) {
     renderPartyEvent(get('party-event-container'), get('mobile-party-event-container'), gameState.currentPartyEvent);
     renderLoot(get('party-loot-container'), get('mobile-party-loot-container'), gameState.lootPool, isMyTurn);
     renderSkillChallenge(get('skill-challenge-display'), get('mobile-skill-challenge-display'), gameState.skillChallenge, isMyTurn);
+
+    // Check for out of AP and prompt to end turn
+    if (isMyTurn && myPlayer.currentAp === 0 && !actionState && !endTurnModalShownThisTurn) {
+        endTurnModalShownThisTurn = true;
+        const endTurnModal = get('end-turn-confirm-modal');
+        get('end-turn-prompt').textContent = "You are out of Action Points. Would you like to end your turn?";
+        endTurnModal.classList.remove('hidden');
+    }
 }
 
 function renderCharacterPanel(desktopContainer, mobileContainer, player, isMyTurn) {
@@ -411,6 +420,7 @@ function renderSkillChallenge(desktopContainer, mobileContainer, challenge, isMy
             <div class="challenge-content">
                 <p>${challenge.description}</p>
                 <p><strong>Check:</strong> DC ${challenge.dc} (${challenge.skill.toUpperCase()})</p>
+                <p><strong>Progress:</strong> ${challenge.successes}/${challenge.successThreshold} Successes | ${challenge.failures}/${challenge.failureThreshold} Failures</p>
             </div>
         `;
         desktopContainer.innerHTML = challengeHTML;
@@ -434,7 +444,7 @@ function renderChat(chatLog) {
     const mobileLog = document.getElementById('mobile-chat-log');
     
     const renderLog = (container) => {
-        container.innerHTML = chatLog.map(msg => {
+        container.innerHTML = (chatLog || []).map(msg => {
             const senderClass = msg.senderId === myId ? 'self' : '';
             return `<div class="chat-message">
                 <span class="channel ${msg.channel}">${msg.channel.toUpperCase()}</span>
@@ -545,7 +555,6 @@ function initializeGameUIListeners() {
         btn.addEventListener('click', () => window.location.reload());
     });
 
-    // --- NEW MODAL & NARRATION LISTENERS ---
     const autoNarrateToggleBtns = document.querySelectorAll('.action-narrate-toggle-btn');
     autoNarrateToggleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -556,18 +565,20 @@ function initializeGameUIListeners() {
                 icon.textContent = autoNarrate ? 'auto_stories' : 'edit';
                 b.title = autoNarrate ? 'Auto-Narration ON' : 'Manual Narration ON';
             });
-            showToast(`Auto-Narration is now ${autoNarrate ? 'ON' : 'OFF'}.`);
+            showToast(`Auto-Narration is now ${autoNarrate ? 'ON' : 'OFF'}.`, 'info', 2000);
         });
     });
 
     const setupModal = (modalId, confirmBtnId, cancelBtnId, onConfirm) => {
         const modal = get(modalId);
         get(confirmBtnId).addEventListener('click', () => {
-            if (!actionState || actionState.type !== 'attack') return;
+            if (!actionState && modalId !== 'end-turn-confirm-modal') return;
             onConfirm();
             modal.classList.add('hidden');
-            actionState = null;
-            renderUI();
+            if (modalId !== 'end-turn-confirm-modal') {
+                 actionState = null;
+                 renderUI();
+            }
         });
         get(cancelBtnId).addEventListener('click', () => {
             modal.classList.add('hidden');
@@ -577,6 +588,7 @@ function initializeGameUIListeners() {
     };
 
     setupModal('narrative-modal', 'narrative-confirm-btn', 'narrative-cancel-btn', () => {
+        if (!actionState || actionState.type !== 'attack') return;
         socket.emit('playerAction', {
             action: 'attack', cardId: actionState.weaponId,
             targetId: actionState.targetId,
@@ -585,13 +597,23 @@ function initializeGameUIListeners() {
     });
 
     setupModal('attack-confirm-modal', 'attack-confirm-confirm-btn', 'attack-confirm-cancel-btn', () => {
+        if (!actionState || actionState.type !== 'attack') return;
         socket.emit('playerAction', {
             action: 'attack', cardId: actionState.weaponId,
             targetId: actionState.targetId,
             description: actionState.description
         });
     });
-    // --- END NEW LISTENERS ---
+
+    // Wire up the end turn modal
+    get('end-turn-confirm-btn').addEventListener('click', () => {
+        socket.emit('endTurn');
+        get('end-turn-confirm-modal').classList.add('hidden');
+    });
+    get('end-turn-cancel-btn').addEventListener('click', () => {
+        get('end-turn-confirm-modal').classList.add('hidden');
+    });
+
 
     document.body.addEventListener('click', (e) => {
         const classBtn = e.target.closest('.select-class-btn');
@@ -607,7 +629,16 @@ function initializeGameUIListeners() {
         }
         
         const endTurnBtn = e.target.closest('#action-end-turn-btn, #mobile-action-end-turn-btn');
-        if (endTurnBtn) { socket.emit('endTurn'); return; }
+        if (endTurnBtn) {
+            const myPlayer = currentRoomState.players[myId];
+            if (myPlayer.currentAp > 0) {
+                get('end-turn-prompt').textContent = 'You still have Action Points remaining. Are you sure you want to end your turn?';
+                get('end-turn-confirm-modal').classList.remove('hidden');
+            } else {
+                socket.emit('endTurn');
+            }
+            return;
+        }
         
         const guardBtn = e.target.closest('#action-guard-btn, #mobile-action-guard-btn');
         if (guardBtn) { socket.emit('playerAction', { action: 'guard' }); return; }
@@ -631,10 +662,10 @@ function initializeGameUIListeners() {
             if (ability) {
                 if (ability.cost?.type === 'discard') {
                     actionState = { type: 'useAbility', step: 'selectCard', cost: ability.cost, ability: ability };
-                    showToast(`Choose a ${ability.cost.cardType} card from your hand to discard.`);
+                    showToast(`Choose a ${ability.cost.cardType} card from your hand to discard.`, 'info');
                 } else if (ability.target) {
                     actionState = { type: 'useAbility', ability: ability, effect: { target: ability.target } };
-                    showToast(`Choose a ${ability.target} to target.`);
+                    showToast(`Choose a ${ability.target} to target.`, 'info');
                 } else {
                     socket.emit('playerAction', { action: 'useAbility' });
                 }
@@ -665,8 +696,9 @@ socket.on('gameStateUpdate', (newState) => {
     currentRoomState = newState;
     requestAnimationFrame(renderUI);
 
-    // Show "Your Turn" popup if the turn has changed to you
+    // Show "Your Turn" popup and reset modal flag
     if (newTurnPlayerId === myId && oldTurnPlayerId !== myId) {
+        endTurnModalShownThisTurn = false;
         const popup = document.getElementById('your-turn-popup');
         popup.classList.remove('hidden');
         setTimeout(() => popup.classList.add('hidden'), 2000);
@@ -674,7 +706,7 @@ socket.on('gameStateUpdate', (newState) => {
 });
 
 socket.on('actionError', (message) => {
-    showToast(`Error: ${message}`, 'error');
+    showToast(`${message}`, 'error', 2500);
     actionState = null; // Clear pending action on error
     renderUI();
 });
@@ -688,45 +720,52 @@ socket.on('chatMessage', (msg) => {
     }
 });
 
-socket.on('attackRollResult', (data) => showRollResult(data));
-socket.on('damageRollResult', (data) => showRollResult(data));
+socket.on('attackRollResult', (data) => showDiceRollModal(data));
+socket.on('damageRollResult', (data) => showDiceRollModal(data));
 
 
 // --- 5. HELPER FUNCTIONS ---
-function showRollResult(data) {
-    const isMyAction = data.attacker.id === myId;
-    const toastContainer = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast-roll-overlay`;
+function showDiceRollModal(data) {
+    const get = id => document.getElementById(id);
+    const modal = get('dice-roll-modal');
+    const titleEl = get('dice-roll-title');
+    const spinnerContainer = get('dice-spinner-container');
+    const resultContainer = get('dice-result-container');
+    const resultLineEl = get('dice-roll-result-line');
+    const detailsEl = get('dice-roll-details');
 
     const title = data.dice ? "Damage Roll" : "Attack/Skill Roll";
     const resultColor = data.result === 'HIT' || data.result === 'CRITICAL HIT' || data.result === 'SUCCESS' ? 'var(--color-success)' : 'var(--color-danger)';
     
     let detailsHtml = '';
     if (data.dice) { // Damage roll
-        detailsHtml = `Rolled ${data.roll} (${data.dice}) + ${data.bonus} bonus = <strong>${data.total} Damage</strong>`;
-    } else { // Attack roll
+        titleEl.textContent = `${data.attacker.name}'s Damage Roll`;
+        resultLineEl.textContent = `${data.total} Damage!`;
+        resultLineEl.style.color = 'var(--stat-color-hp)';
+        detailsHtml = `Rolled ${data.roll} (${data.dice}) + ${data.bonus} bonus`;
+    } else { // Attack/Skill roll
+        titleEl.textContent = `${data.attacker.name}'s ${data.target.name} Roll`;
+        resultLineEl.textContent = data.result || '';
+        resultLineEl.style.color = resultColor;
         detailsHtml = `Rolled ${data.roll} (d20) + ${data.bonus} bonus = <strong>${data.total}</strong> vs DC ${data.required}`;
     }
 
-    toast.innerHTML = `
-        <div class="toast-roll-content">
-            <h2 class="panel-header">${data.attacker.name}'s ${title}</h2>
-            <p class="result-line" style="color:${resultColor};">${data.result || ''}</p>
-            <p class="roll-details">${detailsHtml}</p>
-        </div>
-    `;
-    
-    toastContainer.appendChild(toast);
-    
-    setTimeout(() => { toast.classList.add('visible'); }, 10);
+    spinnerContainer.classList.remove('hidden');
+    resultContainer.classList.add('hidden');
+    modal.classList.remove('hidden');
+
     setTimeout(() => {
-        toast.classList.remove('visible');
-        toast.addEventListener('transitionend', () => toast.remove());
-    }, 2400);
+        spinnerContainer.classList.add('hidden');
+        detailsEl.innerHTML = detailsHtml;
+        resultContainer.classList.remove('hidden');
+
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 2400);
+    }, 1500); // Animation duration
 }
 
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duration = 3000) {
     const toastContainer = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast-message type-${type}`;
@@ -737,7 +776,7 @@ function showToast(message, type = 'info') {
     setTimeout(() => {
         toast.classList.remove('visible');
         toast.addEventListener('transitionend', () => toast.remove());
-    }, 3000);
+    }, duration);
 }
 
 function switchMobileScreen(screenName) {

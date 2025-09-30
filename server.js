@@ -442,6 +442,7 @@ class GameManager {
         
         // Handle start-of-turn events
         if (player.role === 'Explorer') {
+            this.handleStartOfTurnEffects(room, player);
             this.handlePlayerEventTrigger(room, player);
         }
 
@@ -510,10 +511,17 @@ class GameManager {
     async handleDmTurn(room) {
         await new Promise(res => setTimeout(res, 1000));
         
+        if (room.gameState.turnCount === 1) {
+             this.logEvent(room.id, getDialogue('environment'), 'event');
+             this.emitGameState(room.id);
+             await new Promise(res => setTimeout(res, 1500));
+        }
+        
         // Priority 1: If the board is empty, summon a monster to apply pressure.
         if (room.gameState.board.monsters.length === 0 && room.gameState.turnCount > 1) {
             this.logEvent(room.id, "The DM senses a lull and calls forth a new challenger!", 'event');
             this.dmPlayMonster(room);
+            this.emitGameState(room.id);
             await new Promise(res => setTimeout(res, 1500));
             return; // End DM turn after summoning to an empty board
         }
@@ -521,6 +529,7 @@ class GameManager {
         // Priority 2: Have any existing monsters attack
         if (room.gameState.board.monsters.length > 0) {
             this.logEvent(room.id, `The monsters retaliate!`, 'event');
+            this.emitGameState(room.id);
             for (const monster of [...room.gameState.board.monsters]) {
                if (monster.currentHp <= 0) continue;
                await new Promise(res => setTimeout(res, 1500));
@@ -536,13 +545,8 @@ class GameManager {
         const actionRoll = Math.random();
 
         if (room.gameState.turnCount === 1) { // Special first turn logic
-             if (actionRoll < 0.6) {
-                this.logEvent(room.id, "The DM prepares to unleash a monster...", 'event');
-                this.dmPlayMonster(room);
-            } else {
-                this.logEvent(room.id, "The DM consults the winds of fate...", 'event');
-                this.dmPlayWorldEvent(room);
-            }
+             this.logEvent(room.id, "The DM prepares to unleash a monster...", 'event');
+             this.dmPlayMonster(room);
         } else { // Standard logic for subsequent turns
             if (room.gameState.board.monsters.length < 4 && actionRoll < 0.75) {
                 this.logEvent(room.id, `The DM calls for reinforcements...`, 'event');
@@ -553,6 +557,7 @@ class GameManager {
             }
         }
         
+        this.emitGameState(room.id);
         await new Promise(res => setTimeout(res, 1500));
     }
     
@@ -564,9 +569,20 @@ class GameManager {
             const monsters = room.gameState.board.monsters.filter(m => m.currentHp > 0);
             let actionTakenThisLoop = false;
 
+            // Priority 0: Attempt skill challenge if active
+            const challenge = room.gameState.skillChallenge;
+            if (challenge && challenge.isActive && ap >=1 && Math.random() < 0.8) {
+                this.logEvent(room.id, `${player.name} decides to tackle the challenge!`, 'action');
+                this.emitGameState(room.id);
+                await new Promise(res => setTimeout(res, 1000));
+                this.resolveSkillChallenge(room, player, challenge.id);
+                ap -= 1; // All attempts cost 1 ap
+                actionTakenThisLoop = true;
+            }
+
             // Priority 1: Use ability if advantageous
             const classAbility = gameData.classes[player.class]?.ability;
-            if (classAbility && ap >= classAbility.apCost && Math.random() < 0.3) {
+            if (!actionTakenThisLoop && classAbility && ap >= classAbility.apCost && Math.random() < 0.3) {
                 this.logEvent(room.id, `${player.name} uses their ability: ${classAbility.name}!`, 'action');
                 this.applyEffect(room, {type: 'ability', abilityName: classAbility.name}, player, null);
                 ap -= classAbility.apCost;
@@ -620,7 +636,7 @@ class GameManager {
             
             player.currentAp = ap;
             this.emitGameState(room.id);
-            await new Promise(res => setTimeout(res, 1000));
+            await new Promise(res => setTimeout(res, 1500));
         }
     }
 
@@ -636,67 +652,57 @@ class GameManager {
         if (!player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
 
         const { action, cardId, targetId, description, challengeId, cardToDiscardId } = data;
+        const sendError = (msg) => socket.emit('actionError', msg);
 
         const actionHandlers = {
             'attack': () => this.initiateAttack(room, { attackerId: player.id, targetId, weaponId: cardId, description }),
             'guard': () => {
-                if (player.currentAp >= gameData.actionCosts.guard) {
-                    player.currentAp -= gameData.actionCosts.guard;
-                    const shieldGain = (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
-                    player.stats.shieldHp += shieldGain;
-                    this.logEvent(room.id, `${player.name} takes a defensive stance, gaining ${shieldGain} shield.`, 'info');
-                }
+                if (player.currentAp < gameData.actionCosts.guard) return sendError("Not enough AP to Guard.");
+                player.currentAp -= gameData.actionCosts.guard;
+                const shieldGain = (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
+                player.stats.shieldHp += shieldGain;
+                this.logEvent(room.id, `${player.name} takes a defensive stance, gaining ${shieldGain} shield.`, 'info');
             },
             'briefRespite': () => {
-                if (player.currentAp >= gameData.actionCosts.briefRespite) {
-                    player.currentAp -= gameData.actionCosts.briefRespite;
-                    this.logEvent(room.id, `${player.name} takes a brief respite to recover.`, 'info');
-                    this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d4` }, player, player);
-                }
+                if (player.currentAp < gameData.actionCosts.briefRespite) return sendError("Not enough AP for Respite.");
+                player.currentAp -= gameData.actionCosts.briefRespite;
+                this.logEvent(room.id, `${player.name} takes a brief respite to recover.`, 'info');
+                this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d4` }, player, player);
             },
             'fullRest': () => {
-                 if (player.currentAp >= gameData.actionCosts.fullRest) {
-                     player.currentAp -= gameData.actionCosts.fullRest;
-                     this.logEvent(room.id, `${player.name} takes a full rest to recover.`, 'info');
-                     this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d8` }, player, player);
-                 }
+                 if (player.currentAp < gameData.actionCosts.fullRest) return sendError("Not enough AP for a Full Rest.");
+                 player.currentAp -= gameData.actionCosts.fullRest;
+                 this.logEvent(room.id, `${player.name} takes a full rest to recover.`, 'info');
+                 this.applyEffect(room, { type: 'heal', dice: `${gameData.classes[player.class].healthDice}d8` }, player, player);
             },
             'useCard': () => {
                 const cardIndex = player.hand.findIndex(c => c.id === cardId);
                 if (cardIndex === -1) return;
                 const card = player.hand[cardIndex];
-                if (player.currentAp >= (card.apCost || 1)) {
-                    player.currentAp -= (card.apCost || 1);
-                    player.hand.splice(cardIndex, 1);
-                    const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
-                    this.logEvent(room.id, `${player.name} uses ${card.name}.`, 'action');
-                    this.applyEffect(room, card.effect, player, target);
-                }
+                if (player.currentAp < (card.apCost || 1)) return sendError("Not enough AP to use this card.");
+                player.currentAp -= (card.apCost || 1);
+                player.hand.splice(cardIndex, 1);
+                const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
+                this.logEvent(room.id, `${player.name} uses ${card.name}.`, 'action');
+                this.applyEffect(room, card.effect, player, target);
             },
             'claimLoot': () => {
                 const lootIndex = room.gameState.lootPool.findIndex(c => c.id === cardId);
                 if (lootIndex === -1) return;
-                
                 const lootCard = room.gameState.lootPool.splice(lootIndex, 1)[0];
                 player.hand.push(lootCard);
                 this.logEvent(room.id, `${player.name} claims the ${lootCard.name}!`, 'loot');
             },
             'useAbility': () => {
                 const ability = gameData.classes[player.class]?.ability;
-                if (!ability || player.currentAp < ability.apCost) return;
+                if (!ability || player.currentAp < ability.apCost) return sendError("Not enough AP to use your ability.");
             
                 // Handle discard cost
                 if (ability.cost?.type === 'discard') {
                     const cardToDiscardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
-                    if (cardToDiscardIndex === -1) {
-                         this.emitToRoom(room.id, 'actionError', 'Card to discard not found in hand.');
-                         return;
-                    }
+                    if (cardToDiscardIndex === -1) return sendError('Card to discard not found in hand.');
                     const cardToDiscard = player.hand[cardToDiscardIndex];
-                    if (cardToDiscard.type.toLowerCase() !== ability.cost.cardType.toLowerCase()) {
-                        this.emitToRoom(room.id, 'actionError', `You must discard a ${ability.cost.cardType} card.`);
-                        return;
-                    }
+                    if (cardToDiscard.type.toLowerCase() !== ability.cost.cardType.toLowerCase()) return sendError(`You must discard a ${ability.cost.cardType} card.`);
             
                     player.hand.splice(cardToDiscardIndex, 1); // Discard the card
                     this.logEvent(room.id, `${player.name} discards ${cardToDiscard.name} to power their ability.`, 'info');
@@ -728,7 +734,7 @@ class GameManager {
     
         const apCost = isUnarmed ? 1 : (weapon?.apCost || 2);
         if (!isMonster) {
-            if (attacker.currentAp < apCost) return;
+            if (attacker.currentAp < apCost) return; // Server-side check
             attacker.currentAp -= apCost;
         }
     
@@ -975,7 +981,6 @@ class GameManager {
             monsterCard.statusEffects = [];
             room.gameState.board.monsters.push(monsterCard);
             this.logEvent(room.id, `The Dungeon Master summons a toughened ${monsterCard.name}!`, 'monster');
-            this.emitGameState(room.id);
         } else {
             this.logEvent(room.id, `The DM tried to summon a monster, but the deck was empty.`, 'error');
         }
@@ -987,9 +992,23 @@ class GameManager {
             room.gameState.worldEvents.currentEvent = eventCard;
             room.gameState.worldEvents.duration = 2; // Example duration
             this.logEvent(room.id, `A world event occurs: <strong>${eventCard.name}</strong>. ${eventCard.description}`, 'event');
-            // Apply mechanical effects
-            Object.values(room.players).forEach(p => this.applyEffect(room, eventCard.effect, null, p));
             this.emitGameState(room.id);
+        }
+    }
+
+    handleStartOfTurnEffects(room, player) {
+        const event = room.gameState.worldEvents.currentEvent;
+        if (event && event.effect?.type === 'save') {
+            const { stat, dc, consequence } = event.effect;
+            const d20 = this.rollDice('1d20');
+            const statBonus = player.stats[stat] || 0;
+            const total = d20 + statBonus;
+            const success = total >= dc;
+            this.logEvent(room.id, `${player.name} makes a ${stat.toUpperCase()} save for "${event.name}"... Roll: ${d20} + ${statBonus} = <strong>${total}</strong> vs DC ${dc}.`, 'info');
+            if (!success) {
+                this.logEvent(room.id, `They failed the save!`, 'damage');
+                this.applyEffect(room, consequence, {name: 'World Event'}, player);
+            }
         }
     }
 
@@ -1016,15 +1035,18 @@ class GameManager {
     }
 
     dmTriggerSkillChallenge(room) {
-        const challenge = gameData.skillChallenges[Math.floor(Math.random() * gameData.skillChallenges.length)];
-        room.gameState.skillChallenge = { ...challenge, isActive: true };
+        const challenge = deepClone(gameData.skillChallenges[Math.floor(Math.random() * gameData.skillChallenges.length)]);
+        room.gameState.skillChallenge = { ...challenge, isActive: true, successes: 0, failures: 0 };
         this.logEvent(room.id, `A challenge presents itself! <strong>${challenge.name}</strong>: ${challenge.description}`, 'event');
         this.emitGameState(room.id);
     }
 
     resolveSkillChallenge(room, player, challengeId) {
         const challenge = room.gameState.skillChallenge;
-        if (!challenge || !challenge.isActive || challenge.id !== challengeId || player.currentAp < 1) return;
+        if (!challenge || !challenge.isActive || challenge.id !== challengeId || player.currentAp < 1) {
+            if (player.currentAp < 1 && !player.isNpc) this.emitToRoom(player.id, 'actionError', 'Not enough AP.');
+            return;
+        }
         player.currentAp -= 1;
         
         const d20 = this.rollDice('1d20');
@@ -1042,17 +1064,26 @@ class GameManager {
             required: challenge.dc,
             result: success ? 'SUCCESS' : 'FAILURE'
         });
-
+        
         setTimeout(() => {
-            room.gameState.skillChallenge = null;
-            if(success) {
+            if (success) {
+                challenge.successes++;
+                this.logEvent(room.id, `${player.name}'s attempt succeeded! (${challenge.successes}/${challenge.successThreshold})`, 'info');
+            } else {
+                challenge.failures++;
+                this.logEvent(room.id, `${player.name}'s attempt failed. (${challenge.failures}/${challenge.failureThreshold})`, 'info');
+            }
+
+            if (challenge.successes >= challenge.successThreshold) {
+                room.gameState.skillChallenge = null;
                 this.logEvent(room.id, challenge.success.message, 'loot');
                  if(challenge.success.reward.type === 'loot') {
                     for(let i = 0; i < challenge.success.reward.count; i++) {
                         room.gameState.lootPool.push(this.drawCardFromDeck(room.id, 'treasure'));
                     }
                 }
-            } else {
+            } else if (challenge.failures >= challenge.failureThreshold) {
+                room.gameState.skillChallenge = null;
                  this.logEvent(room.id, challenge.failure.message, 'damage');
                  if(challenge.failure.consequence.type === 'damage') {
                      const damage = this.rollDice(challenge.failure.consequence.dice);
@@ -1078,16 +1109,7 @@ class GameManager {
         };
         
         room.chatLog.push(chatMessage);
-        
-        if (channel === 'party') {
-            Object.values(room.players).forEach(p => {
-                if (p.role === 'Explorer') {
-                    io.to(p.id).emit('chatMessage', chatMessage);
-                }
-            });
-        } else {
-            this.emitToRoom(room.id, 'chatMessage', chatMessage);
-        }
+        this.emitToRoom(room.id, 'chatMessage', chatMessage);
     }
 
 
