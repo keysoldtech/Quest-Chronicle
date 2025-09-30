@@ -11,6 +11,7 @@ let myId = '';
 let currentRoomState = {}; // The single, authoritative copy of the game state on the client.
 let selectedGameMode = null; // For the menu screen
 let selectedWeaponId = null; // For targeting UI
+let selectedTargetId = null; // For narrative modal
 let gameUIInitialized = false; // Flag to ensure game listeners are only attached once
 
 // --- 2. CORE RENDERING ENGINE ---
@@ -44,10 +45,18 @@ function createCardElement(card, options = {}) {
             <div class="card-bonus" title="Armor Class"><span class="material-symbols-outlined">security</span>${card.requiredRollToHit || 10}</div>
         </div>` : '';
     const weaponDiceHTML = card.type === 'Weapon' ? `<div class="card-bonus" title="Damage Dice"><span class="material-symbols-outlined">casino</span>${card.effect.dice}</div>` : '';
+    
+    let bonusHtml = '';
+    if(card.effect?.bonuses){
+        bonusHtml = `<div class="card-bonuses-grid">` + Object.entries(card.effect.bonuses).map(([key, value]) => {
+            return `<div class="card-bonus" title="${key} bonus">${key.substring(0,3).toUpperCase()}: +${value}</div>`
+        }).join('') + `</div>`;
+    }
+
 
     cardDiv.innerHTML = `
         <div class="card-header">
-             <h3 class="card-title">${card.name}</h3>
+             <h3 class="card-title ${card.name.includes(' of ') ? 'magical-item' : ''}">${card.name}</h3>
              ${monsterHpHTML}
         </div>
         <div class="card-content">
@@ -56,6 +65,7 @@ function createCardElement(card, options = {}) {
         <div class="card-footer">
             ${monsterStatsHTML}
             ${weaponDiceHTML}
+            ${bonusHtml}
             <p class="card-type">${typeInfo}</p>
         </div>
     `;
@@ -140,7 +150,7 @@ function renderUI() {
  * Renders the class selection UI into the specified containers.
  */
 function renderClassSelection(desktopContainer, mobileContainer) {
-    const classData = gameData.classes; // Assuming gameData is available on client for this
+    const classData = gameData.classes;
     const classSelectionHTML = `
         <h2 class="panel-header">Choose Your Class</h2>
         <div class="panel-content">
@@ -149,8 +159,7 @@ function renderClassSelection(desktopContainer, mobileContainer) {
                     <div class="class-card" data-class-id="${id}">
                         <h3>${id}</h3>
                         <div class="class-stats">
-                            <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
-                            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAp}</p>
+                            ${Object.entries(data.stats).map(([stat, val]) => `<p><strong>${stat.toUpperCase()}</strong> ${val}</p>`).join('')}
                         </div>
                         <div class="class-ability">
                             <p><strong>${data.ability.name}</strong></p>
@@ -179,11 +188,9 @@ function renderGameplayState(myPlayer, gameState) {
     get('turn-indicator').textContent = turnText;
     get('mobile-turn-indicator').textContent = turnText;
 
-    // HP is always relevant
     get('hp-counter-desktop').innerHTML = `<span class="material-symbols-outlined">favorite</span>${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
     get('hp-counter-mobile').innerHTML = `<span class="material-symbols-outlined">favorite</span>${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
     
-    // AP is 'current' on your turn, otherwise shows potential
     const apText = isMyTurn ? `${myPlayer.currentAp}/${myPlayer.stats.ap}` : `0/${myPlayer.stats.ap}`;
     get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${apText}`;
     get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${apText}`;
@@ -197,41 +204,40 @@ function renderGameplayState(myPlayer, gameState) {
     const mobileBoard = get('mobile-board-cards');
     board.innerHTML = ''; mobileBoard.innerHTML = '';
     gameState.board.monsters.forEach(monster => {
-        const cardEl = createCardElement(monster, { isTargetable: isMyTurn });
+        const cardEl = createCardElement(monster, { isTargetable: isMyTurn && selectedWeaponId });
         cardEl.onclick = () => {
             if (!isMyTurn || !selectedWeaponId) return;
-            const weapon = selectedWeaponId === 'unarmed' ? null : myPlayer.equipment.weapon;
-            const apCost = selectedWeaponId === 'unarmed' ? 1 : (weapon?.apCost || 2);
-            if (myPlayer.currentAp < apCost) return;
-            socket.emit('playerAction', { action: 'attack', cardId: selectedWeaponId, targetId: monster.id });
-            selectedWeaponId = null; // Deselect after attacking
+            selectedTargetId = monster.id;
+            const weaponName = selectedWeaponId === 'unarmed' ? 'Fists' : myPlayer.equipment.weapon?.name;
+            document.getElementById('narrative-prompt').textContent = `How do you attack with your ${weaponName}?`;
+            document.getElementById('narrative-modal').classList.remove('hidden');
+            document.getElementById('narrative-input').focus();
         };
         board.appendChild(cardEl);
-        mobileBoard.appendChild(cardEl.cloneNode(true)); // Simple clone for mobile
+        mobileBoard.appendChild(cardEl.cloneNode(true));
     });
 
-    // Player Character Panel (Desktop) & Mobile Screen
     renderCharacterPanel(get('character-panel-content'), get('mobile-screen-character'), myPlayer);
-
-    // Equipment & Hand
     renderHandAndEquipment(myPlayer, isMyTurn);
-
-    // Logs and Events
     renderGameLog(get('game-log-content'), gameState.gameLog);
-    renderGameLog(get('mobile-game-log'), gameState.gameLog); // Also render for mobile
+    renderGameLog(get('mobile-game-log'), gameState.gameLog);
     renderWorldEvents(get('world-events-container'), gameState.worldEvents);
     renderWorldEvents(get('mobile-world-events-container'), gameState.worldEvents);
 }
 
 function renderCharacterPanel(desktopContainer, mobileContainer, player) {
-    const { stats, class: className, equipment, statusEffects } = player;
+    const { stats, class: className } = player;
     const classData = gameData.classes[className];
     const statsHTML = `
         <h2 class="panel-header player-class-header">${player.name} - ${className}</h2>
         <div class="panel-content">
-            <div class="player-stats">
+            <div class="player-stats-grid">
+                ${Object.entries(stats).filter(([key]) => ['str','dex','con','int','wis','cha'].includes(key))
+                .map(([key, val]) => `<div class="stat-line"><span class="stat-label">${key.toUpperCase()}</span><span class="stat-value">${val}</span></div>`).join('')}
+            </div>
+            <div class="player-stats-derived">
                  <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-hp)">favorite</span><span class="stat-label">Health</span><span class="stat-value">${stats.currentHp} / ${stats.maxHp}</span></div>
-                 <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-ap)">bolt</span><span class="stat-label">Action Points</span><span class="stat-value">${stats.ap}</span></div>
+                 <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-ap)">bolt</span><span class="stat-label">Action Points</span><span class="stat-value">${player.currentAp} / ${stats.ap}</span></div>
                  <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-damage)">swords</span><span class="stat-label">Damage Bonus</span><span class="stat-value">+${stats.damageBonus}</span></div>
                  <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-shield)">shield</span><span class="stat-label">Shield Bonus</span><span class="stat-value">+${stats.shieldBonus}</span></div>
             </div>
@@ -251,18 +257,16 @@ function renderHandAndEquipment(player, isMyTurn) {
     const mobileEquipped = get('mobile-equipped-items');
     equipped.innerHTML = ''; mobileEquipped.innerHTML = '';
     
-    // Unarmed/Fist option (only if no weapon is equipped)
-    if (!player.equipment.weapon) {
-        const unarmedCard = createCardElement({ id: 'unarmed', name: 'Fists', type: 'Unarmed', effect: { description: 'Costs 1 AP.' } }, { isAttackable: isMyTurn });
+    if (player.equipment.weapon === null) {
+        const unarmedCard = createCardElement({ id: 'unarmed', name: 'Fists', type: 'Unarmed', effect: { description: 'Costs 1 AP.' }, apCost: 1 }, { isAttackable: isMyTurn });
         unarmedCard.onclick = () => {
             if (!isMyTurn) return;
             selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
-            renderUI(); // Re-render to show selection
+            renderUI();
         };
         equipped.appendChild(unarmedCard);
     }
 
-    // Equipped weapon
     if (player.equipment.weapon) {
         const weaponCard = createCardElement(player.equipment.weapon, { isAttackable: isMyTurn });
         weaponCard.onclick = () => {
@@ -272,12 +276,10 @@ function renderHandAndEquipment(player, isMyTurn) {
         };
         equipped.appendChild(weaponCard);
     }
-     // Equipped Armor
     if (player.equipment.armor) {
         equipped.appendChild(createCardElement(player.equipment.armor));
     }
 
-    // Hand
     const hand = get('player-hand');
     const mobileHand = get('mobile-player-hand');
     hand.innerHTML = ''; mobileHand.innerHTML = '';
@@ -286,7 +288,6 @@ function renderHandAndEquipment(player, isMyTurn) {
         hand.appendChild(createCardElement(card, { isEquippable }));
     });
     
-    // Clone for mobile - non-interactive for simplicity
     mobileEquipped.innerHTML = equipped.innerHTML;
     mobileHand.innerHTML = hand.innerHTML;
 }
@@ -361,6 +362,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeGameUIListeners() {
+    const get = id => document.getElementById(id);
+
     // Event delegation for dynamically created elements
     document.body.addEventListener('click', (e) => {
         const classBtn = e.target.closest('.select-class-btn');
@@ -386,25 +389,48 @@ function initializeGameUIListeners() {
             socket.emit('playerAction', { action: 'guard' });
             return;
         }
+
+        const challengeBtn = e.target.closest('#action-skill-challenge-btn, #mobile-action-skill-challenge-btn');
+        if (challengeBtn) {
+            socket.emit('playerAction', { action: 'skillChallenge', challengeId: 'sc-01' }); // Hardcoded for now
+            return;
+        }
+    });
+
+    // Narrative Modal
+    get('narrative-cancel-btn').addEventListener('click', () => {
+        get('narrative-modal').classList.add('hidden');
+        selectedTargetId = null;
+        selectedWeaponId = null;
+        renderUI();
+    });
+    get('narrative-confirm-btn').addEventListener('click', () => {
+        socket.emit('playerAction', { 
+            action: 'attack', 
+            cardId: selectedWeaponId, 
+            targetId: selectedTargetId,
+            description: get('narrative-input').value.trim()
+        });
+        get('narrative-input').value = '';
+        get('narrative-modal').classList.add('hidden');
+        selectedWeaponId = null;
+        selectedTargetId = null;
     });
 }
 
 // --- 4. SOCKET EVENT HANDLERS ---
 socket.on('connect', () => { myId = socket.id; });
 
-// REBUILT: This is the single entry point for all state changes.
 socket.on('gameStateUpdate', (newState) => {
-    // TEMP DATA: Add gameData to client for rendering purposes
-    // In a real build, this would be managed better to avoid sending all data
     if (typeof gameData === 'undefined') {
         window.gameData = {
             classes: {
-                Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAp: 3, ability: { name: 'Unchecked Assault', description: 'Discard a Spell card to add +6 damage to your next successful weapon attack this turn.' } },
-                Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAp: 2, ability: { name: 'Divine Aid', description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
-                Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAp: 2, ability: { name: 'Mystic Recall', description: 'Draw one card from the Spell deck.' } },
-                Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAp: 2, ability: { name: 'Hunters Mark', description: 'Mark a monster. All attacks against it deal +2 damage for one round.' } },
-                Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAp: 3, ability: { name: 'Evasion', description: 'For one round, all attacks against you have disadvantage (DM rerolls hits).' } },
-                Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAp: 3, ability: { name: 'Weapon Surge', description: 'Discard a Spell card to add +4 damage to your next successful weapon attack this turn.' } },
+                Barbarian: { stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Unchecked Assault', description: 'Discard a Spell card to add +6 damage to your next successful weapon attack this turn.' } },
+                Cleric:    { stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Aid', description: 'Gain a +1d4 bonus to your next d20 roll (attack or challenge) this turn.' } },
+                Mage:      { stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, ability: { name: 'Mystic Recall', description: 'Draw one card from the Spell deck.' } },
+                Ranger:    { stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, ability: { name: 'Hunters Mark', description: 'Mark a monster. All attacks against it deal +2 damage for one round.' } },
+                Rogue:     { stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, ability: { name: 'Evasion', description: 'For one round, all attacks against you have disadvantage (DM rerolls hits).' } },
+                Warrior:   { stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, ability: { name: 'Weapon Surge', description: 'Discard a Spell card to add +4 damage to your next successful weapon attack this turn.' } },
             }
         };
     }
@@ -416,7 +442,44 @@ socket.on('actionError', (message) => {
     alert(`Error: ${message}`);
 });
 
+socket.on('attackRollResult', (data) => showRollResult(data));
+socket.on('damageRollResult', (data) => showRollResult(data));
+
+
 // --- 5. HELPER FUNCTIONS ---
+function showRollResult(data) {
+    const isMyAction = data.attacker.id === myId;
+    const toastContainer = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast-roll-overlay ${isMyAction ? 'self' : 'other'}`;
+
+    const title = data.dice ? "Damage Roll" : "Attack Roll";
+    const resultColor = data.result === 'HIT' || data.result === 'CRITICAL HIT' || data.result === 'SUCCESS' ? 'var(--color-success)' : 'var(--color-danger)';
+    
+    let detailsHtml = '';
+    if (data.dice) { // Damage roll
+        detailsHtml = `Rolled ${data.roll} (${data.dice}) + ${data.bonus} bonus = <strong>${data.total} Damage</strong>`;
+    } else { // Attack roll
+        detailsHtml = `Rolled ${data.roll} (d20) + ${data.bonus} bonus = <strong>${data.total}</strong> vs DC ${data.required}`;
+    }
+
+    toast.innerHTML = `
+        <div class="toast-roll-content">
+            <h2 class="panel-header">${data.attacker.name}'s ${title}</h2>
+            <p class="result-line" style="color:${resultColor};">${data.result || ''}</p>
+            <p class="roll-details">${detailsHtml}</p>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    setTimeout(() => { toast.classList.add('visible'); }, 10);
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, 2400);
+}
+
 function switchMobileScreen(screenName) {
     document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(n => n.classList.remove('active'));
