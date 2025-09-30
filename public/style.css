@@ -61,6 +61,7 @@
 html, body {
     height: 100%;
     overflow: hidden; /* Lock the viewport */
+    overflow-x: hidden !important;
 }
 
 body {
@@ -895,9 +896,9 @@ label {
 }
 
 #narrative-input {
-    width: 95%;
+    width: 90%;
     max-width: 400px;
-    margin: 1rem 0;
+    margin: 10px auto;
     box-sizing: border-box;
 }
 
@@ -963,7 +964,7 @@ label {
 }
 
 /* --- TOAST NOTIFICATIONS (FIXED) --- */
-.toast-container {
+#toast-container {
     position: fixed;
     top: 0;
     left: 0;
@@ -985,7 +986,8 @@ label {
     border-radius: 8px;
     border: 1px solid var(--color-border);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    max-width: 90%;
+    width: 90%;
+    max-width: 400px;
     word-wrap: break-word;
     box-sizing: border-box;
     pointer-events: auto;
