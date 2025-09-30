@@ -158,7 +158,7 @@ function renderClassSelection(desktopContainer, mobileContainer) {
                         <p><strong>${data.ability.name}</strong></p>
                         <p class="ability-desc">${data.ability.description}</p>
                     </div>
-                    <button class="select-class-btn" data-class-id="${id}">Select ${id}</button>
+                    <button class="select-class-btn btn btn-primary btn-sm" data-class-id="${id}">Select ${id}</button>
                 </div>
             `).join('')}
         </div>`;
@@ -239,18 +239,10 @@ function renderHandAndEquipment(player, isMyTurn) {
     const get = id => document.getElementById(id);
     const equipped = get('equipped-items');
     const mobileEquipped = get('mobile-equipped-items');
-    equipped.innerHTML = ''; mobileEquipped.innerHTML = '';
+    equipped.innerHTML = ''; 
+    mobileEquipped.innerHTML = '';
     
-    // Unarmed/Fist option
-    const unarmedCard = createCardElement({ id: 'unarmed', name: 'Fists', type: 'Unarmed', effect: { description: 'Costs 1 AP.' } }, { isAttackable: isMyTurn });
-    unarmedCard.onclick = () => {
-        if (!isMyTurn) return;
-        selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
-        renderUI(); // Re-render to show selection
-    };
-    equipped.appendChild(unarmedCard);
-
-    // Equipped weapon
+    // Equipped weapon OR unarmed if no weapon
     if (player.equipment.weapon) {
         const weaponCard = createCardElement(player.equipment.weapon, { isAttackable: isMyTurn });
         weaponCard.onclick = () => {
@@ -259,8 +251,18 @@ function renderHandAndEquipment(player, isMyTurn) {
             renderUI();
         };
         equipped.appendChild(weaponCard);
+    } else {
+        // Unarmed/Fist option only if no weapon equipped
+        const unarmedCard = createCardElement({ id: 'unarmed', name: 'Fists', type: 'Unarmed', effect: { description: 'Costs 1 AP.' } }, { isAttackable: isMyTurn });
+        unarmedCard.onclick = () => {
+            if (!isMyTurn) return;
+            selectedWeaponId = (selectedWeaponId === 'unarmed') ? null : 'unarmed';
+            renderUI(); // Re-render to show selection
+        };
+        equipped.appendChild(unarmedCard);
     }
-     // Equipped Armor
+    
+    // Equipped Armor
     if (player.equipment.armor) {
         equipped.appendChild(createCardElement(player.equipment.armor));
     }
@@ -268,7 +270,8 @@ function renderHandAndEquipment(player, isMyTurn) {
     // Hand
     const hand = get('player-hand');
     const mobileHand = get('mobile-player-hand');
-    hand.innerHTML = ''; mobileHand.innerHTML = '';
+    hand.innerHTML = ''; 
+    mobileHand.innerHTML = '';
     player.hand.forEach(card => {
         const isEquippable = (card.type === 'Weapon' || card.type === 'Armor') && isMyTurn;
         hand.appendChild(createCardElement(card, { isEquippable }));

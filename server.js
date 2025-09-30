@@ -276,7 +276,15 @@ class GameManager {
     drawCardFromDeck(roomId, deckName, playerClass = null) {
         const room = this.rooms[roomId];
         if (!room) return null;
-        const deck = room.gameState.decks[deckName];
+
+        let deck;
+        if (deckName.includes('.')) {
+            const [parent, child] = deckName.split('.');
+            deck = room.gameState.decks[parent]?.[child];
+        } else {
+            deck = room.gameState.decks[deckName];
+        }
+
         if (!deck || deck.length === 0) return null;
 
         if (playerClass && (deckName === 'spell' || deckName === 'weapon' || deckName === 'armor')) {
@@ -345,8 +353,15 @@ class GameManager {
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
         if (cardIndex === -1) return;
         
-        const cardToEquip = player.hand.splice(cardIndex, 1)[0];
+        const cardToEquip = player.hand[cardIndex];
         const itemType = cardToEquip.type.toLowerCase();
+
+        if (itemType !== 'weapon' && itemType !== 'armor') {
+            return; // Not an equippable item type
+        }
+        
+        // Now that we know it's valid, splice it from the hand
+        player.hand.splice(cardIndex, 1);
 
         // Unequip old item and put it back in hand
         if (player.equipment[itemType]) {
@@ -460,7 +475,7 @@ class GameManager {
     }
 
     dmPlayMonster(room) {
-        const { turnCount, decks } = room.gameState;
+        const { turnCount } = room.gameState;
         const tier = turnCount <= 3 ? 'tier1' : (turnCount <= 6 ? 'tier2' : 'tier3');
         const monsterCard = this.drawCardFromDeck(room.id, `monster.${tier}`);
         if (monsterCard) {
