@@ -108,10 +108,12 @@ class GameManager {
             id, // The temporary socket ID
             playerId, // The persistent ID for reconnects
             name,
+            status: 'active', // Can be 'active' or 'spectator'
             isNpc: false,
             isDowned: false, // Player defeat state
             disconnected: false, // For reconnect logic
             cleanupTimer: null, // For removing disconnected players
+            isGuaranteedCrit: false, // For server-side crit tracking
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
@@ -168,8 +170,24 @@ class GameManager {
     joinRoom(socket, { roomId, playerName }) {
         const room = this.rooms[roomId];
         if (!room) return socket.emit('actionError', 'Room not found.');
-        if (Object.values(room.players).length > 0 && Object.values(room.players).some(p => !p.isNpc && !p.disconnected)) {
-             return socket.emit('actionError', 'This game already has a player.');
+
+        // LATE JOIN LOGIC: If a game is in progress, join as a spectator.
+        const humanPlayerExists = Object.values(room.players).some(p => !p.isNpc && !p.disconnected);
+        if (humanPlayerExists && room.gameState.phase !== 'class_selection') {
+            const newSpectator = this.createPlayerObject(socket.id, playerName);
+            newSpectator.role = null;
+            newSpectator.status = 'spectator';
+            room.players[socket.id] = newSpectator;
+            socket.join(roomId);
+            this.socketToRoom[socket.id] = roomId;
+            socket.emit('playerIdentity', { playerId: newSpectator.playerId, roomId: roomId });
+            this.emitGameState(roomId);
+            return;
+        }
+
+        // Standard join logic if no human player exists yet.
+        if (humanPlayerExists) {
+            return socket.emit('actionError', 'This game already has a player.');
         }
 
         const newPlayer = this.createPlayerObject(socket.id, playerName);
@@ -178,9 +196,7 @@ class GameManager {
         socket.join(roomId);
         this.socketToRoom[socket.id] = roomId;
         
-        // Send the persistent ID to the client for session storage
         socket.emit('playerIdentity', { playerId: newPlayer.playerId, roomId: roomId });
-
         this.emitGameState(roomId);
     }
 
@@ -266,6 +282,16 @@ class GameManager {
         ]);
     }
 
+    _giveCardToPlayer(room, player, card) {
+        if (!card) return;
+        if (player.hand.length >= room.gameState.customSettings.maxHandSize) {
+            room.chatLog.push({ type: 'system', text: `${player.name}'s hand is full! A drawn card was discarded.` });
+            // Optionally add to a discard pile
+            return;
+        }
+        player.hand.push(card);
+    }
+
     dealStartingLoadout(room, player) {
         const { gameMode, customSettings } = room.gameState;
         
@@ -292,10 +318,12 @@ class GameManager {
         if (gameMode === 'Advanced') { itemsToDraw = 2; spellsToDraw = 1; }
         if (gameMode === 'Custom') { itemsToDraw = customSettings.startingItems; spellsToDraw = customSettings.startingSpells; }
 
-        for (let i = 0; i < itemsToDraw; i++) player.hand.push(this.drawCardFromDeck(room.id, 'item'));
-        for (let i = 0; i < spellsToDraw; i++) player.hand.push(this.drawCardFromDeck(room.id, 'spell', player.class));
-        
-        player.hand = player.hand.filter(Boolean); // Clean out any nulls if decks were empty
+        for (let i = 0; i < itemsToDraw; i++) {
+            this._giveCardToPlayer(room, player, this.drawCardFromDeck(room.id, 'item'));
+        }
+        for (let i = 0; i < spellsToDraw; i++) {
+            this._giveCardToPlayer(room, player, this.drawCardFromDeck(room.id, 'spell', player.class));
+        }
     }
 
     drawCardFromDeck(roomId, deckName, playerClass = null) {
@@ -312,7 +340,6 @@ class GameManager {
 
         if (!deck || deck.length === 0) return null;
 
-        // FIXED: If looking for a class-specific card and none are found, return null instead of a random one.
         if (playerClass && (deckName === 'spell' || deckName === 'weapon' || deckName === 'armor')) {
             const suitableCardIndex = deck.findIndex(card => 
                 !card.class || card.class.includes("Any") || card.class.includes(playerClass)
@@ -405,7 +432,7 @@ class GameManager {
         player.hand.splice(cardIndex, 1);
 
         if (player.equipment[itemType]) {
-            player.hand.push(player.equipment[itemType]);
+            this._giveCardToPlayer(room, player, player.equipment[itemType]);
         }
         
         player.equipment[itemType] = cardToEquip;
@@ -603,13 +630,12 @@ class GameManager {
         if (!player || player.isDowned || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
         
         // P0 FIX: Halt any new player-initiated action if they have no AP.
-        // Resolution steps of an attack are not "new" actions and are allowed to proceed.
         if (player.currentAp <= 0 && data.action !== 'resolve_hit' && data.action !== 'resolve_damage') {
             socket.emit('apZeroPrompt');
             return; // Halt the action immediately.
         }
 
-        const { action, cardId, targetId, weaponId, narrative } = data;
+        const { action, cardId, targetId, weaponId, narrative, itemName } = data;
 
         switch (action) {
             case 'attack':
@@ -619,7 +645,7 @@ class GameManager {
                  this._resolveHitRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId });
                  break;
             case 'resolve_damage':
-                 this._resolveDamageRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId, isCrit: data.isCrit });
+                 this._resolveDamageRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId });
                  break;
             case 'guard': {
                 const guardCost = gameData.actionCosts.guard;
@@ -662,6 +688,9 @@ class GameManager {
             }
             case 'useAbility':
                 this._resolveAbility(socket, room, player, data);
+                break;
+            case 'useConsumable':
+                this._resolveConsumable(socket, room, player, { cardId, targetId });
                 break;
         }
     }
@@ -715,6 +744,11 @@ class GameManager {
         const isMiss = d20 === 1;
         const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
 
+        // SECURITY FIX: Store crit status server-side
+        if (isCrit) {
+            attacker.isGuaranteedCrit = true;
+        }
+
         // Consume single-use hit buffs like Divine Aid
         const divineAidBuffIndex = attacker.statusEffects.findIndex(e => e.name === 'Divine Aid');
         if (divineAidBuffIndex > -1) {
@@ -735,9 +769,8 @@ class GameManager {
             targetAC: target.requiredRollToHit,
             outcome: isCrit ? 'CRIT!' : (hit ? 'HIT' : 'MISS'),
             needsDamageRoll: hit,
-            isCrit: isCrit, // Pass crit status to client
             damageDice: hit ? damageDice : null,
-            weaponId, // Pass these through for the next step
+            weaponId,
             targetId,
         };
         
@@ -755,9 +788,15 @@ class GameManager {
         io.to(room.id).emit('attackResult', result);
     }
 
-    _resolveDamageRoll(room, attacker, { weaponId, targetId, isCrit }) {
+    _resolveDamageRoll(room, attacker, { weaponId, targetId }) { // isCrit removed
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
         if (!attacker || !target) return;
+
+        // SECURITY FIX: Check internal state for crit, don't trust client.
+        const isCrit = attacker.isGuaranteedCrit;
+        if (isCrit) {
+            attacker.isGuaranteedCrit = false; // Clear the flag after use
+        }
 
         const isUnarmed = weaponId === 'unarmed';
         const weapon = isUnarmed ? null : attacker.equipment.weapon;
@@ -773,7 +812,6 @@ class GameManager {
 
         if (isCrit) damage *= 2; 
 
-        // Check for debuffs on target like Hunter's Mark
         const huntersMark = target.statusEffects.find(e => e.name === 'Hunters Mark');
         if (huntersMark) {
             damage += huntersMark.damageTakenBonus || 2;
@@ -823,6 +861,11 @@ class GameManager {
         const isMiss = d20 === 1;
         const hit = !isMiss && (isCrit || totalRoll >= target.requiredRollToHit);
 
+        // SECURITY: Server-side crit tracking for NPCs
+        if (isCrit) {
+            attacker.isGuaranteedCrit = true;
+        }
+
         room.chatLog.push({ type: 'system', text: `${attacker.name} attacks ${target.name}... ${hit ? 'HIT' : 'MISS'}! (Rolled ${totalRoll})` });
 
         io.to(room.id).emit('attackResult', {
@@ -838,9 +881,13 @@ class GameManager {
             const damageDice = isUnarmed ? '1d4' : weapon.effect.dice;
             const damageRoll = this.rollDice(damageDice);
             let damage = damageRoll + attacker.stats.damageBonus;
-            if (isCrit) damage *= 2;
 
-            // Check for debuffs on target like Hunter's Mark
+            // SECURITY: Check internal flag for NPC crits
+            if (attacker.isGuaranteedCrit) {
+                damage *= 2;
+                attacker.isGuaranteedCrit = false;
+            }
+
             const huntersMark = target.statusEffects.find(e => e.name === 'Hunters Mark');
             if (huntersMark) {
                 damage += huntersMark.damageTakenBonus || 2;
@@ -870,12 +917,11 @@ class GameManager {
         const target = room.players[targetId];
         if (!monster || !target) return;
         
-        // --- HIT ROLL ---
         let d20 = this.rollDice('1d20');
         const evasion = target.statusEffects.find(e => e.name === 'Evasion');
         if (evasion) {
             const d20_2 = this.rollDice('1d20');
-            d20 = Math.min(d20, d20_2); // Disadvantage
+            d20 = Math.min(d20, d20_2);
         }
 
         const isCrit = d20 === 20;
@@ -894,7 +940,6 @@ class GameManager {
         
         await pause(1500);
         
-        // --- DAMAGE ROLL (if hit) ---
         if (hit) {
             let damageRoll = this.rollDice(monster.effect.dice);
             let damage = damageRoll;
@@ -936,7 +981,6 @@ class GameManager {
             player.stats.currentHp = 0;
             player.isDowned = true;
             room.chatLog.push({ type: 'system', text: `${player.name} has been knocked down!` });
-            // If the human player is downed, the game is over.
             if (!player.isNpc) {
                 room.gameState.phase = 'game_over';
                 room.gameState.winner = 'Monsters';
@@ -958,12 +1002,10 @@ class GameManager {
         const ability = gameData.classes[player.class].ability;
         if (!ability || ability.name !== data.abilityName) return;
 
-        // 1. Check AP Cost
         if (player.currentAp < ability.apCost) {
             return socket.emit('actionError', "Not enough AP to use this ability.");
         }
 
-        // 2. Check Card Cost
         if (ability.cost && ability.cost.type === 'discard') {
             const discardedCard = this._discardCardFromHand(player, ability.cost.cardType);
             if (!discardedCard) {
@@ -972,7 +1014,6 @@ class GameManager {
             room.chatLog.push({ type: 'system', text: `${player.name} discards ${discardedCard.name} to use ${ability.name}.` });
         }
 
-        // 3. Deduct AP & Apply Effect
         player.currentAp -= ability.apCost;
         let successMessage = `${player.name} used ${ability.name}!`;
 
@@ -987,12 +1028,8 @@ class GameManager {
                 break;
             case 'Mystic Recall':
                 const drawnCard = this.drawCardFromDeck(room.id, 'spell', player.class);
-                if (drawnCard) {
-                    player.hand.push(drawnCard);
-                    successMessage = `${player.name} recalls arcane knowledge, drawing a spell.`;
-                } else {
-                    successMessage = `${player.name} reaches for arcane knowledge, but finds none.`;
-                }
+                this._giveCardToPlayer(room, player, drawnCard);
+                successMessage = drawnCard ? `${player.name} recalls arcane knowledge, drawing a spell.` : `${player.name} reaches for arcane knowledge, but finds none.`;
                 break;
             case 'Divine Aid': {
                 const wisBonus = this._getStatModifier(player, 'wis');
@@ -1018,6 +1055,40 @@ class GameManager {
 
         socket.emit('showToast', { message: successMessage });
         player.stats = this.calculatePlayerStats(player);
+        this.emitGameState(room.id);
+    }
+    
+    _resolveConsumable(socket, room, player, { cardId, targetId }) {
+        const cardIndex = player.hand.findIndex(c => c.id === cardId);
+        if (cardIndex === -1) return;
+        
+        const card = player.hand[cardIndex];
+        if (card.type !== 'Consumable') return;
+        
+        if (player.currentAp < (card.apCost || 1)) {
+            return socket.emit('actionError', 'Not enough AP.');
+        }
+
+        player.currentAp -= (card.apCost || 1);
+        player.hand.splice(cardIndex, 1); // Remove from hand
+
+        let successMessage = `You used ${card.name}.`;
+
+        if (card.name === "Combustion Flask") {
+            const target = room.gameState.board.monsters.find(m => m.id === targetId);
+            if (target) {
+                const damage = this.rollDice(card.effect.dice);
+                target.currentHp = Math.max(0, target.currentHp - damage);
+                target.statusEffects.push({ name: card.effect.status, type: 'damage_over_time', damage: '1d4', duration: card.effect.duration });
+                successMessage = `You hurl the ${card.name}, dealing ${damage} fire damage to ${target.name}! It is now On Fire.`;
+                room.chatLog.push({ type: 'system', text: successMessage });
+                if (target.currentHp <= 0) {
+                    this._handleMonsterDefeat(room, target.id);
+                }
+            }
+        }
+        
+        socket.emit('showToast', { message: successMessage });
         this.emitGameState(room.id);
     }
 
@@ -1058,7 +1129,6 @@ class GameManager {
         if (playerToReconnect) {
             const oldId = playerToReconnect.id;
             
-            // Clear the cleanup timer
             if (playerToReconnect.cleanupTimer) {
                 clearTimeout(playerToReconnect.cleanupTimer);
                 playerToReconnect.cleanupTimer = null;
@@ -1107,11 +1177,10 @@ class GameManager {
                     if (playerKeyToDelete && roomForCleanup.players[playerKeyToDelete].disconnected) {
                         console.log(`Cleaning up disconnected player ${roomForCleanup.players[playerKeyToDelete].name} from room ${roomId}`);
                         delete roomForCleanup.players[playerKeyToDelete];
-                        // If no human players left, maybe end the game or handle host migration
                         this.emitGameState(roomId);
                     }
                 }
-            }, 300000); // 5 minutes (300,000 ms)
+            }, 300000); // 5 minutes
 
             this.emitGameState(roomId);
         }

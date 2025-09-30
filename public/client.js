@@ -19,6 +19,28 @@ let rollModalCloseTimeout = null; // Timer for closing the roll modal
 
 // --- 2. CORE RENDERING ENGINE ---
 
+function useItem(card) {
+    if (!currentRoomState || !card) return;
+    const isMyTurn = currentRoomState.gameState.turnOrder[currentRoomState.gameState.currentPlayerIndex] === myId;
+    if (!isMyTurn) return;
+
+    // For now, consumables that require a target will automatically target the first monster.
+    const monsters = currentRoomState.gameState.board.monsters;
+    if (card.effect.target === "any-monster" && monsters.length === 0) {
+        showToast("There are no monsters to target.", "error");
+        return;
+    }
+    
+    const targetId = monsters.length > 0 ? monsters[0].id : null;
+    
+    socket.emit('playerAction', { 
+        action: 'useConsumable', 
+        cardId: card.id,
+        targetId: targetId 
+    });
+}
+
+
 /**
  * Creates an HTML element for a game card.
  * @param {object} card - The card data object.
@@ -26,7 +48,7 @@ let rollModalCloseTimeout = null; // Timer for closing the roll modal
  * @returns {HTMLElement} The card element.
  */
 function createCardElement(card, options = {}) {
-    const { isEquippable = false, isAttackable = false, isTargetable = false } = options;
+    const { isEquippable = false, isAttackable = false, isTargetable = false, isConsumable = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
@@ -75,8 +97,75 @@ function createCardElement(card, options = {}) {
         equipBtn.onclick = (e) => { e.stopPropagation(); socket.emit('equipItem', { cardId: card.id }); };
         cardDiv.appendChild(equipBtn);
     }
+
+    if (isConsumable) {
+        const useBtn = document.createElement('button');
+        useBtn.textContent = 'Use';
+        useBtn.className = 'btn btn-xs btn-special equip-btn';
+        useBtn.onclick = (e) => { e.stopPropagation(); useItem(card); };
+        cardDiv.appendChild(useBtn);
+    }
+
     return cardDiv;
 }
+
+function renderSpectatorUI() {
+    const get = id => document.getElementById(id);
+    // Hide all action-oriented UI
+    ['fixed-action-bar', 'mobile-action-bar', 'character-panel-content', 'hand-panel'].forEach(id => {
+        const el = get(id);
+        if(el) el.classList.add('hidden');
+    });
+    // Hide mobile action buttons
+    document.querySelectorAll('.mobile-bottom-nav .nav-btn').forEach(btn => {
+        if(btn.dataset.screen === 'character') btn.classList.add('hidden');
+    });
+
+    // Show spectator banner
+    get('spectator-banner').classList.remove('hidden');
+
+    // Render only the necessary parts
+    const { players, gameState, chatLog } = currentRoomState;
+    get('room-code').textContent = currentRoomState.id;
+    get('mobile-room-code').textContent = currentRoomState.id;
+    get('turn-counter').textContent = gameState.turnCount;
+    get('mobile-turn-counter').textContent = gameState.turnCount;
+    renderGameLog(chatLog);
+
+    const playerList = get('player-list');
+    const mobilePlayerList = get('mobile-player-list');
+    playerList.innerHTML = '';
+    mobilePlayerList.innerHTML = '';
+    const currentPlayerId = gameState.turnOrder[gameState.currentPlayerIndex];
+    Object.values(players).forEach(p => {
+        if (!p.role && p.status !== 'spectator') return;
+        const isCurrentTurn = p.id === currentPlayerId;
+        const li = document.createElement('li');
+        const isSpectator = p.status === 'spectator';
+        li.className = `player-list-item ${isCurrentTurn ? 'active' : ''} ${p.isDowned ? 'downed' : ''} ${isSpectator ? '' : p.role.toLowerCase()}`;
+        const npcTag = p.isNpc ? '<span class="npc-tag">[NPC]</span> ' : '';
+        const roleText = p.role === 'DM' ? `<span class="player-role dm">DM</span>` : '';
+        const classText = p.class ? `<span class="player-class"> - ${p.class}</span>` : '';
+        const hpDisplay = gameState.phase === 'started' && p.role === 'Explorer' ? `HP: ${p.stats.currentHp} / ${p.stats.maxHp}` : '';
+        const downedText = p.isDowned ? '<span class="downed-text">[DOWNED]</span> ' : '';
+        const disconnectedText = p.disconnected ? '<span class="disconnected-text">[OFFLINE]</span> ' : '';
+        const spectatorText = isSpectator ? '<span class="spectator-tag">[SPECTATOR]</span> ' : '';
+        li.innerHTML = `<div class="player-info"><span>${spectatorText}${disconnectedText}${downedText}${npcTag}${p.name}${classText}${roleText}</span></div><div class="player-hp">${hpDisplay}</div>`;
+        playerList.appendChild(li);
+        mobilePlayerList.appendChild(li.cloneNode(true));
+    });
+    
+    // Board
+    const boardContainers = [get('board-cards'), get('mobile-board-cards')];
+    boardContainers.forEach(c => c.innerHTML = '');
+    gameState.board.monsters.forEach(monster => {
+        boardContainers.forEach(container => {
+            const cardEl = createCardElement(monster, { isTargetable: false });
+            container.appendChild(cardEl);
+        });
+    });
+}
+
 
 /**
  * The master rendering function. Wipes and redraws the UI based on the current state.
@@ -85,11 +174,17 @@ function renderUI() {
     if (!currentRoomState || !currentRoomState.id) return;
     const myPlayer = currentRoomState.players[myId];
     if (!myPlayer) {
-        // If my player is not in the list (e.g. after reconnect), wait for the next update.
-        // It might take a moment for the server to re-associate the new socket ID.
         return;
     }
 
+    if (myPlayer.status === 'spectator') {
+        renderSpectatorUI();
+        return;
+    }
+
+    // Hide spectator UI if not a spectator
+    document.getElementById('spectator-banner').classList.add('hidden');
+    document.getElementById('hand-panel').classList.remove('hidden');
 
     const { players, gameState, chatLog } = currentRoomState;
     const { phase } = gameState;
@@ -307,8 +402,9 @@ function renderHandAndEquipment(player, isMyTurn) {
     // RENDER HAND
     player.hand.forEach(card => {
         const isEquippable = (card.type === 'Weapon' || card.type === 'Armor') && isMyTurn;
+        const isConsumable = card.type === 'Consumable' && isMyTurn;
         handContainers.forEach(container => {
-            container.appendChild(createCardElement(card, { isEquippable }));
+            container.appendChild(createCardElement(card, { isEquippable, isConsumable }));
         });
     });
 }
@@ -618,7 +714,6 @@ socket.on('attackResult', (data) => {
                         action: 'resolve_damage',
                         weaponId: data.weaponId,
                         targetId: data.targetId,
-                        isCrit: data.isCrit // Pass crit status back to server
                     });
                 };
             }, 1500);
