@@ -142,7 +142,6 @@ class GameManager {
             hostId: socket.id,
             players: { [socket.id]: newPlayer },
             chatLog: [],
-            // BUG FIX: Add static data here so the first emit sends it to the client.
             staticDataForClient: { classes: gameData.classes },
             gameState: {
                 phase: 'class_selection',
@@ -166,7 +165,6 @@ class GameManager {
         socket.join(newRoomId);
         this.socketToRoom[socket.id] = newRoomId;
     
-        // BUG FIX: The `true` flag sends the static data.
         this.emitGameState(newRoomId, true);
     }
     
@@ -319,7 +317,7 @@ class GameManager {
     drawCardFromDeck(roomId, deckName, playerClass = null) {
         const room = this.rooms[roomId];
         if (!room) return null;
-
+    
         let deck;
         if (deckName.startsWith('monster.')) {
             const tier = deckName.split('.')[1];
@@ -329,15 +327,30 @@ class GameManager {
         }
     
         if (!deck || !Array.isArray(deck) || deck.length === 0) return null;
-
-        if (playerClass && (deckName === 'spell' || deckName === 'weapon' || deckName === 'armor')) {
-            const suitableCardIndex = deck.findIndex(card => 
-                !card.class || card.class.includes("Any") || card.class.includes(playerClass)
-            );
+    
+        if (playerClass && (deckName === 'weapon' || deckName === 'armor' || deckName === 'spell')) {
+            // Priority 1: Find a card specifically for the player's class.
+            let suitableCardIndex = deck.findIndex(card => card.class && card.class.includes(playerClass));
             if (suitableCardIndex !== -1) {
                 return deck.splice(suitableCardIndex, 1)[0];
             }
+    
+            // Priority 2: If no class-specific card, find an "Any" or non-restricted card.
+            suitableCardIndex = deck.findIndex(card => !card.class || card.class.includes("Any"));
+             if (suitableCardIndex !== -1) {
+                return deck.splice(suitableCardIndex, 1)[0];
+            }
+
+            // Priority 3 (Exception): Barbarians/Warriors can draw any spell to discard for abilities.
+            if (deckName === 'spell' && (playerClass === 'Barbarian' || playerClass === 'Warrior') && deck.length > 0) {
+                 return deck.pop(); // Take whatever is on top if no other options exist.
+            }
+            
+            // If no suitable card is found at all.
+            return null;
         }
+    
+        // If no class is specified, just pop the top card.
         return deck.pop();
     }
 
@@ -350,36 +363,38 @@ class GameManager {
     }
 
     calculatePlayerStats(player) {
-        const baseStats = { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+        const baseStats = { maxHp: 0, currentHp: player.stats.currentHp || 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
         if (!player.class) return baseStats;
     
         const classData = gameData.classes[player.class];
-        const newStats = {
-            ...baseStats,
-            currentHp: player.stats.currentHp,
-            maxHp: classData.baseHp,
-            damageBonus: classData.baseDamageBonus,
-            shieldBonus: classData.baseShieldBonus,
-            ap: classData.baseAp,
-            ...classData.stats
-        };
     
+        // 1. Start with class base stats
+        const newStats = { ...baseStats };
+        Object.assign(newStats, classData.stats);
+        newStats.maxHp = classData.baseHp;
+        newStats.damageBonus = classData.baseDamageBonus;
+        newStats.shieldBonus = classData.baseShieldBonus;
+        newStats.ap = classData.baseAp;
+    
+        // 2. Add bonuses from equipment
         for (const item of Object.values(player.equipment)) {
             if (item?.effect?.bonuses) {
-                Object.keys(item.effect.bonuses).forEach(key => {
-                    newStats[key] = (newStats[key] || 0) + item.effect.bonuses[key];
-                });
+                for (const [key, value] of Object.entries(item.effect.bonuses)) {
+                     newStats[key] = (newStats[key] || 0) + value;
+                }
             }
         }
         
+        // 3. Add bonuses from status effects
         for (const effect of player.statusEffects) {
              if (effect.type === 'stat_modifier' && effect.bonuses) {
-                Object.keys(effect.bonuses).forEach(key => {
+                for (const key in effect.bonuses) {
                     newStats[key] = (newStats[key] || 0) + effect.bonuses[key];
-                });
+                }
             }
         }
     
+        // 4. Sanitize HP values
         newStats.currentHp = newStats.currentHp || newStats.maxHp;
         newStats.currentHp = Math.min(newStats.currentHp, newStats.maxHp);
         
@@ -428,10 +443,16 @@ class GameManager {
         await new Promise(res => setTimeout(res, 100)); // Brief delay to let client render turn change
 
         if (player.isNpc) {
-            if (player.role === 'DM') {
-                await this.handleDmTurn(room);
-            } else {
-                await this.handleNpcExplorerTurn(room, player);
+            try {
+                if (player.role === 'DM') {
+                    await this.handleDmTurn(room);
+                } else {
+                    await this.handleNpcExplorerTurn(room, player);
+                }
+            } catch (error) {
+                console.error(`Unhandled error during NPC turn for ${player.name}:`, error);
+                this.logEvent(room.id, `A critical error occurred during ${player.name}'s turn. Advancing turn.`, 'error');
+                await this.advanceToNextTurn(room.id);
             }
         }
     }
@@ -515,54 +536,60 @@ class GameManager {
     }
     
      async handleNpcExplorerTurn(room, player) {
-        await new Promise(res => setTimeout(res, 1000));
-        const monsters = room.gameState.board.monsters.filter(m => m.currentHp > 0);
-        let actionTaken = false;
-
-        // Use class ability
-        const classAbility = gameData.classes[player.class]?.ability;
-        if (classAbility && player.currentAp >= classAbility.apCost) {
-            if (Math.random() < 0.3) { // 30% chance to use ability
-                this.logEvent(room.id, `${player.name} uses their ability: ${classAbility.name}!`, 'action');
-                this.applyEffect(room, {type: 'ability', abilityName: classAbility.name}, player, null);
-                player.currentAp -= classAbility.apCost;
-                actionTaken = true;
+        try {
+            await new Promise(res => setTimeout(res, 1000));
+            const monsters = room.gameState.board.monsters.filter(m => m.currentHp > 0);
+            let actionTaken = false;
+    
+            // Use class ability
+            const classAbility = gameData.classes[player.class]?.ability;
+            if (classAbility && player.currentAp >= classAbility.apCost) {
+                if (Math.random() < 0.3) { // 30% chance to use ability
+                    this.logEvent(room.id, `${player.name} uses their ability: ${classAbility.name}!`, 'action');
+                    this.applyEffect(room, {type: 'ability', abilityName: classAbility.name}, player, null);
+                    player.currentAp -= classAbility.apCost;
+                    actionTaken = true;
+                }
             }
-        }
-        
-        if (!actionTaken && player.stats.currentHp < player.stats.maxHp / 2) {
-            const healingSpell = player.hand.find(c => c.effect.type === 'heal');
-            if (healingSpell && player.currentAp >= (healingSpell.apCost || 1)) {
-                 this.logEvent(room.id, `${player.name} uses ${healingSpell.name} to heal themselves.`, 'action');
-                 this.applyEffect(room, healingSpell.effect, player, player);
-                 player.currentAp -= (healingSpell.apCost || 1);
-                 player.hand.splice(player.hand.findIndex(c => c.id === healingSpell.id), 1);
-                 actionTaken = true;
+            
+            if (!actionTaken && player.stats.currentHp < player.stats.maxHp / 2) {
+                const healingSpell = player.hand.find(c => c.effect.type === 'heal');
+                if (healingSpell && player.currentAp >= (healingSpell.apCost || 1)) {
+                     this.logEvent(room.id, `${player.name} uses ${healingSpell.name} to heal themselves.`, 'action');
+                     this.applyEffect(room, healingSpell.effect, player, player);
+                     player.currentAp -= (healingSpell.apCost || 1);
+                     player.hand.splice(player.hand.findIndex(c => c.id === healingSpell.id), 1);
+                     actionTaken = true;
+                }
             }
-        }
-
-        if (!actionTaken && monsters.length > 0) {
-            const weakestMonster = monsters.sort((a, b) => a.currentHp - b.currentHp)[0];
-            const weapon = player.equipment.weapon;
-
-            if (weapon && player.currentAp >= (weapon.apCost || 2)) {
-                 await this.initiateAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: weapon.id });
-                 actionTaken = true;
-            } else if (player.currentAp >= 1) { 
-                 await this.initiateAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: 'unarmed' });
-                 actionTaken = true;
+    
+            if (!actionTaken && monsters.length > 0) {
+                const weakestMonster = monsters.sort((a, b) => a.currentHp - b.currentHp)[0];
+                const weapon = player.equipment.weapon;
+    
+                if (weapon && player.currentAp >= (weapon.apCost || 2)) {
+                     await this.initiateAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: weapon.id });
+                     actionTaken = true;
+                } else if (player.currentAp >= 1) { 
+                     await this.initiateAttack(room, { attackerId: player.id, targetId: weakestMonster.id, weaponId: 'unarmed' });
+                     actionTaken = true;
+                }
+            } 
+            
+            if (!actionTaken && player.currentAp >= 1) {
+                 player.currentAp -= 1;
+                 player.stats.shieldHp += (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
+                 this.logEvent(room.id, `${player.name} takes a defensive stance.`, 'info');
             }
-        } 
-        
-        if (!actionTaken && player.currentAp >= 1) {
-             player.currentAp -= 1;
-             player.stats.shieldHp += (player.equipment.armor?.guardBonus || 2) + player.stats.shieldBonus;
-             this.logEvent(room.id, `${player.name} takes a defensive stance.`, 'info');
+            
+            this.emitGameState(room.id);
+            await new Promise(res => setTimeout(res, 1000));
+        } catch (error) {
+            console.error(`Error during NPC turn for ${player.name}:`, error);
+            this.logEvent(room.id, `An error occurred during ${player.name}'s turn. Advancing to next turn.`, 'error');
+        } finally {
+            await this.advanceToNextTurn(room.id);
         }
-        
-        this.emitGameState(room.id);
-        await new Promise(res => setTimeout(res, 1000));
-        await this.advanceToNextTurn(room.id);
     }
 
     _chooseMonsterTarget(room) {
@@ -576,7 +603,7 @@ class GameManager {
         const player = room?.players[socket.id];
         if (!player || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
 
-        const { action, cardId, targetId, description, challengeId } = data;
+        const { action, cardId, targetId, description, challengeId, cardToDiscardId } = data;
 
         const actionHandlers = {
             'attack': () => this.initiateAttack(room, { attackerId: player.id, targetId, weaponId: cardId, description }),
@@ -615,12 +642,29 @@ class GameManager {
             },
             'useAbility': () => {
                 const ability = gameData.classes[player.class]?.ability;
-                if (ability && player.currentAp >= ability.apCost) {
-                    player.currentAp -= ability.apCost;
-                    const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
-                    this.applyEffect(room, {type: 'ability', abilityName: ability.name, ...ability}, player, target);
-                    this.logEvent(room.id, `${player.name} uses ${ability.name}!`, 'action');
+                if (!ability || player.currentAp < ability.apCost) return;
+            
+                // Handle discard cost
+                if (ability.cost?.type === 'discard') {
+                    const cardToDiscardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
+                    if (cardToDiscardIndex === -1) {
+                         this.emitToRoom(room.id, 'actionError', 'Card to discard not found in hand.');
+                         return;
+                    }
+                    const cardToDiscard = player.hand[cardToDiscardIndex];
+                    if (cardToDiscard.type.toLowerCase() !== ability.cost.cardType.toLowerCase()) {
+                        this.emitToRoom(room.id, 'actionError', `You must discard a ${ability.cost.cardType} card.`);
+                        return;
+                    }
+            
+                    player.hand.splice(cardToDiscardIndex, 1); // Discard the card
+                    this.logEvent(room.id, `${player.name} discards ${cardToDiscard.name}.`, 'info');
                 }
+            
+                player.currentAp -= ability.apCost;
+                const target = room.players[targetId] || room.gameState.board.monsters.find(m => m.id === targetId);
+                this.applyEffect(room, {type: 'ability', abilityName: ability.name, ...ability}, player, target);
+                this.logEvent(room.id, `${player.name} uses ${ability.name}!`, 'action');
             },
             'skillChallenge': () => this.resolveSkillChallenge(room, player, challengeId),
         };
@@ -684,6 +728,14 @@ class GameManager {
                 }
             }
     
+            // Check for and apply temporary attack buffs
+            const attackBuff = !isMonster ? attacker.statusEffects.find(e => e.type === 'buff_next_attack') : null;
+            if (attackBuff) {
+                totalDamage += attackBuff.bonuses.damageBonus;
+                this.logEvent(room.id, `${attacker.name}'s ${attackBuff.name} adds +${attackBuff.bonuses.damageBonus} damage!`, 'info');
+                attacker.statusEffects = attacker.statusEffects.filter(e => e.id !== attackBuff.id); // Consume the buff
+            }
+
             this.emitToRoom(room.id, 'damageRollResult', {
                 attacker: { id: attacker.id, name: attacker.name },
                 target: { id: target.id, name: target.name },
@@ -741,12 +793,18 @@ class GameManager {
                 break;
             }
             case 'ability': {
-                // Handle specific class abilities
                 if (effect.abilityName === 'Mystic Recall') {
-                    const card = this.drawCardFromDeck(room.id, 'spell');
+                    const card = this.drawCardFromDeck(room.id, 'spell', source.class);
                     if (card) source.hand.push(card);
                 }
-                // Other abilities can be added here
+                if (effect.abilityName === 'Unchecked Assault') {
+                    source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Unchecked Assault', type: 'buff_next_attack', bonuses: { damageBonus: 6 }, duration: 1 });
+                    this.logEvent(room.id, `${source.name} is empowered for their next attack!`, 'info');
+                }
+                if (effect.abilityName === 'Weapon Surge') {
+                    source.statusEffects.push({ id: `eff-${Date.now()}`, name: 'Weapon Surge', type: 'buff_next_attack', bonuses: { damageBonus: 4 }, duration: 1 });
+                    this.logEvent(room.id, `${source.name} is empowered for their next attack!`, 'info');
+                }
                 break;
             }
         }

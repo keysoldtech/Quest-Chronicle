@@ -23,14 +23,14 @@ let gameUIInitialized = false; // Flag to ensure game listeners are only attache
  */
 function createCardElement(card, options = {}) {
     if (!card) return document.createElement('div');
-    const { isEquippable = false, isUsable = false, isAttackable = false, isTargetable = false } = options;
+    const { isEquippable = false, isUsable = false, isAttackable = false, isTargetable = false, isSelectableForDiscard = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
 
     if (card.type === 'Monster') cardDiv.dataset.monsterId = card.id;
 
-    if (isTargetable) cardDiv.classList.add('valid-target');
+    if (isTargetable || isSelectableForDiscard) cardDiv.classList.add('valid-target');
     if (isAttackable) {
         cardDiv.classList.add('attackable-weapon');
         if (actionState?.type === 'attack' && card.id === actionState.weaponId) cardDiv.classList.add('selected-weapon');
@@ -213,7 +213,7 @@ function renderGameplayState(myPlayer, gameState) {
     const mobileBoard = get('mobile-board-cards');
     board.innerHTML = ''; mobileBoard.innerHTML = '';
     gameState.board.monsters.forEach(monster => {
-        const isTargetable = actionState && actionState.effect?.target === 'any-monster';
+        const isTargetable = actionState && (actionState.effect?.target === 'any-monster' || actionState.type === 'attack');
         const cardEl = createCardElement(monster, { isTargetable });
         cardEl.onclick = () => {
             if (!isMyTurn) return;
@@ -306,7 +306,21 @@ function renderHandAndEquipment(player, isMyTurn) {
     player.hand.forEach(card => {
         const isEquippable = (card.type === 'Weapon' || card.type === 'Armor') && isMyTurn;
         const isUsable = (card.type === 'Spell' || card.type === 'Consumable') && isMyTurn;
-        hand.appendChild(createCardElement(card, { isEquippable, isUsable }));
+        const isSelectableForDiscard = actionState?.type === 'useAbility' && actionState.step === 'selectCard' && card.type.toLowerCase() === actionState.cost.cardType.toLowerCase();
+
+        const cardEl = createCardElement(card, { isEquippable, isUsable, isSelectableForDiscard });
+
+        if (isSelectableForDiscard) {
+            cardEl.onclick = () => {
+                socket.emit('playerAction', { 
+                    action: 'useAbility',
+                    cardToDiscardId: card.id 
+                });
+                actionState = null;
+                renderUI();
+            };
+        }
+        hand.appendChild(cardEl);
     });
     
     mobileEquipped.innerHTML = equipped.innerHTML;
@@ -518,8 +532,15 @@ function initializeGameUIListeners() {
         if (useAbilityBtn) {
             const myPlayer = currentRoomState.players[myId];
             const ability = window.gameData.classes[myPlayer.class]?.ability;
-            if(ability) {
-                actionState = { type: 'useAbility', effect: ability };
+            if (ability) {
+                if (ability.cost?.type === 'discard') {
+                    actionState = { type: 'useAbility', step: 'selectCard', cost: ability.cost, effect: ability };
+                    showToast("Choose a Spell card from your hand to discard.");
+                } else if (ability.target) {
+                    actionState = { type: 'useAbility', effect: ability };
+                } else {
+                    socket.emit('playerAction', { action: 'useAbility' });
+                }
                 renderUI();
             }
             return;
@@ -554,7 +575,7 @@ function initializeGameUIListeners() {
 socket.on('connect', () => { myId = socket.id; });
 
 socket.on('gameStateUpdate', (newState) => {
-    // BUG FIX: The first time we get state, it includes static data. Store it globally.
+    // The first time we get state, it includes static data. Store it globally.
     if (newState.staticDataForClient && typeof window.gameData === 'undefined') {
         window.gameData = { classes: newState.staticDataForClient.classes };
     }
@@ -563,7 +584,7 @@ socket.on('gameStateUpdate', (newState) => {
 });
 
 socket.on('actionError', (message) => {
-    alert(`Error: ${message}`);
+    showToast(`Error: ${message}`, 'error');
     actionState = null; // Clear pending action on error
     renderUI();
 });
@@ -612,6 +633,20 @@ function showRollResult(data) {
         toast.classList.remove('visible');
         toast.addEventListener('transitionend', () => toast.remove());
     }, 2400);
+}
+
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast-message type-${type}`;
+    toast.textContent = message;
+
+    toastContainer.appendChild(toast);
+    setTimeout(() => { toast.classList.add('visible'); }, 10);
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, 3000);
 }
 
 function switchMobileScreen(screenName) {
