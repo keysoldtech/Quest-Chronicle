@@ -36,7 +36,7 @@
     <div id="menu-screen" class="screen active">
         <div class="menu-container">
             <h1 class="game-title">Quest & Chronicle</h1>
-            <p class="game-subtitle">v6.5.21</p>
+            <p class="game-subtitle">v6.5.22</p>
             
             <!-- Player Name Input -->
             <div class="menu-section">
@@ -128,7 +128,7 @@
                          <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v6.5.21</p>
+                        <p class="build-number-font">v6.5.22</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -150,24 +150,36 @@
                     </div>
                 </header>
     
-                <aside class="players-panel panel">
-                     <h2 class="panel-header">Players</h2>
-                     <div id="game-lobby-settings-display" class="lobby-settings-display hidden"></div>
-                     <ul id="player-list" class="player-list"></ul>
-                </aside>
-                
-                <aside class="character-panel panel">
-                    <!-- This panel will be entirely controlled by JS based on game phase -->
-                    <div id="character-panel-content">
+                <aside id="players-list-container" class="players-panel panel">
+                    <div id="player-list-display">
+                        <h2 class="panel-header">Players</h2>
+                        <div id="game-lobby-settings-display" class="lobby-settings-display hidden"></div>
+                        <ul id="player-list" class="player-list"></ul>
+                    </div>
+                    <div id="character-sheet-block">
                         <!-- Content for class selection or player stats will be rendered here -->
                     </div>
                 </aside>
-    
-                <main class="board-panel panel">
-                    <h2 class="panel-header">Game Board</h2>
-                    <div id="board-cards" class="card-container-row"></div>
-                </main>
-    
+                
+                <div id="main-game-area-wrapper">
+                    <main id="game-board-container" class="board-panel panel">
+                        <h2 class="panel-header">Game Board</h2>
+                        <div id="board-cards" class="card-container-row"></div>
+                    </main>
+                    <footer id="hand-equipment-container" class="hand-panel panel">
+                        <div class="player-hand-header">
+                           <h2 class="panel-header">Your Hand & Equipment</h2>
+                        </div>
+                       <div class="hand-and-equipped-container">
+                           <div id="equipped-items-container" class="equipped-items-container">
+                               <h3 class="sub-header-font">Equipped</h3>
+                               <div id="equipped-items" class="card-container-row"></div>
+                           </div>
+                           <div id="player-hand" class="player-hand-container card-container-row"></div>
+                       </div>
+                   </footer>
+                </div>
+
                 <aside class="info-tabs-panel panel">
                     <div class="tab-buttons">
                         <button class="tab-btn" data-tab="world-events-tab">World Events</button>
@@ -189,19 +201,6 @@
                     </div>
                 </aside>
     
-                <footer class="hand-panel panel">
-                     <div class="player-hand-header">
-                        <h2 class="panel-header">Your Hand & Equipment</h2>
-                     </div>
-                    <div class="hand-and-equipped-container">
-                        <div id="equipped-items-container" class="equipped-items-container">
-                            <h3 class="sub-header-font">Equipped</h3>
-                            <div id="equipped-items" class="card-container-row"></div>
-                        </div>
-                        <div id="player-hand" class="player-hand-container card-container-row"></div>
-                    </div>
-                </footer>
-                
                 <div id="fixed-action-bar" class="fixed-action-bar hidden">
                     <button id="action-skill-challenge-btn" class="btn btn-special hidden">Challenge (-1 AP)</button>
                     <button id="action-guard-btn" class="btn btn-secondary">Guard (1AP)</button>

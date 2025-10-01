@@ -180,7 +180,7 @@ function renderUI() {
     }
 
     // --- Phase 3: Phase-Specific Rendering ---
-    const desktopCharacterPanel = get('character-panel-content');
+    const desktopCharacterPanel = get('character-sheet-block');
     const mobileCharacterPanel = get('mobile-screen-character');
     
     if (phase === 'class_selection') {
@@ -356,7 +356,7 @@ function renderGameplayState(myPlayer, gameState) {
     });
 
     // Player Character Panel (Desktop) & Mobile Screen
-    renderCharacterPanel(get('character-panel-content'), get('mobile-screen-character'), myPlayer, isMyTurn);
+    renderCharacterPanel(get('character-sheet-block'), get('mobile-screen-character'), myPlayer, isMyTurn);
 
     // Loot Pool
     const lootContainers = [get('party-loot-container'), get('mobile-party-loot-container')];

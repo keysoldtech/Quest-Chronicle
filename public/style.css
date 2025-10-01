@@ -304,6 +304,29 @@ label {
 .board-panel { grid-area: board; }
 .info-tabs-panel { grid-area: info; }
 .hand-panel { grid-area: hand; }
+#main-game-area-wrapper {
+    /* This new wrapper will hold the board and hand */
+    grid-area: main;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Flexbox bug fix */
+}
+
+#game-board-container {
+    flex-grow: 1.5;
+    flex-shrink: 1;
+    overflow-y: auto;
+    min-height: 250px;
+    margin-bottom: 10px;
+}
+#hand-equipment-container {
+    flex-grow: 1;
+    flex-shrink: 1;
+    max-height: 50vh;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    padding: 0 10px;
+}
 .fixed-action-bar { grid-area: actions; }
 
 
@@ -553,7 +576,7 @@ label {
 }
 
 /* --- CHARACTER PANEL --- */
-.character-panel .panel-content {
+#character-sheet-block .panel-content {
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -1729,57 +1752,48 @@ label {
 
 /* ===== DESKTOP SCALING & SCROLLING FIXES ===== */
 @media (min-width: 1024px) {
-    /* v6.5.19: Fix for panel content overflowing viewport */
-    .panel {
-        min-height: 0;
+    .game-area-desktop {
+        display: grid;
+        grid-template-columns: 25fr 55fr 20fr;
+        grid-template-rows: auto 1fr auto;
+        grid-template-areas:
+            "header header header"
+            "players main info"
+            "actions actions actions";
+        gap: 10px;
+        height: 100%;
+        max-height: 100vh;
+        overflow: hidden;
     }
-    .players-panel .player-list,
-    .hand-panel .hand-and-equipped-container {
-        flex-grow: 1;
-        /* overflow-y: auto; -- REMOVED AS PER v6.5.21 */
-    }
-
-    /* Reduce card size slightly on desktop to fit more content */
-    .card {
-        width: 160px;
-        min-width: 160px;
-        height: 240px;
-    }
-
-    /* Final Class Selection Scroll Override */
-    .character-panel .panel-content.class-grid {
-        display: flex; 
-        flex-wrap: wrap !important; 
-        justify-content: center;
-        max-height: 80vh !important; 
-        overflow-x: hidden !important; 
-        overflow-y: auto !important;   
-        padding: 10px;
-    }
-    
-    .character-panel .class-card {
-        min-width: 220px;
-        margin: 10px;
-        box-sizing: border-box; 
-    }
-
-    .board-panel {
+    #players-list-container {
+        grid-area: players;
+        display: flex;
+        flex-direction: column;
         overflow-y: auto;
-        min-height: 250px;
+    }
+    #main-game-area-wrapper { grid-area: main; }
+    .info-tabs-panel { grid-area: info; }
+
+    #player-list-display {
+        flex-grow: 1;
+        flex-shrink: 1;
+        min-height: 100px;
+        overflow-y: auto;
         margin-bottom: 10px;
     }
-
-    #board-cards {
-        flex-wrap: wrap;
-        /* overflow-y: auto; -- REMOVED AS PER v6.5.21 */
-        overflow-x: hidden;
-        align-content: flex-start;
+    #character-sheet-block {
+        flex-grow: 0;
+        flex-shrink: 0;
+        max-height: auto;
+        overflow: hidden;
+        padding: 10px;
     }
 
-    .hand-panel {
-        max-height: 50vh;
-        overflow-y: auto !important;
-        overflow-x: hidden;
+    .card {
+        width: 170px;
+        height: 250px;
+        margin: 5px;
+        min-width: 170px; /* Override previous min-width */
     }
 
     #desktop-class-card-display {
@@ -1791,13 +1805,5 @@ label {
         overflow-y: auto !important; 
         padding: 10px;
         flex-grow: 1;
-    }
-
-    /* Let them take their natural height so the parent's scrollbar is used */
-    .equipped-items-container,
-    .player-hand-container {
-        flex-shrink: 0;
-        flex-grow: 0;
-        min-height: auto;
     }
 }
