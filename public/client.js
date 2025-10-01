@@ -248,7 +248,7 @@ function renderGameplayState(myPlayer, gameState) {
     // Loot Pool
     const lootContainers = [get('party-loot-container'), get('mobile-party-loot-container')];
     lootContainers.forEach(c => c.innerHTML = '');
-    if (gameState.lootPool.length > 0) {
+    if (gameState.lootPool && gameState.lootPool.length > 0) {
         gameState.lootPool.forEach(lootItem => {
             lootContainers.forEach(container => {
                 container.appendChild(createCardElement(lootItem));

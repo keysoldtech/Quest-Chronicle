@@ -337,7 +337,7 @@ label {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 0.5rem;
+    padding: 0.5rem 0;
 }
 .header-info { display: flex; align-items: center; gap: 1rem; }
 .ap-counter {

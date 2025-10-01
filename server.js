@@ -300,7 +300,7 @@ class GameManager {
         if (!card) return;
         // Reintroduce Max Hand Size Enforcement
         if (room && player && room.settings && player.hand.length >= room.settings.maxHandSize) {
-            room.chatLog.push({ type: 'system', text: `${player.name}'s hand is full! The drawn card, ${card.name}, is discarded.` });
+            room.chatLog.push({ type: 'system', text: `${player.name}'s hand is full! The drawn card, '${card.name}', is discarded.` });
             return; // Do not add the card to the hand
         }
         player.hand.push(card);
