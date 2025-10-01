@@ -245,6 +245,21 @@ function renderGameplayState(myPlayer, gameState) {
     // Player Character Panel (Desktop) & Mobile Screen
     renderCharacterPanel(get('character-panel-content'), get('mobile-screen-character'), myPlayer, isMyTurn);
 
+    // Loot Pool
+    const lootContainers = [get('party-loot-container'), get('mobile-party-loot-container')];
+    lootContainers.forEach(c => c.innerHTML = '');
+    if (gameState.lootPool.length > 0) {
+        gameState.lootPool.forEach(lootItem => {
+            lootContainers.forEach(container => {
+                container.appendChild(createCardElement(lootItem));
+            });
+        });
+    } else {
+         lootContainers.forEach(container => {
+            container.innerHTML = `<p class="empty-pool-text">No discoveries yet.</p>`;
+         });
+    }
+
     // Equipment & Hand
     renderHandAndEquipment(myPlayer, isMyTurn);
 }
@@ -377,7 +392,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 startWithArmor: get('setting-armor').checked,
                 startingItems: parseInt(get('setting-items').value),
                 startingSpells: parseInt(get('setting-spells').value),
-                maxHandSize: parseInt(get('setting-hand-size').value),
                 lootDropRate: parseInt(get('setting-loot-rate').value)
             } : null
         });

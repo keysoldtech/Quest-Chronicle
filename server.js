@@ -149,7 +149,7 @@ class GameManager {
     
         const defaultSettings = {
             startWithWeapon: true, startWithArmor: true, startingItems: 2, 
-            startingSpells: 2, lootDropRate: 50
+            startingSpells: 2, lootDropRate: 50, maxHandSize: 10
         };
     
         const newRoom = {
@@ -298,6 +298,11 @@ class GameManager {
 
     _giveCardToPlayer(room, player, card) {
         if (!card) return;
+        // Reintroduce Max Hand Size Enforcement
+        if (room && player && room.settings && player.hand.length >= room.settings.maxHandSize) {
+            room.chatLog.push({ type: 'system', text: `${player.name}'s hand is full! The drawn card, ${card.name}, is discarded.` });
+            return; // Do not add the card to the hand
+        }
         player.hand.push(card);
     }
 
