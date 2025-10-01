@@ -97,6 +97,24 @@ body.in-game {
     100% { background-position: 100% 100%; }
 }
 
+/* --- SCREEN MANAGEMENT --- */
+.screen {
+    display: none;
+    width: 100%;
+    height: 100%;
+}
+.screen.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+/* Ensure game-screen takes full space when active and isn't centered */
+#game-screen.active {
+    align-items: stretch;
+    justify-content: stretch;
+}
+
 .title-font { font-family: var(--font-body); }
 .subtitle-font { font-family: var(--font-body); color: var(--color-text-secondary); }
 .turn-indicator-font { font-family: var(--font-title); font-size: 1.5rem; }
@@ -776,4 +794,62 @@ label {
         width: 100%;
         height: 100%;
     }
+}1. FILE: index.html (View Container IDs)
+ * Action: Ensure your primary view containers have unique IDs:
+   * #start-screen (The main menu)
+   * #game-screen (The in-game UI)
+2. FILE: client.js (View Switching Logic)
+ * Action: Review the JavaScript function that handles switching from the start screen to the game screen (e.g., showGameScreen() or setGameView()). This function must explicitly manage the CSS display property.
+<!-- end list -->
+// In client.js (Check this function for the critical visibility changes)
+showGameScreen() {
+    // 1. Hide the Start Screen
+    document.getElementById('start-screen').style.display = 'none';
+
+    // 2. Show the Game Screen
+    const gameScreen = document.getElementById('game-screen');
+    gameScreen.style.display = 'flex'; // Use 'block' or 'flex' based on the style.css requirement
+    
+    // IMPORTANT: If you have a universal container like #app, 
+    // ensure it's not set to display: block; on its children globally.
+    // If #game-screen is inside #app, then #game-screen must be set correctly.
+    
+    // Also, ensure the bottom navigation bar is visible (if it's a separate div)
+    document.getElementById('nav-bar').style.display = 'flex'; 
 }
+
+3. FILE: style.css (Initial State & Overlap Fix)
+We need to make sure the game screen is hidden by default and only the start screen is visible.
+ * Action: Go to the global CSS block and ensure the game screen is hidden.
+<!-- end list -->
+/* --- Global CSS (Applies to all screens) --- */
+
+/* CRITICAL: Ensure the Game Screen is hidden when the app starts */
+#game-screen {
+    display: none; 
+}
+
+/* Ensure the Start Screen is visible by default */
+#start-screen {
+    /* If you used display: flex; in v6.5.26, keep it */
+    display: flex;
+    flex-direction: column; 
+    /* ... other starting styles ... */
+}
+
+/* Fix for the overlapping Players column and Chat/Log tabs */
+/* This is likely caused by setting their position to 'fixed' or 'absolute' */
+/* Check ALL elements that are appearing on the start screen for these properties */
+
+The most frequent cause of this specific type of overlap is when elements like the Players List or Game Log containers are given a position: fixed or position: absolute style that is not contained within the game screen element.
+ * Check: In your style.css, search for position: fixed; or position: absolute; applied to:
+   * #players-list-container
+   * #right-sidebar-container
+   * Any bottom navigation bar elements.
+If you find position: fixed; on any of these elements, you must restrict it to the desktop media query or remove it entirely if it was added accidentally.
+The highest priority is ensuring the JavaScript function correctly hides the #start-screen and shows the #game-screen.
+FINAL ACTIONS
+ * Implement the CSS fix in style.css to ensure the #game-screen is display: none; by default (Section 3).
+ * Verify the JavaScript function in client.js explicitly hides the start screen and shows the game screen when the user clicks "Create Game" or "Join Game" (Section 2).
+ * Search style.css for any unintentional position: fixed or position: absolute rules on the game UI containers and remove them if they are in the global scope.
+ * Version Update: Update the build number in all referenced files to 6.5.1 (v6.5.27).
