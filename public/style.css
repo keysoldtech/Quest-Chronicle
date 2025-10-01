@@ -1706,19 +1706,20 @@ label {
         height: 240px;
     }
 
+    /* Final Class Selection Scroll Override */
     .character-panel .panel-content.class-grid {
-        display: flex;
-        flex-wrap: wrap !important;
+        display: flex; 
+        flex-wrap: wrap !important; 
         justify-content: center;
-        max-height: 80vh !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
+        max-height: 80vh !important; 
+        overflow-x: hidden !important; 
+        overflow-y: auto !important;   
         padding: 10px;
     }
     
     .character-panel .class-card {
         min-width: 220px;
         margin: 10px;
-        box-sizing: border-box;
+        box-sizing: border-box; 
     }
 }
