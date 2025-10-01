@@ -1,3 +1,4 @@
+
 // This file is the Service Worker for the Quest & Chronicle Progressive Web App (PWA).
 // It handles caching of assets for offline functionality and manages the update process
 // to ensure users seamlessly receive new versions of the app.

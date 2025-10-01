@@ -1,3 +1,4 @@
+
 // This file is the main Node.js server for the Quest & Chronicle application.
 // It uses Express to serve the static frontend files (HTML, CSS, JS) from the 'public' directory
 // and uses Socket.IO for real-time, event-based communication to manage the multiplayer game logic.
