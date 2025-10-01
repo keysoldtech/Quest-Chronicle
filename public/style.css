@@ -304,29 +304,6 @@ label {
 .board-panel { grid-area: board; }
 .info-tabs-panel { grid-area: info; }
 .hand-panel { grid-area: hand; }
-#main-game-area-wrapper {
-    /* This new wrapper will hold the board and hand */
-    grid-area: main;
-    display: flex;
-    flex-direction: column;
-    min-height: 0; /* Flexbox bug fix */
-}
-
-#game-board-container {
-    flex-grow: 1.5;
-    flex-shrink: 1;
-    overflow-y: auto;
-    min-height: 250px;
-    margin-bottom: 10px;
-}
-#hand-equipment-container {
-    flex-grow: 1;
-    flex-shrink: 1;
-    max-height: 50vh;
-    overflow-y: auto !important;
-    overflow-x: hidden;
-    padding: 0 10px;
-}
 .fixed-action-bar { grid-area: actions; }
 
 
@@ -1765,35 +1742,65 @@ label {
         max-height: 100vh;
         overflow: hidden;
     }
+    
+    /* --- Left Column Parent (Consolidated) --- */
     #players-list-container {
         grid-area: players;
         display: flex;
-        flex-direction: column;
-        overflow-y: auto;
+        flex-direction: column; 
+        height: 100%; 
     }
-    #main-game-area-wrapper { grid-area: main; }
+
+    /* --- 1. Players List (MUST BE SMALLER) --- */
+    #player-list-display {
+        max-height: 25vh;
+        flex-grow: 0; 
+        flex-shrink: 0;
+        overflow-y: auto;
+        margin-bottom: 5px;
+        font-size: 0.85em;
+    }
+    
+    /* --- 2. Character Sheet (MUST EXPAND) --- */
+    #character-sheet-block {
+        flex-grow: 1; 
+        flex-shrink: 1;
+        overflow-y: auto;
+        padding: 10px;
+        font-size: 0.9em;
+    }
+
+    #main-game-area-wrapper { 
+        grid-area: main; 
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
     .info-tabs-panel { grid-area: info; }
 
-    #player-list-display {
-        flex-grow: 1;
+    #game-board-container { 
+        flex-grow: 2;
         flex-shrink: 1;
-        min-height: 100px;
-        overflow-y: auto;
+        overflow-y: auto; 
+        min-height: 280px;
         margin-bottom: 10px;
     }
-    #character-sheet-block {
-        flex-grow: 0;
-        flex-shrink: 0;
-        max-height: auto;
-        overflow: hidden;
+
+    #hand-equipment-container {
+        flex-grow: 1; 
+        flex-shrink: 1; 
+        max-height: 40vh;
+        overflow-y: auto !important; 
+        overflow-x: hidden; 
         padding: 10px;
     }
 
     .card {
-        width: 170px;
-        height: 250px;
+        width: 160px;
+        height: 240px;
         margin: 5px;
-        min-width: 170px; /* Override previous min-width */
+        min-width: 160px;
     }
 
     #desktop-class-card-display {
