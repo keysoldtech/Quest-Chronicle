@@ -1736,7 +1736,7 @@ label {
     .players-panel .player-list,
     .hand-panel .hand-and-equipped-container {
         flex-grow: 1;
-        overflow-y: auto;
+        /* overflow-y: auto; -- REMOVED AS PER v6.5.21 */
     }
 
     /* Reduce card size slightly on desktop to fit more content */
@@ -1764,18 +1764,22 @@ label {
     }
 
     .board-panel {
-        min-height: 0;
+        overflow-y: auto;
+        min-height: 250px;
+        margin-bottom: 10px;
     }
 
     #board-cards {
         flex-wrap: wrap;
-        overflow-y: auto;
+        /* overflow-y: auto; -- REMOVED AS PER v6.5.21 */
         overflow-x: hidden;
         align-content: flex-start;
     }
 
     .hand-panel {
-        max-height: 45vh;
+        max-height: 50vh;
+        overflow-y: auto !important;
+        overflow-x: hidden;
     }
 
     #desktop-class-card-display {
@@ -1787,5 +1791,13 @@ label {
         overflow-y: auto !important; 
         padding: 10px;
         flex-grow: 1;
+    }
+
+    /* Let them take their natural height so the parent's scrollbar is used */
+    .equipped-items-container,
+    .player-hand-container {
+        flex-shrink: 0;
+        flex-grow: 0;
+        min-height: auto;
     }
 }
