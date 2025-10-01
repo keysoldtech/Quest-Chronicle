@@ -1656,21 +1656,6 @@ label {
     margin-top: auto; /* Pushes button to the bottom */
 }
 
-/* ===== SPECTATOR BANNER ===== */
-.spectator-banner {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    background-color: var(--color-special);
-    color: var(--color-bg-dark);
-    text-align: center;
-    padding: 0.5rem;
-    font-weight: bold;
-    z-index: 100;
-}
-
-
 /* ===== DESKTOP SCALING & SCROLLING FIXES ===== */
 @media (min-width: 1024px) {
     /* Reduce card size slightly on desktop to fit more content */

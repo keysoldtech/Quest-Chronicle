@@ -108,7 +108,6 @@ class GameManager {
             id, // The temporary socket ID
             playerId, // The persistent ID for reconnects
             name,
-            status: 'active', // Can be 'active' or 'spectator'
             isNpc: false,
             isDowned: false, // Player defeat state
             disconnected: false, // For reconnect logic
@@ -131,7 +130,6 @@ class GameManager {
             id: socket.id,
             playerId: playerId,
             name: playerName,
-            status: 'active', // Explicitly 'active' for the host, per bug fix request.
             isNpc: false,
             isDowned: false,
             disconnected: false,
@@ -151,7 +149,7 @@ class GameManager {
     
         const defaultSettings = {
             startWithWeapon: true, startWithArmor: true, startingItems: 2, 
-            startingSpells: 2, maxHandSize: 10, lootDropRate: 50
+            startingSpells: 2, lootDropRate: 50
         };
     
         const newRoom = {
@@ -195,21 +193,11 @@ class GameManager {
         const isGameInProgress = room.gameState.phase !== 'class_selection';
         const humanPlayersCount = Object.values(room.players).filter(p => !p.isNpc).length;
     
-        // Game is in progress, join as a spectator
         if (isGameInProgress) {
-            const newSpectator = this.createPlayerObject(socket.id, playerName);
-            newSpectator.role = null;
-            newSpectator.status = 'spectator';
-            room.players[socket.id] = newSpectator;
-            socket.join(roomId);
-            this.socketToRoom[socket.id] = roomId;
-            socket.emit('playerIdentity', { playerId: newSpectator.playerId, roomId: roomId });
-            this.emitGameState(roomId);
-            return;
+            return socket.emit('actionError', 'Game is already in progress.');
         }
     
         // Game is in lobby (class_selection) phase
-        // FIX: Allow multiple players (e.g., up to 4) to join the lobby.
         const MAX_PLAYERS = 4;
         if (humanPlayersCount >= MAX_PLAYERS) {
              return socket.emit('actionError', 'This game lobby is full.');
@@ -310,11 +298,6 @@ class GameManager {
 
     _giveCardToPlayer(room, player, card) {
         if (!card) return;
-        if (player.hand.length >= room.settings.maxHandSize) {
-            room.chatLog.push({ type: 'system', text: `${player.name}'s hand is full! A drawn card was discarded.` });
-            // Optionally add to a discard pile
-            return;
-        }
         player.hand.push(card);
     }
 
@@ -662,7 +645,7 @@ class GameManager {
             return; // Halt the action immediately.
         }
 
-        const { action, cardId, targetId, weaponId, narrative, itemName } = data;
+        const { action, cardId, targetId, weaponId, narrative } = data;
 
         switch (action) {
             case 'attack':
@@ -715,9 +698,6 @@ class GameManager {
             }
             case 'useAbility':
                 this._resolveAbility(socket, room, player, data);
-                break;
-            case 'useConsumable':
-                this._resolveConsumable(socket, room, player, { cardId, targetId });
                 break;
         }
     }
@@ -1085,40 +1065,6 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
-    _resolveConsumable(socket, room, player, { cardId, targetId }) {
-        const cardIndex = player.hand.findIndex(c => c.id === cardId);
-        if (cardIndex === -1) return;
-        
-        const card = player.hand[cardIndex];
-        if (card.type !== 'Consumable') return;
-        
-        if (player.currentAp < (card.apCost || 1)) {
-            return socket.emit('actionError', 'Not enough AP.');
-        }
-
-        player.currentAp -= (card.apCost || 1);
-        player.hand.splice(cardIndex, 1); // Remove from hand
-
-        let successMessage = `You used ${card.name}.`;
-
-        if (card.name === "Combustion Flask") {
-            const target = room.gameState.board.monsters.find(m => m.id === targetId);
-            if (target) {
-                const damage = this.rollDice(card.effect.dice);
-                target.currentHp = Math.max(0, target.currentHp - damage);
-                target.statusEffects.push({ name: card.effect.status, type: 'damage_over_time', damage: '1d4', duration: card.effect.duration });
-                successMessage = `You hurl the ${card.name}, dealing ${damage} fire damage to ${target.name}! It is now On Fire.`;
-                room.chatLog.push({ type: 'system', text: successMessage });
-                if (target.currentHp <= 0) {
-                    this._handleMonsterDefeat(room, target.id);
-                }
-            }
-        }
-        
-        socket.emit('showToast', { message: successMessage });
-        this.emitGameState(room.id);
-    }
-
     // --- 3.9. Chat & Disconnect Logic (REBUILT) ---
     handleChatMessage(socket, { channel, message }) {
         const room = this.findRoomBySocket(socket);
