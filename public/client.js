@@ -16,6 +16,7 @@ let gameUIInitialized = false; // Flag to ensure game listeners are only attache
 let currentRollData = null; // Holds data for an active roll modal
 let diceAnimationInterval = null;
 let rollModalCloseTimeout = null; // Timer for closing the roll modal
+let activeItem = null; // For modals that need to remember which item is being used/claimed.
 
 // --- 2. CORE RENDERING ENGINE ---
 
@@ -26,7 +27,7 @@ let rollModalCloseTimeout = null; // Timer for closing the roll modal
  * @returns {HTMLElement} The card element.
  */
 function createCardElement(card, options = {}) {
-    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false } = options;
+    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
@@ -79,6 +80,22 @@ function createCardElement(card, options = {}) {
         actionContainer.appendChild(equipBtn);
     }
     
+    if (isConsumable) {
+        const useBtn = document.createElement('button');
+        useBtn.textContent = 'Use';
+        useBtn.className = 'btn btn-xs btn-special';
+        useBtn.onclick = (e) => { e.stopPropagation(); handleUseConsumable(card); };
+        actionContainer.appendChild(useBtn);
+    }
+
+    if (isClaimable) {
+        const claimBtn = document.createElement('button');
+        claimBtn.textContent = 'Claim';
+        claimBtn.className = 'btn btn-xs btn-primary';
+        claimBtn.onclick = (e) => { e.stopPropagation(); showClaimLootModal(card); };
+        actionContainer.appendChild(claimBtn);
+    }
+
     if (isDiscardable) {
         const discardBtn = document.createElement('button');
         discardBtn.textContent = 'Discard';
@@ -110,7 +127,7 @@ function renderUI() {
 
     // --- Phase 1: Show/Hide Major Screens ---
     get('menu-screen').classList.toggle('active', phase === 'lobby');
-    const isGameActive = phase === 'class_selection' || phase === 'started' || phase === 'game_over';
+    const isGameActive = phase === 'class_selection' || phase === 'started' || phase === 'game_over' || phase === 'skill_challenge';
     get('game-screen').classList.toggle('active', isGameActive);
     
     if (isGameActive && !gameUIInitialized) {
@@ -165,8 +182,16 @@ function renderUI() {
         } else {
             renderClassSelection(desktopCharacterPanel, mobileCharacterPanel);
         }
-    } else if (phase === 'started') {
+    } else if (phase === 'started' || phase === 'skill_challenge') {
         renderGameplayState(myPlayer, gameState);
+    }
+    
+    // v6.5.0: Show/hide skill challenge modal based on phase
+    const skillChallengeModal = get('skill-challenge-modal');
+    if (phase === 'skill_challenge' && gameState.skillChallenge.isActive) {
+        showSkillChallengeModal(gameState.skillChallenge.details);
+    } else {
+        skillChallengeModal.classList.add('hidden');
     }
 }
 
@@ -208,7 +233,7 @@ function renderGameplayState(myPlayer, gameState) {
     // Health bars
     const headerStats = get('header-player-stats');
     const mobileHeaderStats = get('mobile-header-player-stats');
-    if (gameState.phase === 'started' && myPlayer.stats.maxHp > 0) {
+    if ((gameState.phase === 'started' || gameState.phase === 'skill_challenge') && myPlayer.stats.maxHp > 0) {
         const healthPercent = (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100;
         
         // Desktop
@@ -266,7 +291,7 @@ function renderGameplayState(myPlayer, gameState) {
     if (gameState.lootPool && gameState.lootPool.length > 0) {
         gameState.lootPool.forEach(lootItem => {
             lootContainers.forEach(container => {
-                container.appendChild(createCardElement(lootItem));
+                container.appendChild(createCardElement(lootItem, { isClaimable: true }));
             });
         });
     } else {
@@ -335,8 +360,9 @@ function renderHandAndEquipment(player, isMyTurn) {
     // RENDER HAND
     player.hand.forEach(card => {
         const isEquippable = (card.type === 'Weapon' || card.type === 'Armor') && isMyTurn;
+        const isConsumable = card.type === 'Consumable' && isMyTurn;
         handContainers.forEach(container => {
-            container.appendChild(createCardElement(card, { isEquippable, isDiscardable: isMyTurn }));
+            container.appendChild(createCardElement(card, { isEquippable, isDiscardable: isMyTurn, isConsumable }));
         });
     });
 }
@@ -433,6 +459,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     get('end-turn-cancel-btn').addEventListener('click', () => {
         get('end-turn-confirm-modal').classList.add('hidden');
+    });
+    // v6.5.0: Wire up cancel button for new modals
+    get('claim-loot-cancel-btn').addEventListener('click', () => {
+        get('claim-loot-modal').classList.add('hidden');
     });
 });
 
@@ -821,6 +851,98 @@ function showGameOverModal(winner) {
         title.textContent = 'Victory!';
         message.textContent = 'You have overcome the challenges and emerged triumphant!';
     }
+    modal.classList.remove('hidden');
+}
+
+function showClaimLootModal(item) {
+    activeItem = item;
+    const modal = document.getElementById('claim-loot-modal');
+    const playerList = document.getElementById('claim-loot-player-list');
+    modal.querySelector('#claim-loot-title').textContent = `Claim ${item.name}`;
+    modal.querySelector('#claim-loot-prompt').textContent = 'Who should receive this item?';
+    playerList.innerHTML = '';
+
+    Object.values(currentRoomState.players)
+        .filter(p => p.role === 'Explorer' && !p.isNpc && !p.isDowned)
+        .forEach(player => {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-primary';
+            btn.textContent = player.name;
+            btn.onclick = () => {
+                socket.emit('playerAction', {
+                    action: 'claimLoot',
+                    itemId: activeItem.id,
+                    targetPlayerId: player.id
+                });
+                modal.classList.add('hidden');
+            };
+            playerList.appendChild(btn);
+        });
+    
+    modal.classList.remove('hidden');
+}
+
+function handleUseConsumable(card) {
+    const effect = card.effect;
+    if (!effect.target || effect.target === 'utility' || effect.target === 'self') {
+        socket.emit('playerAction', { action: 'useConsumable', cardId: card.id, targetId: myId });
+        return;
+    }
+
+    activeItem = card;
+    const modal = document.getElementById('claim-loot-modal'); // Re-using modal for targeting
+    const targetList = document.getElementById('claim-loot-player-list');
+    const title = document.getElementById('claim-loot-title');
+    const prompt = document.getElementById('claim-loot-prompt');
+    targetList.innerHTML = '';
+
+    let targets = [];
+    if (effect.target === 'any-player') {
+        title.textContent = `Use ${card.name} On...`;
+        prompt.textContent = `Select a player to receive the effects of ${card.name}.`;
+        targets = Object.values(currentRoomState.players).filter(p => p.role === 'Explorer' && !p.isDowned);
+    } else if (effect.target === 'any-monster') {
+        title.textContent = `Use ${card.name} On...`;
+        prompt.textContent = `Select a monster to target with ${card.name}.`;
+        targets = currentRoomState.gameState.board.monsters;
+    }
+
+    if (targets.length === 0) {
+        showToast('No valid targets available.', 'error');
+        return;
+    }
+
+    targets.forEach(target => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary';
+        btn.textContent = target.name;
+        btn.onclick = () => {
+            socket.emit('playerAction', {
+                action: 'useConsumable',
+                cardId: activeItem.id,
+                targetId: target.id
+            });
+            modal.classList.add('hidden');
+        };
+        targetList.appendChild(btn);
+    });
+    
+    modal.classList.remove('hidden');
+}
+
+
+function showSkillChallengeModal(challenge) {
+    if (!challenge) return;
+    const modal = document.getElementById('skill-challenge-modal');
+    document.getElementById('skill-challenge-title').textContent = challenge.name;
+    document.getElementById('skill-challenge-description').textContent = challenge.description;
+    
+    const resolveBtn = document.getElementById('skill-challenge-resolve-btn');
+    resolveBtn.onclick = () => {
+        socket.emit('playerAction', { action: 'resolveSkillCheck' });
+        // The server will change game phase, which will cause renderUI to hide the modal
+    };
+    
     modal.classList.remove('hidden');
 }
 

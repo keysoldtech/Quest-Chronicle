@@ -36,7 +36,7 @@
     <div id="menu-screen" class="screen active">
         <div class="menu-container">
             <h1 class="game-title">Quest & Chronicle</h1>
-            <p class="game-subtitle">v6.4.1</p>
+            <p class="game-subtitle">v6.5.0</p>
             
             <!-- Player Name Input -->
             <div class="menu-section">
@@ -128,7 +128,7 @@
                          <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v6.4.1</p>
+                        <p class="build-number-font">v6.5.0</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -425,6 +425,31 @@
                 </div>
                 <div class="modal-actions">
                     <button id="confirm-discard-btn" class="btn btn-primary" disabled>Confirm Discard</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Claim Loot / Target Selection Modal -->
+        <div id="claim-loot-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h2 id="claim-loot-title" class="panel-header">Claim Loot For...</h2>
+                <p id="claim-loot-prompt">Who should receive this item?</p>
+                <div id="claim-loot-player-list" class="button-grid">
+                    <!-- Player buttons will be rendered here by client.js -->
+                </div>
+                <div class="modal-actions">
+                    <button id="claim-loot-cancel-btn" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Skill Challenge Modal -->
+        <div id="skill-challenge-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h2 id="skill-challenge-title" class="panel-header">A New Challenge!</h2>
+                <p id="skill-challenge-description">Details of the challenge...</p>
+                <div class="modal-actions">
+                     <button id="skill-challenge-resolve-btn" class="btn btn-primary">Attempt the Challenge</button>
                 </div>
             </div>
         </div>

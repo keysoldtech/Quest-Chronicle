@@ -171,7 +171,7 @@ class GameManager {
                 turnCount: 0,
                 worldEvents: { currentEvent: null, duration: 0 },
                 currentPartyEvent: null,
-                skillChallenge: { isActive: false },
+                skillChallenge: { isActive: false, details: null }, // v6.5.0 Framework
             },
             chatLog: []
         };
@@ -507,7 +507,13 @@ class GameManager {
     
     endCurrentTurn(roomId) {
         const room = this.rooms[roomId];
-        if (!room || room.gameState.turnOrder.length === 0 || room.gameState.phase !== 'started') return;
+        if (!room || room.gameState.turnOrder.length === 0 || (room.gameState.phase !== 'started' && room.gameState.phase !== 'skill_challenge')) return;
+
+        // Don't advance turns during a skill challenge
+        if (room.gameState.phase === 'skill_challenge') {
+            this.emitGameState(roomId);
+            return;
+        }
     
         const oldPlayerIndex = room.gameState.currentPlayerIndex;
         if (oldPlayerIndex > -1) {
@@ -654,6 +660,18 @@ class GameManager {
     handlePlayerAction(socket, data) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
+        // Allow skill check resolution even if it's not your turn
+        if (data.action === 'resolveSkillCheck') {
+            if (room && room.gameState.phase === 'skill_challenge') {
+                 // Placeholder logic as requested
+                room.chatLog.push({ type: 'system', text: `${player.name} leads the party in resolving the challenge...` });
+                room.gameState.phase = 'started'; 
+                room.gameState.skillChallenge = { isActive: false, details: null };
+                this.emitGameState(room.id);
+            }
+            return;
+        }
+
         if (!player || player.isDowned || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
         
         // P0 FIX: Halt any new player-initiated action if they have no AP.
@@ -662,7 +680,7 @@ class GameManager {
             return; // Halt the action immediately.
         }
 
-        const { action, cardId, targetId, weaponId, narrative } = data;
+        const { action, cardId, targetId, weaponId, narrative, itemId, targetPlayerId } = data;
 
         switch (action) {
             case 'attack':
@@ -746,6 +764,23 @@ class GameManager {
             case 'useAbility':
                 this._resolveAbility(socket, room, player, data);
                 break;
+            case 'useConsumable':
+                this._resolveUseConsumable(socket, room, player, { cardId, targetId });
+                break;
+            case 'claimLoot': {
+                const lootIndex = room.gameState.lootPool.findIndex(i => i.id === itemId);
+                if (lootIndex === -1) return;
+                
+                const targetPlayerForLoot = room.players[targetPlayerId];
+                if (!targetPlayerForLoot || targetPlayerForLoot.role !== 'Explorer') return;
+    
+                const [claimedItem] = room.gameState.lootPool.splice(lootIndex, 1);
+                this._giveCardToPlayer(room, targetPlayerForLoot, claimedItem);
+    
+                room.chatLog.push({ type: 'system', text: `${player.name} claimed ${claimedItem.name} for ${targetPlayerForLoot.name}.` });
+                this.emitGameState(room.id);
+                break;
+            }
         }
     }
 
@@ -877,6 +912,8 @@ class GameManager {
 
         if (target.currentHp <= 0) {
             this._handleMonsterDefeat(room, target.id);
+        } else {
+            this.emitGameState(room.id);
         }
 
         io.to(room.id).emit('damageResult', {
@@ -893,8 +930,6 @@ class GameManager {
             const socket = io.sockets.sockets.get(attacker.id);
             if (socket) socket.emit('apZeroPrompt');
         }
-
-        this.emitGameState(room.id);
     }
     
     async _resolveFullPlayerAttack(room, attacker, { weaponId, targetId }) {
@@ -956,13 +991,15 @@ class GameManager {
                 damage, damageRoll, damageDice, damageBonus: attacker.stats.damageBonus
             });
             
-            if (target.currentHp <= 0) this._handleMonsterDefeat(room, target.id);
+            if (target.currentHp <= 0) {
+                 this._handleMonsterDefeat(room, target.id);
+            }
 
             await pause(1000);
         }
 
         attacker.currentAp -= apCost;
-        this.emitGameState(room.id); // Emit state to update HP and AP
+        if (target.currentHp > 0) this.emitGameState(room.id); // Emit state to update HP and AP
     }
 
     async _resolveFullMonsterAttack(room, monsterId, targetId) {
@@ -1015,14 +1052,36 @@ class GameManager {
     }
 
     _handleMonsterDefeat(room, monsterId) {
-        const monsterName = room.gameState.board.monsters.find(m => m.id === monsterId)?.name || 'A monster';
-        room.gameState.board.monsters = room.gameState.board.monsters.filter(m => m.id !== monsterId);
+        const monsterIndex = room.gameState.board.monsters.findIndex(m => m.id === monsterId);
+        if (monsterIndex === -1) return;
+    
+        const monsterName = room.gameState.board.monsters[monsterIndex].name;
+        room.gameState.board.monsters.splice(monsterIndex, 1);
         room.chatLog.push({ type: 'system', text: `${monsterName} has been defeated!` });
+    
         const lootChance = (room.settings.lootDropRate || 50) / 100;
         if (Math.random() < lootChance) {
             const loot = this.drawCardFromDeck(room.id, 'treasure');
-            if (loot) room.gameState.lootPool.push(loot);
+            if (loot) {
+                room.gameState.lootPool.push(loot);
+                room.chatLog.push({ type: 'system', text: `The party discovered a ${loot.name}!` });
+            }
         }
+        
+        // v6.5.0: After a monster is defeated, check if combat is over to trigger a discovery event.
+        if (room.gameState.board.monsters.length === 0 && room.gameState.phase === 'started') {
+            const DISCOVERY_CHANCE = 0.5; // 50% chance for an event
+            if (Math.random() < DISCOVERY_CHANCE) {
+                const challenge = gameData.skillChallenges[Math.floor(Math.random() * gameData.skillChallenges.length)];
+                if (challenge) {
+                    room.gameState.phase = 'skill_challenge';
+                    room.gameState.skillChallenge = { isActive: true, details: challenge };
+                    room.chatLog.push({ type: 'system', text: `With the monsters defeated, you discover something new: ${challenge.name}!` });
+                }
+            }
+        }
+    
+        this.emitGameState(room.id);
     }
 
     _applyDamageToPlayer(room, player, damage) {
@@ -1112,6 +1171,52 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
+    _resolveUseConsumable(socket, room, player, { cardId, targetId }) {
+        const cardIndex = player.hand.findIndex(c => c.id === cardId);
+        if (cardIndex === -1) return socket.emit('actionError', "Card not found in hand.");
+        
+        const card = player.hand[cardIndex];
+        if (card.type !== 'Consumable' || player.currentAp < (card.apCost || 1)) {
+            return socket.emit('actionError', "Cannot use this item.");
+        }
+
+        player.currentAp -= (card.apCost || 1);
+        const [usedCard] = player.hand.splice(cardIndex, 1);
+        room.gameState.discardPile.push(usedCard);
+
+        let logMessage = `${player.name} uses ${card.name}.`;
+        const effect = card.effect;
+
+        if (effect.type === 'damage' && effect.target === 'any-monster') {
+            const target = room.gameState.board.monsters.find(m => m.id === targetId);
+            if (target) {
+                const damage = this.rollDice(effect.dice);
+                target.currentHp = Math.max(0, target.currentHp - damage);
+                logMessage = `${card.name} deals ${damage} damage to ${target.name}!`;
+                if (target.currentHp <= 0) {
+                    this._handleMonsterDefeat(room, target.id);
+                }
+            }
+        } else if (effect.type === 'heal' && effect.target === 'any-player') {
+            const target = room.players[targetId];
+            if (target) {
+                const healing = this.rollDice(effect.dice);
+                target.stats.currentHp = Math.min(target.stats.maxHp, target.stats.currentHp + healing);
+                logMessage = `${target.name} is healed for ${healing} HP!`;
+            }
+        } else if (effect.type === 'utility' && effect.status === 'Cure Poison' && effect.target === 'any-player') {
+            const target = room.players[targetId];
+            if (target) {
+                target.statusEffects = target.statusEffects.filter(se => se.name !== 'Poisoned');
+                logMessage = `${target.name} is cured of poison!`;
+            }
+        }
+
+        room.chatLog.push({ type: 'system', text: logMessage });
+        socket.emit('showToast', { message: logMessage });
+        this.emitGameState(room.id);
+    }
+
     // --- 3.9. Chat & Disconnect Logic (REBUILT) ---
     handleChatMessage(socket, { channel, message }) {
         const room = this.findRoomBySocket(socket);

@@ -97,7 +97,7 @@ body.in-game {
     100% { background-position: 100% 100%; }
 }
 
-.title-font { font-family: var(--font-title); }
+.title-font { font-family: var(--font-body); }
 .subtitle-font { font-family: var(--font-body); color: var(--color-text-secondary); }
 .turn-indicator-font { font-family: var(--font-title); font-size: 1.5rem; }
 .build-number-font { font-family: var(--font-body); font-size: 0.8rem; color: var(--color-text-secondary); }
@@ -678,6 +678,7 @@ label {
     opacity: 0;
     transition: opacity 0.2s;
     pointer-events: none;
+    flex-wrap: wrap; /* Allow buttons to wrap if needed */
 }
 .card:hover .card-action-buttons {
     opacity: 1;
@@ -1006,6 +1007,20 @@ label {
     border-color: var(--color-danger);
     box-shadow: 0 0 10px var(--color-danger);
     transform: translateY(-5px) scale(1.02);
+}
+
+/* v6.5.0: Skill Challenge Modal */
+#skill-challenge-modal .modal-content {
+    text-align: center;
+}
+#skill-challenge-description {
+    font-size: 1.1rem;
+    color: var(--color-text-secondary);
+    margin-top: 1rem;
+    line-height: 1.6;
+}
+#skill-challenge-modal .modal-actions {
+    justify-content: center;
 }
 
 
