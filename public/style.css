@@ -1763,6 +1763,21 @@ label {
         box-sizing: border-box; 
     }
 
+    .board-panel {
+        min-height: 0;
+    }
+
+    #board-cards {
+        flex-wrap: wrap;
+        overflow-y: auto;
+        overflow-x: hidden;
+        align-content: flex-start;
+    }
+
+    .hand-panel {
+        max-height: 45vh;
+    }
+
     #desktop-class-card-display {
         display: flex;
         flex-wrap: wrap; 
