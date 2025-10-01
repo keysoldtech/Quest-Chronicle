@@ -26,7 +26,7 @@ let rollModalCloseTimeout = null; // Timer for closing the roll modal
  * @returns {HTMLElement} The card element.
  */
 function createCardElement(card, options = {}) {
-    const { isEquippable = false, isAttackable = false, isTargetable = false } = options;
+    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
@@ -68,12 +68,27 @@ function createCardElement(card, options = {}) {
         </div>
     `;
 
+    const actionContainer = document.createElement('div');
+    actionContainer.className = 'card-action-buttons';
+
     if (isEquippable) {
         const equipBtn = document.createElement('button');
         equipBtn.textContent = 'Equip';
-        equipBtn.className = 'btn btn-xs btn-success equip-btn';
+        equipBtn.className = 'btn btn-xs btn-success';
         equipBtn.onclick = (e) => { e.stopPropagation(); socket.emit('equipItem', { cardId: card.id }); };
-        cardDiv.appendChild(equipBtn);
+        actionContainer.appendChild(equipBtn);
+    }
+    
+    if (isDiscardable) {
+        const discardBtn = document.createElement('button');
+        discardBtn.textContent = 'Discard';
+        discardBtn.className = 'btn btn-xs btn-danger';
+        discardBtn.onclick = (e) => { e.stopPropagation(); socket.emit('playerAction', { action: 'discardCard', cardId: card.id }); };
+        actionContainer.appendChild(discardBtn);
+    }
+
+    if (actionContainer.hasChildNodes()) {
+        cardDiv.appendChild(actionContainer);
     }
 
     return cardDiv;
@@ -321,7 +336,7 @@ function renderHandAndEquipment(player, isMyTurn) {
     player.hand.forEach(card => {
         const isEquippable = (card.type === 'Weapon' || card.type === 'Armor') && isMyTurn;
         handContainers.forEach(container => {
-            container.appendChild(createCardElement(card, { isEquippable }));
+            container.appendChild(createCardElement(card, { isEquippable, isDiscardable: isMyTurn }));
         });
     });
 }
@@ -675,6 +690,51 @@ socket.on('damageResult', (data) => {
         clearTimeout(rollModalCloseTimeout);
         rollModalCloseTimeout = setTimeout(closeModal, 4000);
     }
+});
+
+socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
+    const get = id => document.getElementById(id);
+    const modal = get('choose-discard-modal');
+    const newCardContainer = get('new-card-to-discard-container');
+    const handContainer = get('hand-cards-to-discard-container');
+    const confirmBtn = get('confirm-discard-btn');
+
+    newCardContainer.innerHTML = '';
+    handContainer.innerHTML = '';
+    let selectedCardId = null;
+
+    const selectCard = (cardEl, cardId) => {
+        // Remove selection from all cards
+        modal.querySelectorAll('.card').forEach(c => c.classList.remove('selected-for-discard'));
+        // Add selection to clicked card
+        cardEl.classList.add('selected-for-discard');
+        selectedCardId = cardId;
+        confirmBtn.disabled = false;
+    };
+
+    const newCardEl = createCardElement(newCard);
+    newCardEl.onclick = () => selectCard(newCardEl, newCard.id);
+    newCardContainer.appendChild(newCardEl);
+
+    currentHand.forEach(card => {
+        const cardEl = createCardElement(card);
+        cardEl.onclick = () => selectCard(cardEl, card.id);
+        handContainer.appendChild(cardEl);
+    });
+
+    confirmBtn.onclick = () => {
+        if (selectedCardId) {
+            socket.emit('playerAction', {
+                action: 'chooseNewCardDiscard',
+                cardToDiscardId: selectedCardId,
+                newCard: newCard
+            });
+            modal.classList.add('hidden');
+            confirmBtn.onclick = null; // Clean up listener
+        }
+    };
+
+    modal.classList.remove('hidden');
 });
 
 // --- 5. HELPER FUNCTIONS ---

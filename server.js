@@ -149,7 +149,7 @@ class GameManager {
     
         const defaultSettings = {
             startWithWeapon: true, startWithArmor: true, startingItems: 2, 
-            startingSpells: 2, lootDropRate: 50, maxHandSize: 10
+            startingSpells: 2, lootDropRate: 50, maxHandSize: 7 // STABILITY: Hardcoded default.
         };
     
         const newRoom = {
@@ -163,6 +163,7 @@ class GameManager {
                 gameMode: gameMode || 'Beginner',
                 winner: null, // To determine game over state
                 decks: { /* Initialized during game start */ },
+                discardPile: [], // v6.4.1: Initialize discard pile
                 turnOrder: [],
                 currentPlayerIndex: -1,
                 board: { monsters: [] },
@@ -298,12 +299,23 @@ class GameManager {
 
     _giveCardToPlayer(room, player, card) {
         if (!card) return;
-        // Reintroduce Max Hand Size Enforcement
+    
+        // v6.4.0: Choose to Discard on Full Hand
         if (room && player && room.settings && player.hand.length >= room.settings.maxHandSize) {
-            room.chatLog.push({ type: 'system', text: `${player.name}'s hand is full! The drawn card, '${card.name}', is discarded.` });
-            return; // Do not add the card to the hand
+            // v6.4.1: CRITICAL FIX - Resolve socket via io instance
+            const playerSocket = io.sockets.sockets.get(player.id);
+            if (playerSocket) {
+                // If player is connected, prompt them to choose
+                playerSocket.emit('chooseToDiscard', { newCard: card, currentHand: player.hand });
+            } else {
+                // Fallback: If socket is not found (disconnected), auto-discard the new card
+                room.gameState.discardPile.push(card);
+                room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full, and they are disconnected. The new card '${card.name}' was discarded.` });
+            }
+        } else {
+            // Hand is not full, add the card normally.
+            player.hand.push(card);
         }
-        player.hand.push(card);
     }
 
     dealStartingLoadout(room, player) {
@@ -662,6 +674,36 @@ class GameManager {
             case 'resolve_damage':
                  this._resolveDamageRoll(room, player, { weaponId: data.weaponId, targetId: data.targetId });
                  break;
+            case 'discardCard': {
+                if (!cardId) return;
+                const cardIndex = player.hand.findIndex(c => c.id === cardId);
+                if (cardIndex > -1) {
+                    const [discardedCard] = player.hand.splice(cardIndex, 1);
+                    room.gameState.discardPile.push(discardedCard);
+                    room.chatLog.push({ type: 'system', text: `${player.name} discards ${discardedCard.name}.` });
+                    this.emitGameState(room.id);
+                }
+                break;
+            }
+            case 'chooseNewCardDiscard': {
+                const { cardToDiscardId, newCard } = data;
+                if (!cardToDiscardId || !newCard) return;
+    
+                if (cardToDiscardId === newCard.id) {
+                    room.gameState.discardPile.push(newCard);
+                    room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full. They chose to discard the new card: ${newCard.name}.` });
+                } else {
+                    const cardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
+                    if (cardIndex > -1) {
+                        const [cardFromHand] = player.hand.splice(cardIndex, 1);
+                        room.gameState.discardPile.push(cardFromHand);
+                        player.hand.push(newCard);
+                        room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full. They discarded ${cardFromHand.name} to make room for ${newCard.name}.` });
+                    }
+                }
+                this.emitGameState(room.id);
+                break;
+            }
             case 'guard': {
                 const guardCost = gameData.actionCosts.guard;
                 if (player.currentAp >= guardCost) {

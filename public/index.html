@@ -36,7 +36,7 @@
     <div id="menu-screen" class="screen active">
         <div class="menu-container">
             <h1 class="game-title">Quest & Chronicle</h1>
-            <p class="game-subtitle">v6.3.0</p>
+            <p class="game-subtitle">v6.4.1</p>
             
             <!-- Player Name Input -->
             <div class="menu-section">
@@ -128,7 +128,7 @@
                          <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v6.3.0</p>
+                        <p class="build-number-font">v6.4.1</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -404,6 +404,27 @@
                 <p id="game-over-message" style="text-align: center; font-size: 1.2rem; margin-top: 1rem;"></p>
                 <div class="modal-actions">
                     <button id="game-over-leave-btn" class="btn btn-primary">Return to Menu</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Choose to Discard Modal -->
+        <div id="choose-discard-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h2 class="panel-header">Hand is Full!</h2>
+                <p>Your hand is full. Choose a card to discard to make room for the new card.</p>
+                <div class="discard-choice-container">
+                    <div class="discard-choice-section">
+                        <h3>New Card</h3>
+                        <div id="new-card-to-discard-container" class="card-container-row"></div>
+                    </div>
+                    <div class="discard-choice-section">
+                        <h3>Your Hand</h3>
+                        <div id="hand-cards-to-discard-container" class="card-container-row"></div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button id="confirm-discard-btn" class="btn btn-primary" disabled>Confirm Discard</button>
                 </div>
             </div>
         </div>
