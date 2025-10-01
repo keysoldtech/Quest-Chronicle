@@ -1,4 +1,3 @@
-
 /* 
   This file contains all the CSS styles for the application. It defines the visual appearance,
   layout, animations, and responsiveness for all components, including the lobby, game board,
@@ -279,33 +278,20 @@ label {
     line-height: 1;
 }
 
-/* --- GAME AREA LAYOUT (DESKTOP) --- */
+/* --- GAME AREA LAYOUT --- */
 .game-area {
     width: 100vw;
     height: 100vh;
     padding: 1rem;
 }
-.game-area-mobile { display: none; }
 .game-area-desktop {
-    display: grid;
-    grid-template-columns: 275px 275px 1fr 350px;
-    grid-template-rows: auto 1fr auto auto;
-    grid-template-areas:
-        "header header header header"
-        "players character board info"
-        "players hand hand info"
-        "actions actions actions actions";
-    gap: 1rem;
-    width: 100%;
+    display: none;
+}
+.game-area-mobile {
+    display: flex;
+    flex-direction: column;
     height: 100%;
 }
-.game-header { grid-area: header; }
-.players-panel { grid-area: players; }
-.character-panel { grid-area: character; }
-.board-panel { grid-area: board; }
-.info-tabs-panel { grid-area: info; }
-.hand-panel { grid-area: hand; }
-.fixed-action-bar { grid-area: actions; }
 
 
 /* --- PANELS --- */
@@ -771,3 +757,23 @@ label {
 
 .tab-content { display: none; flex-grow: 1; overflow: hidden; }
 .tab-content.active { display: flex; flex-direction: column; }
+
+/* --- RESPONSIVE LAYOUT --- */
+@media (min-width: 1024px) {
+    .game-area-mobile {
+        display: none;
+    }
+    .game-area-desktop {
+        display: grid;
+        grid-template-columns: 275px 275px 1fr 350px;
+        grid-template-rows: auto 1fr auto auto;
+        grid-template-areas:
+            "header header header header"
+            "players character board info"
+            "players hand hand info"
+            "actions actions actions actions";
+        gap: 1rem;
+        width: 100%;
+        height: 100%;
+    }
+}
