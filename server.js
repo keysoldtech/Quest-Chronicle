@@ -31,6 +31,18 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Create a lookup map for all cards for efficient access
+const allCards = [
+    ...gameData.itemCards,
+    ...gameData.spellCards,
+    ...gameData.weaponCards,
+    ...gameData.armorCards
+];
+const cardDataMap = allCards.reduce((map, card) => {
+    map[card.name] = card;
+    return map;
+}, {});
+
 // --- 2. HELPER FUNCTIONS ---
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -235,10 +247,13 @@ class GameManager {
             this.dealStartingLoadout(room, p);
         });
         
-        // 5. Finalize stats for all players
+        // 5. Finalize stats and AP for all players
         Object.values(room.players).forEach(p => {
             p.stats = this.calculatePlayerStats(p);
             p.stats.currentHp = p.stats.maxHp;
+            // --- FIX: AP Consistency & Initialization ---
+            p.stats.maxAp = p.stats.ap; // Add maxAp for clarity
+            p.currentAp = p.stats.ap;   // Initialize currentAp
         });
 
         // 6. Set turn order and start the game
@@ -343,6 +358,7 @@ class GameManager {
         const { gameMode } = room.gameState;
         const customSettings = room.settings;
         
+        // --- This part remains for equipping weapon/armor ---
         const dealAndEquip = (type) => {
             const card = this.drawCardFromDeck(room.id, type, player.class);
             if (card) {
@@ -360,17 +376,22 @@ class GameManager {
             dealAndEquip('weapon');
             dealAndEquip('armor');
         }
+        // --- End of existing equip logic ---
 
-        let itemsToDraw = 0, spellsToDraw = 0;
-        if (gameMode === 'Beginner') { itemsToDraw = 2; spellsToDraw = 2; }
-        if (gameMode === 'Advanced') { itemsToDraw = 2; spellsToDraw = 1; }
-        if (gameMode === 'Custom') { itemsToDraw = customSettings.startingItems; spellsToDraw = customSettings.startingSpells; }
+        // --- FIX: Class-specific starting hand ---
+        const classData = gameData.classes[player.class];
+        if (classData && classData.startingDeck) {
+            for (const cardName in classData.startingDeck) {
+                const quantity = classData.startingDeck[cardName];
+                const cardTemplate = cardDataMap[cardName];
 
-        for (let i = 0; i < itemsToDraw; i++) {
-            this._giveCardToPlayer(room, player, this.drawCardFromDeck(room.id, 'item'));
-        }
-        for (let i = 0; i < spellsToDraw; i++) {
-            this._giveCardToPlayer(room, player, this.drawCardFromDeck(room.id, 'spell', player.class));
+                if (cardTemplate) {
+                    for (let i = 0; i < quantity; i++) {
+                        const newCard = { ...cardTemplate, id: this.generateUniqueCardId() };
+                        this._giveCardToPlayer(room, player, newCard);
+                    }
+                }
+            }
         }
     }
 
@@ -1072,6 +1093,30 @@ class GameManager {
         this.emitGameState(room.id);
     }
 
+    // --- FIX: Equipment Random Stats ---
+    _applyRandomnessToCard(card) {
+        if (!card || (card.type !== 'Weapon' && card.type !== 'Armor')) {
+            return card;
+        }
+    
+        const newCard = JSON.parse(JSON.stringify(card)); // Deep copy
+        const variance = 0.15; // +/- 15%
+    
+        const applyRandomness = (baseValue) => {
+            if (typeof baseValue !== 'number' || baseValue === 0) return baseValue;
+            const modifier = 1 + (Math.random() * 2 * variance) - variance;
+            return Math.round(baseValue * modifier);
+        };
+    
+        if (newCard.effect && newCard.effect.bonuses) {
+            for (const key in newCard.effect.bonuses) {
+                newCard.effect.bonuses[key] = applyRandomness(newCard.effect.bonuses[key]);
+            }
+        }
+    
+        return newCard;
+    }
+
     _handleMonsterDefeat(room, monsterId) {
         const monsterIndex = room.gameState.board.monsters.findIndex(m => m.id === monsterId);
         if (monsterIndex === -1) return;
@@ -1082,8 +1127,9 @@ class GameManager {
     
         const lootChance = (room.settings.lootDropRate || 50) / 100;
         if (Math.random() < lootChance) {
-            const loot = this.drawCardFromDeck(room.id, 'treasure');
+            let loot = this.drawCardFromDeck(room.id, 'treasure');
             if (loot) {
+                loot = this._applyRandomnessToCard(loot); // Apply randomness to loot
                 room.gameState.lootPool.push(loot);
                 room.chatLog.push({ type: 'system', text: `The party discovered a ${loot.name}!` });
             }
