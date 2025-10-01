@@ -171,6 +171,13 @@ function renderUI() {
         playerList.appendChild(li);
         mobilePlayerList.appendChild(li.cloneNode(true));
     });
+    
+    if (isDesktop()) {
+        const activePlayerListItem = playerList.querySelector('.player-list-item.active');
+        if (activePlayerListItem) {
+            activePlayerListItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
 
     // --- Phase 3: Phase-Specific Rendering ---
     const desktopCharacterPanel = get('character-panel-content');

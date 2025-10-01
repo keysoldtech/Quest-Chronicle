@@ -1729,6 +1729,16 @@ label {
 
 /* ===== DESKTOP SCALING & SCROLLING FIXES ===== */
 @media (min-width: 1024px) {
+    /* v6.5.19: Fix for panel content overflowing viewport */
+    .panel {
+        min-height: 0;
+    }
+    .players-panel .player-list,
+    .hand-panel .hand-and-equipped-container {
+        flex-grow: 1;
+        overflow-y: auto;
+    }
+
     /* Reduce card size slightly on desktop to fit more content */
     .card {
         width: 160px;
