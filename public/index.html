@@ -36,7 +36,7 @@
     <div id="menu-screen" class="screen active">
         <div class="menu-container">
             <h1 class="game-title">Quest & Chronicle</h1>
-            <p class="game-subtitle">v6.5.14</p>
+            <p class="game-subtitle">v6.5.16</p>
             
             <!-- Player Name Input -->
             <div class="menu-section">
@@ -128,7 +128,7 @@
                          <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v6.5.14</p>
+                        <p class="build-number-font">v6.5.16</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -450,6 +450,20 @@
                 <p id="skill-challenge-description">Details of the challenge...</p>
                 <div class="modal-actions">
                      <button id="skill-challenge-resolve-btn" class="btn btn-primary">Attempt the Challenge</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Class Selection Modal (Desktop Only) -->
+        <div id="class-selection-modal" class="modal-backdrop hidden">
+            <div class="modal-content">
+                <h2 class="panel-header">Choose Your Destiny</h2>
+                <p>Please select a class to begin your Quest & Chronicle.</p>
+                <div id="desktop-class-card-display">
+                    <!-- Class cards will be rendered here by client.js -->
+                </div>
+                <div class="modal-actions">
+                    <button id="confirm-class-selection-btn" class="btn btn-primary" disabled>Confirm Class</button>
                 </div>
             </div>
         </div>

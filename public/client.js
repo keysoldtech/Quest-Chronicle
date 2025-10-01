@@ -19,6 +19,9 @@ let rollModalCloseTimeout = null; // Timer for closing the roll modal
 let activeItem = null; // For modals that need to remember which item is being used/claimed.
 
 // --- 2. CORE RENDERING ENGINE ---
+function isDesktop() {
+    return window.innerWidth >= 1024;
+}
 
 /**
  * Creates an HTML element for a game card.
@@ -174,15 +177,16 @@ function renderUI() {
     const mobileCharacterPanel = get('mobile-screen-character');
     
     if (phase === 'class_selection') {
-        switchMobileScreen('character');
         if (myPlayer.class) {
             const waitingHTML = `<h2 class="panel-header">Class Chosen!</h2><p class="panel-content">Waiting for game to start...</p>`;
             desktopCharacterPanel.innerHTML = waitingHTML;
             mobileCharacterPanel.innerHTML = `<div class="panel mobile-panel">${waitingHTML}</div>`;
+            get('class-selection-modal').classList.add('hidden'); // Ensure modal is hidden if player reconnects
         } else {
             renderClassSelection(desktopCharacterPanel, mobileCharacterPanel);
         }
     } else if (phase === 'started' || phase === 'skill_challenge') {
+        get('class-selection-modal').classList.add('hidden'); // Ensure modal is hidden after game starts
         renderGameplayState(myPlayer, gameState);
     }
     
@@ -195,33 +199,95 @@ function renderUI() {
     }
 }
 
-/**
- * Renders the class selection UI into the specified containers.
- */
-function renderClassSelection(desktopContainer, mobileContainer) {
-    const classData = currentRoomState.staticData.classes;
-    const classSelectionHTML = `
-        <h2 class="panel-header">Choose Your Class</h2>
-        <div class="panel-content class-grid">
-            ${Object.entries(classData).map(([id, data]) => `
-                <div class="class-card" data-class-id="${id}">
-                    <h3>${id}</h3>
-                    <div class="class-stats">
-                        <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
-                        <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAp}</p>
-                    </div>
-                    <div class="class-ability">
-                        <p><strong>${data.ability.name}</strong></p>
-                        <p class="ability-desc">${data.ability.description}</p>
-                    </div>
-                    <button class="select-class-btn btn btn-primary btn-sm" data-class-id="${id}">Select ${id}</button>
-                </div>
-            `).join('')}
-        </div>`;
-    
-    desktopContainer.innerHTML = classSelectionHTML;
-    mobileContainer.innerHTML = `<div class="panel mobile-panel">${classSelectionHTML}</div>`;
+function createClassCardElement(id, data) {
+    const cardDiv = document.createElement('div');
+    cardDiv.className = 'class-card';
+    cardDiv.dataset.classId = id;
+
+    cardDiv.innerHTML = `
+        <h3>${id}</h3>
+        <div class="class-stats">
+            <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
+            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAp}</p>
+        </div>
+        <div class="class-ability">
+            <p><strong>${data.ability.name}</strong></p>
+            <p class="ability-desc">${data.ability.description}</p>
+        </div>
+        <button class="select-class-btn btn btn-primary btn-sm" data-class-id="${id}">Select ${id}</button>
+    `;
+    return cardDiv;
 }
+
+function showClassSelectionModal() {
+    const classData = currentRoomState.staticData.classes;
+    const modal = document.getElementById('class-selection-modal');
+    const displayContainer = document.getElementById('desktop-class-card-display');
+    const confirmBtn = document.getElementById('confirm-class-selection-btn');
+
+    displayContainer.innerHTML = ''; // Clear previous cards
+    let selectedClassId = null;
+
+    Object.entries(classData).forEach(([id, data]) => {
+        const cardElement = createClassCardElement(id, data);
+        
+        const cardButton = cardElement.querySelector('.select-class-btn');
+        if (cardButton) cardButton.style.display = 'none'; // Hide button for modal UX
+
+        cardElement.addEventListener('click', () => {
+            // Logic to select card, highlight it, and enable the confirm button
+            displayContainer.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected-item'));
+            cardElement.classList.add('selected-item');
+            selectedClassId = id;
+            confirmBtn.disabled = false;
+        });
+        
+        displayContainer.appendChild(cardElement);
+    });
+
+    confirmBtn.onclick = () => {
+        if(selectedClassId) {
+            socket.emit('chooseClass', { classId: selectedClassId });
+            modal.classList.add('hidden');
+        }
+    };
+    
+    modal.classList.remove('hidden');
+}
+
+function renderClassSelection(desktopContainer, mobileContainer) {
+    if (isDesktop()) {
+        desktopContainer.innerHTML = `<h2 class="panel-header">Choose Your Class</h2><p class="panel-content">Please make your selection from the popup...</p>`;
+        mobileContainer.innerHTML = ''; // Clear mobile view on desktop
+        showClassSelectionModal();
+    } else {
+        // Fallback to existing embedded mobile logic
+        const classData = currentRoomState.staticData.classes;
+        const classSelectionHTML = `
+            <h2 class="panel-header">Choose Your Class</h2>
+            <div class="panel-content class-grid">
+                ${Object.entries(classData).map(([id, data]) => `
+                    <div class="class-card" data-class-id="${id}">
+                        <h3>${id}</h3>
+                        <div class="class-stats">
+                            <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
+                            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAp}</p>
+                        </div>
+                        <div class="class-ability">
+                            <p><strong>${data.ability.name}</strong></p>
+                            <p class="ability-desc">${data.ability.description}</p>
+                        </div>
+                        <button class="select-class-btn btn btn-primary btn-sm" data-class-id="${id}">Select ${id}</button>
+                    </div>
+                `).join('')}
+            </div>`;
+        
+        switchMobileScreen('character');
+        desktopContainer.innerHTML = ''; // Clear desktop view on mobile
+        mobileContainer.innerHTML = `<div class="panel mobile-panel">${classSelectionHTML}</div>`;
+    }
+}
+
 
 /**
  * Renders all elements related to the active gameplay loop.
