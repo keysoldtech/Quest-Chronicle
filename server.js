@@ -242,9 +242,30 @@ class GameManager {
         });
 
         // 6. Set turn order and start the game
-        const explorerIds = Object.keys(room.players).filter(id => room.players[id].role === 'Explorer');
-        const dmId = Object.keys(room.players).find(id => room.players[id].role === 'DM');
-        room.gameState.turnOrder = [dmId, ...shuffle(explorerIds)];
+        let dmId = null;
+        let humanPlayerId = null;
+        let npcExplorerIds = [];
+    
+        // 6.1 Segment Players by Type
+        Object.keys(room.players).forEach(id => {
+            const player = room.players[id];
+            if (player.role === 'DM') {
+                dmId = id;
+            } else if (player.isNpc) { // NPC Explorer
+                npcExplorerIds.push(id);
+            } else if (player.role === 'Explorer') { // Human Player
+                humanPlayerId = id;
+            }
+        });
+    
+        // 6.2 Establish the New Priority Order
+        const newTurnOrder = [];
+        if (dmId) newTurnOrder.push(dmId);
+        if (humanPlayerId) newTurnOrder.push(humanPlayerId);
+        newTurnOrder.push(...shuffle(npcExplorerIds)); // Shuffle NPCs among themselves
+    
+        // 6.3 Update the room's turn order list
+        room.gameState.turnOrder = newTurnOrder;
         room.gameState.currentPlayerIndex = -1; // Will be incremented to 0 by endCurrentTurn
         room.gameState.phase = 'started';
         room.gameState.turnCount = 0; // Will be incremented to 1 by endCurrentTurn
