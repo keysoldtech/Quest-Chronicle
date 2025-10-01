@@ -1624,12 +1624,7 @@ label {
     text-align: center;
 }
 
-/* ===== CLASS SELECTION (FIXED) ===== */
-.character-panel .panel-content.class-grid {
-    max-height: 80vh; /* CRITICAL FIX: Ensure container has height constraint */
-    overflow-y: auto; /* CRITICAL FIX: Allow vertical scrolling */
-}
-
+/* ===== CLASS SELECTION ===== */
 .class-grid {
     display: flex;
     flex-wrap: wrap; 
@@ -1711,15 +1706,19 @@ label {
         height: 240px;
     }
 
-    .character-panel .class-grid {
+    .character-panel .panel-content.class-grid {
+        display: flex;
+        flex-wrap: wrap !important;
         justify-content: center;
+        max-height: 80vh !important;
         overflow-x: hidden !important;
+        overflow-y: auto !important;
         padding: 10px;
-        gap: 0;
     }
     
     .character-panel .class-card {
-        min-width: 200px;
+        min-width: 220px;
         margin: 10px;
+        box-sizing: border-box;
     }
 }
