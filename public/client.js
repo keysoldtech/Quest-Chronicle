@@ -54,32 +54,8 @@ function createCardElement(card, options = {}) {
     const weaponDiceHTML = card.type === 'Weapon' ? `<div class="card-bonus" title="Damage Dice"><span class="material-symbols-outlined">casino</span>${card.effect.dice}</div>` : '';
     const apCostHTML = card.apCost ? `<div class="card-bonus" title="AP Cost"><span class="material-symbols-outlined">bolt</span>${card.apCost}</div>` : '';
     
-    // VISIBILITY FIX: Render all stat bonuses/penalties
-    let bonusesHTML = '';
-    if (card.effect?.bonuses) {
-        bonusesHTML = Object.entries(card.effect.bonuses).map(([key, value]) => {
-            if (value === 0) return '';
-            const sign = value > 0 ? '+' : '';
-            let icon = 'spark'; // generic icon
-            let title = key.charAt(0).toUpperCase() + key.slice(1);
-            
-            // Normalize key for consistent matching
-            const lowerKey = key.toLowerCase();
-            if (lowerKey.includes('damage')) { icon = 'swords'; title = 'Damage'; }
-            else if (lowerKey.includes('shield') || lowerKey.includes('armor')) { icon = 'security'; title = 'Shield'; }
-            else if (lowerKey.includes('hp')) { icon = 'favorite'; title = 'Health'; }
-            else if (lowerKey.includes('ap')) { icon = 'bolt'; title = 'Action Points'; }
-            else if (lowerKey.includes('str')) { icon = 'fitness_center'; title = 'Strength'; }
-            else if (lowerKey.includes('dex')) { icon = 'sprint'; title = 'Dexterity'; }
-            else if (lowerKey.includes('con')) { icon = 'health_and_safety'; title = 'Constitution'; }
-            else if (lowerKey.includes('int')) { icon = 'psychology'; title = 'Intelligence'; }
-            else if (lowerKey.includes('wis')) { icon = 'self_improvement'; title = 'Wisdom'; }
-            else if (lowerKey.includes('cha')) { icon = 'star'; title = 'Charisma'; }
-            
-            return `<div class="card-bonus" title="${title}"><span class="material-symbols-outlined">${icon}</span>${sign}${value}</div>`;
-        }).join('');
-    }
-
+    // REVERTED (v6.5.45): Stat bonuses are no longer displayed directly on the card for UI stability.
+    const bonusesHTML = '';
 
     cardDiv.innerHTML = `
         <div class="card-header">

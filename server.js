@@ -252,10 +252,10 @@ class GameManager {
             p.stats = this.calculatePlayerStats(p); // This calculates total AP and puts it in p.stats.ap
             p.stats.currentHp = p.stats.maxHp;
             
-            // DUAL AP FIX: maxAP must equal the total calculated AP from stats (base + bonuses).
-            // This ensures the header UI and the character sheet use the same unified value.
-            p.stats.maxAP = p.stats.ap; // Unify: maxAP is the same as the calculated total AP.
-            p.currentAp = p.stats.maxAP; // Start with full AP.
+            // SURGICAL AP FIX (v6.5.45): Unify all AP values in a single assignment.
+            // This ensures the root `currentAp` (for the header) and the nested `stats.maxAP` 
+            // are both correctly set from the final calculated `stats.ap` value.
+            p.currentAp = p.stats.maxAP = p.stats.ap;
         });
 
         // 6. Set turn order and start the game
