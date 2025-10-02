@@ -59,7 +59,7 @@
 }
 
 html, body {
-    height: 100%;
+    min-height: 100%; /* REVERSION: Allow content to define height */
     overflow-y: auto; /* Allow vertical scroll */
     overflow-x: hidden !important;
 }
@@ -98,21 +98,29 @@ body.in-game {
 }
 
 /* --- SCREEN MANAGEMENT --- */
+/* REVERSION: Remove aggressive height, allow scrolling */
 .screen {
     display: none;
     width: 100%;
-    height: 100%;
+    min-height: 100%;
+    overflow-y: auto;
 }
+
+/* REVERSION: Simplify active screen display, handle specifics per-screen */
 .screen.active {
     display: flex;
+}
+
+/* Keep menu centered */
+#menu-screen.active {
     flex-direction: column;
     align-items: center;
     justify-content: center;
 }
-/* Ensure game-screen takes full space when active and isn't centered */
+
+/* Set mobile-first default for game screen */
 #game-screen.active {
-    align-items: stretch;
-    justify-content: stretch;
+    flex-direction: column;
 }
 
 .title-font { font-family: var(--font-body); }
@@ -802,118 +810,15 @@ label {
     #hand-equipment-container { grid-area: hand; }
     .info-tabs-panel { grid-area: info; }
     #fixed-action-bar { grid-area: actions; }
-}1. FILE: index.html (View Container IDs)
- * Action: Ensure your primary view containers have unique IDs:
-   * #start-screen (The main menu)
-   * #game-screen (The in-game UI)
-2. FILE: client.js (View Switching Logic)
- * Action: Review the JavaScript function that handles switching from the start screen to the game screen (e.g., showGameScreen() or setGameView()). This function must explicitly manage the CSS display property.
-<!-- end list -->
-// In client.js (Check this function for the critical visibility changes)
-showGameScreen() {
-    // 1. Hide the Start Screen
-    document.getElementById('start-screen').style.display = 'none';
 
-    // 2. Show the Game Screen
-    const gameScreen = document.getElementById('game-screen');
-    gameScreen.style.display = 'flex'; // Use 'block' or 'flex' based on the style.css requirement
-    
-    // IMPORTANT: If you have a universal container like #app, 
-    // ensure it's not set to display: block; on its children globally.
-    // If #game-screen is inside #app, then #game-screen must be set correctly.
-    
-    // Also, ensure the bottom navigation bar is visible (if it's a separate div)
-    document.getElementById('nav-bar').style.display = 'flex'; 
+    /* --- Desktop Layout Stability Fixes --- */
+    #game-board-container {
+        min-height: 250px;
+    }
+    #hand-equipment-container {
+        max-height: 50vh; /* Prevents hand from pushing board away */
+    }
+    #players-list-container, #character-sheet-block, #game-board-container, #hand-equipment-container, .info-tabs-panel {
+        position: static; /* Enforce grid flow */
+    }
 }
-
-3. FILE: style.css (Initial State & Overlap Fix)
-We need to make sure the game screen is hidden by default and only the start screen is visible.
- * Action: Go to the global CSS block and ensure the game screen is hidden.
-<!-- end list -->
-/* --- Global CSS (Applies to all screens) --- */
-
-/* CRITICAL: Ensure the Game Screen is hidden when the app starts */
-#game-screen {
-    display: none; 
-}
-
-/* Ensure the Start Screen is visible by default */
-#start-screen {
-    /* If you used display: flex; in v6.5.26, keep it */
-    display: flex;
-    flex-direction: column; 
-    /* ... other starting styles ... */
-}
-
-/* Fix for the overlapping Players column and Chat/Log tabs */
-/* This is likely caused by setting their position to 'fixed' or 'absolute' */
-/* Check ALL elements that are appearing on the start screen for these properties */
-
-The most frequent cause of this specific type of overlap is when elements like the Players List or Game Log containers are given a position: fixed or position: absolute style that is not contained within the game screen element.
- * Check: In your style.css, search for position: fixed; or position: absolute; applied to:
-   * #players-list-container
-   * #right-sidebar-container
-   * Any bottom navigation bar elements.
-If you find position: fixed; on any of these elements, you must restrict it to the desktop media query or remove it entirely if it was added accidentally.
-The highest priority is ensuring the JavaScript function correctly hides the #start-screen and shows the #game-screen.
-FINAL ACTIONS
- * Implement the CSS fix in style.css to ensure the #game-screen is display: none; by default (Section 3).
- * Verify the JavaScript function in client.js explicitly hides the start screen and shows the game screen when the user clicks "Create Game" or "Join Game" (Section 2).
- * Search style.css for any unintentional position: fixed or position: absolute rules on the game UI containers and remove them if they are in the global scope.
- * Version Update: Update the build number in all referenced files to 6.5.1 (v6.5.27).1. FILE: style.css (Initial View State & Scroll Fix)
-We need to ensure all main screen containers are set up for proper visibility and mobile scrolling.
- * Action A: Hide Game Screen by Default. Ensure the game UI is hidden when the app starts.
- * Action B: Restore Mobile Scroll. The height: 100vh on the global body/app likely prevented scrolling. We must ensure the content containers are set to height: auto; or min-height: 100vh; and let the content scroll naturally.
-<!-- end list -->
-/* --- Global CSS (Applies to all screens) --- */
-
-html, body {
-    height: 100%;
-    overflow-y: auto; /* Ensure scrolling is allowed on the main body */
-}
-
-#app {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column; /* Keep the vertical stacking for the initial screen/mobile */
-    /* DO NOT add display: grid here! */
-}
-
-/* CRITICAL FIX: Only one main screen should be visible at a time */
-#game-screen {
-    display: none; /* MUST be hidden by default */
-    width: 100%;
-}
-
-#start-screen {
-    /* Ensure this is the only thing visible at startup */
-    display: flex; 
-    flex-direction: column;
-    width: 100%;
-    /* Allow the class list inside the start screen to scroll */
-    overflow-y: auto; 
-}
-
-2. FILE: client.js (View Switching Logic)
-We must verify that your "Create Game" or "Join Game" button handler correctly hides the start screen and shows the game screen.
- * Action: Locate the function that runs when a game is created/joined (e.g., showGameView() or similar) and ensure it has these two lines:
-<!-- end list -->
-// In client.js (Check the function that transitions to the game)
-
-function transitionToGame() {
-    // 1. CRITICAL: Hide the start screen completely
-    document.getElementById('start-screen').style.display = 'none';
-
-    // 2. CRITICAL: Show the main game screen
-    // On mobile, this will use the global flex-direction: column
-    // On desktop, the media query will override this to display: grid
-    document.getElementById('game-screen').style.display = 'flex'; // Use 'flex' for the base property
-    
-    // ... rest of your game setup logic ...
-}
-
-By ensuring the views are correctly hidden/shown and allowing the body and the view containers to scroll, the mobile layout chaos will resolve.
-FINAL ACTIONS
- * Apply the CSS fixes in style.css (Section 1), focusing on setting #game-screen to display: none globally, and ensuring body allows vertical scroll.
- * Verify the JavaScript transition function in client.js explicitly hides the start screen and shows the game screen (Section 2).
- * Version Update: Update the build number in all referenced files to 6.5.1 (v6.5.28).
