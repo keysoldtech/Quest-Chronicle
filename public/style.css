@@ -285,9 +285,9 @@ body:not(.game-active) #game-screen {
 .game-area-mobile { display: flex; flex-direction: column; height: 100%; }
 
 .panel {
-    background-color: var(--color-surface);
-    border-radius: 4px;
-    box-shadow: var(--shadow-md);
+    background-color: #2a2c30;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
     border: 1px solid var(--color-border);
     overflow: hidden;
 }
@@ -318,14 +318,14 @@ body:not(.game-active) #game-screen {
     flex-shrink: 0;
     width: 180px;
     height: 250px;
-    background-color: var(--color-surface-light);
+    background-color: #2a2c30;
     border: 2px solid var(--color-border);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     padding: 0.75rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
     transition: transform 0.2s, box-shadow 0.2s;
     cursor: default;
 }
@@ -414,7 +414,44 @@ body:not(.game-active) #game-screen {
 }
 .ability-desc { font-size: 0.8rem; color: var(--color-text-secondary); }
 
-/* --- PLAYER STATS --- */
+/* --- PLAYER STATS & HEALTH/AP BARS --- */
+.health-ap-container {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+.stat-display {
+    display: flex;
+    flex-direction: column;
+    width: 80px;
+}
+.stat-value {
+    font-size: 0.8rem;
+    font-weight: bold;
+    text-align: right;
+    margin-bottom: 2px;
+    color: var(--color-text-secondary);
+}
+.progress-bar {
+    height: 8px;
+    border-radius: 4px;
+    background-color: #444;
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+}
+.progress-bar.health .progress-bar-fill {
+    background-color: #c90000;
+}
+.progress-bar.ap .progress-bar-fill {
+    background-color: #0088cc;
+}
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease-in-out;
+}
+
 .player-class-header {
     padding-left: 1rem;
 }
@@ -446,9 +483,9 @@ body:not(.game-active) #game-screen {
 
 /* --- MOBILE LAYOUT --- */
 .mobile-header {
-    background-color: var(--color-surface);
-    padding: 0.5rem;
-    border-bottom: 1px solid var(--color-border);
+    background-color: #1c1e21;
+    padding: 0.5rem 1rem;
+    border-bottom: 2px solid var(--color-primary);
 }
 .header-tier {
     display: flex;
@@ -462,36 +499,6 @@ body:not(.game-active) #game-screen {
 #mobile-room-code { font-weight: bold; font-size: 1.2rem; letter-spacing: 2px; }
 .resource-stack { display: flex; flex-direction: column; align-items: center; }
 
-.player-health-bar-container.mobile { width: 120px; }
-.progress-bar-wrapper {
-    position: relative;
-    height: 20px;
-    width: 100%;
-}
-.progress-bar {
-    width: 100%;
-    height: 100%;
-    background-color: var(--color-bg-dark);
-    border-radius: 10px;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-}
-.progress-bar-fill {
-    height: 100%;
-    background-color: var(--stat-color-hp);
-    transition: width 0.3s ease-in-out;
-}
-.progress-bar-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 0.8rem;
-    font-weight: bold;
-    color: white;
-    text-shadow: 1px 1px 2px black;
-}
-
 .mobile-main {
     flex-grow: 1;
     overflow-y: auto;
@@ -503,7 +510,6 @@ body:not(.game-active) #game-screen {
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.5rem;
-    /* FIX: Removed height and overflow to allow parent .mobile-main to handle scrolling */
 }
 .mobile-screen.active {
     display: flex;
@@ -633,6 +639,38 @@ body:not(.game-active) #game-screen {
 #desktop-class-card-display .class-card { cursor: pointer; }
 .selected-item { border: 2px solid var(--color-primary); }
 
+/* --- DICE ROLL & ANIMATION --- */
+#dice-animation-container {
+    width: 100px;
+    height: 100px;
+    margin: 1rem auto;
+}
+@keyframes dice-roll-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+#dice-animation-container svg {
+    width: 100%;
+    height: 100%;
+    animation: dice-roll-spin 0.5s linear infinite;
+}
+#dice-animation-container svg.stopped {
+    animation: none;
+}
+.dice-face {
+    fill: var(--color-surface-light);
+    stroke: var(--color-primary);
+    stroke-width: 4px;
+}
+.dice-text {
+    font-family: var(--font-body);
+    font-size: 50px;
+    font-weight: bold;
+    fill: var(--color-text-primary);
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+
 /* --- TOASTS & POPUPS --- */
 #toast-container {
     position: fixed;
@@ -683,15 +721,25 @@ body:not(.game-active) #game-screen {
         height: 100vh;
     }
 
-    .game-header { grid-area: header; display: flex; justify-content: space-between; align-items: center; padding: 0 1rem; background: var(--color-surface); }
+    .game-header {
+        grid-area: header;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        background: #1c1e21;
+        border-bottom: 2px solid var(--color-primary);
+        position: sticky;
+        top: 0;
+        z-index: 50;
+    }
     #players-list-container { grid-area: players; display: flex; flex-direction: column; }
     #character-sheet-block { grid-area: character; }
     #game-board-container { grid-area: board; }
     #hand-equipment-container { grid-area: hand; }
     .info-tabs-panel { grid-area: info; display: flex; flex-direction: column; }
 
-    .header-info { display: flex; align-items: center; gap: 1rem; }
-    .player-health-bar-container { width: 200px; display: flex; align-items: center; gap: 0.5rem; }
+    .header-info { display: flex; align-items: center; gap: 1.5rem; }
     .header-controls { display: flex; align-items: center; gap: 0.5rem; }
     .header-menu { position: relative; }
     .menu-dropdown {

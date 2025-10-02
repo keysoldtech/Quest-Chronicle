@@ -302,38 +302,39 @@ function renderGameplayState(myPlayer, gameState) {
     const get = id => document.getElementById(id);
     const isMyTurn = gameState.turnOrder[gameState.currentPlayerIndex] === myPlayer.id && !myPlayer.isDowned;
 
-    // Health bars
-    const headerStats = get('header-player-stats');
-    const mobileHeaderStats = get('mobile-header-player-stats');
+    // Health and AP Bars
+    const healthApDesktop = get('health-ap-container-desktop');
+    const healthApMobile = get('health-ap-container-mobile');
+
     if ((gameState.phase === 'started' || gameState.phase === 'skill_challenge') && myPlayer.stats.maxHp > 0) {
-        const healthPercent = (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100;
+        const healthPercent = myPlayer.stats.maxHp > 0 ? (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100 : 0;
+        const apPercent = myPlayer.stats.ap > 0 ? (myPlayer.currentAp / myPlayer.stats.ap) * 100 : 0;
         
         // Desktop
-        get('player-health-bar').style.width = `${healthPercent}%`;
-        get('player-health-text').textContent = `${myPlayer.stats.currentHp} / ${myPlayer.stats.maxHp}`;
-        headerStats.classList.remove('hidden');
+        get('player-health-bar-desktop').style.width = `${healthPercent}%`;
+        get('player-health-text-desktop').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
+        get('player-ap-bar-desktop').style.width = `${apPercent}%`;
+        get('ap-counter-text-desktop').textContent = `${myPlayer.currentAp}/${myPlayer.stats.ap}`;
+        healthApDesktop.classList.remove('hidden');
 
         // Mobile
-        get('mobile-player-health-bar').style.width = `${healthPercent}%`;
-        get('mobile-player-health-text').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
-        mobileHeaderStats.classList.remove('hidden');
+        get('player-health-bar-mobile').style.width = `${healthPercent}%`;
+        get('player-health-text-mobile').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
+        get('player-ap-bar-mobile').style.width = `${apPercent}%`;
+        get('ap-counter-text-mobile').textContent = `${myPlayer.currentAp}/${myPlayer.stats.ap}`;
+        healthApMobile.classList.remove('hidden');
+
     } else {
-        headerStats.classList.add('hidden');
-        mobileHeaderStats.classList.add('hidden');
+        healthApDesktop.classList.add('hidden');
+        healthApMobile.classList.add('hidden');
     }
 
-    // Turn Indicator & AP
+    // Turn Indicator
     const turnPlayer = currentRoomState.players[gameState.turnOrder[gameState.currentPlayerIndex]];
     const turnText = turnPlayer ? `${turnPlayer.name}'s Turn` : "Loading...";
     get('turn-indicator').textContent = turnText;
     get('mobile-turn-indicator').textContent = turnText;
-    get('ap-counter-desktop').classList.toggle('hidden', !isMyTurn);
-    get('ap-counter-mobile').classList.toggle('hidden', !isMyTurn);
-    if(isMyTurn) {
-        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.ap}`;
-        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.ap}`;
-    }
-
+    
     // Action Bars
     get('fixed-action-bar').classList.toggle('hidden', !isMyTurn);
     get('mobile-action-bar').classList.toggle('hidden', !isMyTurn);

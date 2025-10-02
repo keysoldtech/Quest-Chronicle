@@ -36,7 +36,7 @@
     <div id="menu-screen" class="screen">
         <div class="menu-container">
             <h1 class="game-title">Quest & Chronicle</h1>
-            <p class="game-subtitle">v6.5.35</p>
+            <p class="game-subtitle">v6.5.37</p>
             
             <!-- Player Name Input -->
             <div class="menu-section">
@@ -113,22 +113,24 @@
                 <header class="game-header">
                     <div class="header-info">
                          <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
-                         <div id="header-player-stats" class="hidden">
-                             <div class="player-health-bar-container">
-                                 <span class="material-symbols-outlined">favorite</span>
-                                 <div class="progress-bar-wrapper">
-                                     <div class="progress-bar health">
-                                         <div id="player-health-bar" class="progress-bar-fill"></div>
-                                     </div>
-                                     <span id="player-health-text" class="progress-bar-text"></span>
-                                 </div>
-                             </div>
-                         </div>
-                         <p id="ap-counter-desktop" class="ap-counter hidden"></p>
+                         <div id="health-ap-container-desktop" class="health-ap-container hidden">
+                            <div class="stat-display">
+                                <span class="stat-value" id="player-health-text-desktop">--/--</span>
+                                <div class="progress-bar health">
+                                    <div class="progress-bar-fill" id="player-health-bar-desktop"></div>
+                                </div>
+                            </div>
+                            <div class="stat-display">
+                                <span class="stat-value" id="ap-counter-text-desktop">--/--</span>
+                                <div class="progress-bar ap">
+                                    <div class="progress-bar-fill" id="player-ap-bar-desktop"></div>
+                                </div>
+                            </div>
+                        </div>
                          <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v6.5.35</p>
+                        <p class="build-number-font">v6.5.37</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -222,17 +224,20 @@
                     </div>
                     <!-- Tier 2: Resources & Actions -->
                     <div class="header-tier bottom-tier">
-                         <div id="mobile-header-player-stats" class="hidden resource-stack">
-                             <div class="player-health-bar-container mobile">
-                                 <div class="progress-bar-wrapper">
-                                     <div class="progress-bar health">
-                                         <div id="mobile-player-health-bar" class="progress-bar-fill"></div>
-                                     </div>
-                                     <span id="mobile-player-health-text" class="progress-bar-text"></span>
-                                 </div>
-                             </div>
-                         </div>
-                         <p id="ap-counter-mobile" class="ap-counter hidden resource-stack"></p>
+                        <div id="health-ap-container-mobile" class="health-ap-container hidden">
+                            <div class="stat-display">
+                                <span class="stat-value" id="player-health-text-mobile">--/--</span>
+                                <div class="progress-bar health">
+                                    <div class="progress-bar-fill" id="player-health-bar-mobile"></div>
+                                </div>
+                            </div>
+                            <div class="stat-display">
+                                <span class="stat-value" id="ap-counter-text-mobile">--/--</span>
+                                <div class="progress-bar ap">
+                                    <div class="progress-bar-fill" id="player-ap-bar-mobile"></div>
+                                </div>
+                            </div>
+                        </div>
                          <button id="mobile-help-btn" class="btn btn-sm btn-icon action-button"><span class="material-symbols-outlined">help</span></button>
                          <div class="header-menu">
                              <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon action-button"><span class="material-symbols-outlined">menu</span></button>
