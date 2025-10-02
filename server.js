@@ -1,4 +1,3 @@
-
 // This file is the main Node.js server for the Quest & Chronicle application.
 // It uses Express to serve the static frontend files (HTML, CSS, JS) from the 'public' directory
 // and uses Socket.IO for real-time, event-based communication to manage the multiplayer game logic.
@@ -128,7 +127,7 @@ class GameManager {
             isGuaranteedCrit: false, // For server-side crit tracking
             role: null,
             class: null,
-            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
             currentAp: 0,
             hand: [],
             equipment: { weapon: null, armor: null },
@@ -150,7 +149,7 @@ class GameManager {
             isGuaranteedCrit: false,
             role: null,
             class: null,
-            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
             currentAp: 0,
             hand: [], // Explicitly initialized as an empty array.
             equipment: { weapon: null, armor: null }, // Using stable, single-slot equipment structure.
@@ -252,9 +251,18 @@ class GameManager {
         Object.values(room.players).forEach(p => {
             p.stats = this.calculatePlayerStats(p);
             p.stats.currentHp = p.stats.maxHp;
-            // --- FIX: AP Consistency & Initialization ---
-            p.stats.maxAP = p.stats.ap; // Add maxAp for clarity
-            p.currentAp = p.stats.ap;   // Initialize currentAp
+            
+            // CRITICAL AP FIX: Ensure maxAP and currentAP are set from the class data.
+            if (p.class && gameData.classes[p.class]) {
+                const classData = gameData.classes[p.class];
+                const baseAPValue = classData.baseAP || 2; // Safety fallback
+                p.stats.maxAP = baseAPValue;
+                p.currentAp = baseAPValue;
+            } else {
+                // Fallback for DM or unclassed players
+                p.stats.maxAP = p.stats.ap;
+                p.currentAp = p.stats.ap;
+            }
         });
 
         // 6. Set turn order and start the game
@@ -519,7 +527,7 @@ class GameManager {
         if (!player) return;
     
         player.stats = this.calculatePlayerStats(player);
-        player.currentAp = player.stats.ap;
+        player.currentAp = player.stats.maxAP; // Refresh AP to max (from base class)
     
         this.emitGameState(roomId);
     

@@ -1,4 +1,3 @@
-
 /* 
   This file contains all the CSS styles for the application. It defines the visual appearance,
   layout, animations, and responsiveness for all components, including the lobby, game board,
@@ -313,22 +312,22 @@ label {
 
 /* Desktop layout tuning from playtest */
 #game-board-container {
-    flex-grow: 2.2;
-    min-height: 280px;
+    flex-grow: 3;
+    min-height: 300px;
     overflow-y: auto;
 }
 #hand-equipment-container {
-    flex-grow: 0.8;
-    max-height: 38vh;
+    flex-grow: 0.3;
+    max-height: 30vh;
     overflow-y: auto !important;
 }
 #player-list-display {
-    max-height: 20vh;
+    max-height: 12vh;
     flex-grow: 0;
     flex-shrink: 0;
     overflow-y: auto;
     margin-bottom: 5px;
-    font-size: 0.85em;
+    font-size: 0.8em;
 }
 #character-sheet-block {
     flex-grow: 1;

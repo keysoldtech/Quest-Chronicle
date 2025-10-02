@@ -1,4 +1,3 @@
-
 // REBUILT: Quest & Chronicle Client-Side Logic (v6.1.0)
 // This file has been completely rebuilt to use a unidirectional data flow model.
 // 1. The server is the single source of truth.
@@ -54,6 +53,33 @@ function createCardElement(card, options = {}) {
         </div>` : '';
     const weaponDiceHTML = card.type === 'Weapon' ? `<div class="card-bonus" title="Damage Dice"><span class="material-symbols-outlined">casino</span>${card.effect.dice}</div>` : '';
     const apCostHTML = card.apCost ? `<div class="card-bonus" title="AP Cost"><span class="material-symbols-outlined">bolt</span>${card.apCost}</div>` : '';
+    
+    // VISIBILITY FIX: Render all stat bonuses/penalties
+    let bonusesHTML = '';
+    if (card.effect?.bonuses) {
+        bonusesHTML = Object.entries(card.effect.bonuses).map(([key, value]) => {
+            if (value === 0) return '';
+            const sign = value > 0 ? '+' : '';
+            let icon = 'spark'; // generic icon
+            let title = key.charAt(0).toUpperCase() + key.slice(1);
+            
+            // Normalize key for consistent matching
+            const lowerKey = key.toLowerCase();
+            if (lowerKey.includes('damage')) { icon = 'swords'; title = 'Damage'; }
+            else if (lowerKey.includes('shield') || lowerKey.includes('armor')) { icon = 'security'; title = 'Shield'; }
+            else if (lowerKey.includes('hp')) { icon = 'favorite'; title = 'Health'; }
+            else if (lowerKey.includes('ap')) { icon = 'bolt'; title = 'Action Points'; }
+            else if (lowerKey.includes('str')) { icon = 'fitness_center'; title = 'Strength'; }
+            else if (lowerKey.includes('dex')) { icon = 'sprint'; title = 'Dexterity'; }
+            else if (lowerKey.includes('con')) { icon = 'health_and_safety'; title = 'Constitution'; }
+            else if (lowerKey.includes('int')) { icon = 'psychology'; title = 'Intelligence'; }
+            else if (lowerKey.includes('wis')) { icon = 'self_improvement'; title = 'Wisdom'; }
+            else if (lowerKey.includes('cha')) { icon = 'star'; title = 'Charisma'; }
+            
+            return `<div class="card-bonus" title="${title}"><span class="material-symbols-outlined">${icon}</span>${sign}${value}</div>`;
+        }).join('');
+    }
+
 
     cardDiv.innerHTML = `
         <div class="card-header">
@@ -67,6 +93,7 @@ function createCardElement(card, options = {}) {
             <div class="card-bonuses-grid">
                 ${monsterStatsHTML}
                 ${weaponDiceHTML}
+                ${bonusesHTML}
                 ${apCostHTML}
             </div>
             <p class="card-type">${typeInfo}</p>
@@ -216,7 +243,7 @@ function createClassCardElement(id, data) {
         <h3>${id}</h3>
         <div class="class-stats">
             <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
-            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAp}</p>
+            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAP}</p>
         </div>
         <div class="class-ability">
             <p><strong>${data.ability.name}</strong></p>
@@ -279,7 +306,7 @@ function renderClassSelection(desktopContainer, mobileContainer) {
                         <h3>${id}</h3>
                         <div class="class-stats">
                             <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
-                            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAp}</p>
+                            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAP}</p>
                         </div>
                         <div class="class-ability">
                             <p><strong>${data.ability.name}</strong></p>
@@ -332,8 +359,8 @@ function renderGameplayState(myPlayer, gameState) {
     get('ap-counter-desktop').classList.toggle('hidden', !isMyTurn);
     get('ap-counter-mobile').classList.toggle('hidden', !isMyTurn);
     if(isMyTurn) {
-        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.ap}`;
-        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.ap}`;
+        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
+        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
     }
 
     // Action Bars
