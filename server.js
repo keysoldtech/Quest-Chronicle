@@ -249,9 +249,8 @@ class GameManager {
         Object.values(room.players).forEach(p => {
             p.stats = this.calculatePlayerStats(p);
             p.stats.currentHp = p.stats.maxHp;
-            // --- FIX: AP Consistency & Initialization ---
-            p.stats.maxAp = p.stats.ap; // Add maxAp for clarity
-            p.currentAp = p.stats.ap;   // Initialize currentAp
+            p.stats.maxAp = p.stats.ap;
+            p.currentAp = p.stats.ap;
         });
 
         // 6. Set turn order and start the game
