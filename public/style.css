@@ -503,8 +503,7 @@ body:not(.game-active) #game-screen {
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.5rem;
-    height: 100%;
-    overflow-y: auto;
+    /* FIX: Removed height and overflow to allow parent .mobile-main to handle scrolling */
 }
 .mobile-screen.active {
     display: flex;
