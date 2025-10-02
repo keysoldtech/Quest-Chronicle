@@ -393,6 +393,36 @@ body:not(.game-active) #game-screen {
     justify-content: center;
 }
 
+/* --- New Card Stat Styling --- */
+.card-stat-container {
+    display: flex;
+    justify-content: space-evenly;
+    padding: 5px;
+    margin-top: auto; /* Push to bottom */
+    border-top: 1px solid #444;
+    background-color: #1a1a1a;
+    border-radius: 0 0 6px 6px; /* Match the bottom card curve, adjusted for padding */
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+    margin-bottom: -0.75rem;
+}
+
+.card-stat {
+    font-size: 0.85em;
+    font-weight: bold;
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+
+.damage-stat {
+    color: #ff6b6b; /* Reddish for damage */
+}
+
+.shield-stat {
+    color: #6a89cc; /* Bluish for defense */
+}
+
+
 /* --- CLASS SELECTION --- */
 .class-grid {
     display: grid;

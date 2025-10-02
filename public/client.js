@@ -71,6 +71,30 @@ function createCardElement(card, options = {}) {
             <p class="card-type">${typeInfo}</p>
         </div>
     `;
+    
+    // --- NEW: Card Stat Display ---
+    const statsContainer = document.createElement('div');
+    statsContainer.className = 'card-stat-container';
+    
+    // Display Damage Bonus
+    if (card.effect?.bonuses?.damageBonus > 0) {
+        const dmgElement = document.createElement('div');
+        dmgElement.className = 'card-stat damage-stat';
+        dmgElement.innerHTML = `⚔️ +${card.effect.bonuses.damageBonus} DMG`; 
+        statsContainer.appendChild(dmgElement);
+    }
+    
+    // Display Shield Bonus
+    if (card.effect?.bonuses?.shieldBonus > 0) {
+        const shieldElement = document.createElement('div');
+        shieldElement.className = 'card-stat shield-stat';
+        shieldElement.innerHTML = `🛡️ +${card.effect.bonuses.shieldBonus} SHD`; 
+        statsContainer.appendChild(shieldElement);
+    }
+
+    if (statsContainer.hasChildNodes()) {
+        cardDiv.appendChild(statsContainer);
+    }
 
     const actionContainer = document.createElement('div');
     actionContainer.className = 'card-action-buttons';
