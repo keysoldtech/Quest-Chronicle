@@ -78,6 +78,21 @@ body.in-game {
     justify-content: stretch;
 }
 
+/* VIEW MANAGEMENT */
+.screen {
+    display: none;
+    width: 100%;
+    height: 100%;
+}
+.screen.active {
+    display: block;
+}
+#menu-screen.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 
 .background-animation {
     position: fixed;
@@ -1064,36 +1079,27 @@ label {
 
 /* --- DESKTOP SPECIFIC LAYOUT TUNING --- */
 @media (min-width: 1024px) {
-    /* --- Game Board Block (Central Column) --- */
+    /* --- Central Column: Taller Board, Shorter Hand --- */
     #game-board-container { 
-        /* Roll back to a stable, but large, ratio */
-        flex-grow: 2; /* Was 3, roll back to 2 */ 
-        min-height: 280px; 
-        overflow-y: auto; 
+        flex-grow: 2; 
+        min-height: 280px;
+        overflow-y: auto;
     }
-
-    /* --- Hand & Equipment Block (Central Column) --- */
     #hand-equipment-container {
-        /* Roll back to a proportional size */
-        flex-grow: 1; /* Was 0.3, roll back to 1 */
-        max-height: 40vh; /* Restore proportional max height */
-        overflow-y: auto !important; 
+        flex-grow: 1; 
+        max-height: 40vh;
+        overflow-y: auto !important;
     }
     
-    /* --- Players List (Left Column) --- */
-    #player-list-display {
-        /* Raise max-height slightly for better visibility */
-        max-height: 20vh; /* Roll back from 12vh to 20vh */
+    /* --- Left Column: Smaller Players, Larger Sheet --- */
+    #player-list-display { 
+        max-height: 20vh; /* Gives players list enough room */
         flex-grow: 0; 
         flex-shrink: 0;
-        overflow-y: auto;
-        margin-bottom: 5px; 
-        font-size: 0.8em;
-    }
-    
-    /* Character Sheet remains high priority */
-    #character-sheet-block {
-        flex-grow: 1; 
+        overflow-y: auto; 
+    } 
+    #character-sheet-block { 
+        flex-grow: 1; /* Takes the rest of the left column space */
         overflow-y: auto; 
     }
 }

@@ -125,6 +125,11 @@ function renderUI() {
     if (!currentRoomState || !currentRoomState.id) return;
     const myPlayer = currentRoomState.players[myId];
     if (!myPlayer) {
+        // This can happen briefly during a reconnect. If we have a stored ID, wait for the next update.
+        if (sessionStorage.getItem('qc_playerId')) return;
+        // If there's no stored ID and no player object, something is wrong, refresh to menu.
+        sessionStorage.removeItem('qc_roomId');
+        window.location.reload();
         return;
     }
 
@@ -133,8 +138,9 @@ function renderUI() {
     const get = id => document.getElementById(id);
 
     // --- Phase 1: Show/Hide Major Screens ---
-    get('menu-screen').classList.toggle('active', phase === 'lobby');
+    // The `active` class is now controlled by CSS to prevent overlaps.
     const isGameActive = phase === 'class_selection' || phase === 'started' || phase === 'game_over' || phase === 'skill_challenge';
+    get('menu-screen').classList.toggle('active', !isGameActive);
     get('game-screen').classList.toggle('active', isGameActive);
     
     if (isGameActive && !gameUIInitialized) {
@@ -335,8 +341,11 @@ function renderGameplayState(myPlayer, gameState) {
     get('ap-counter-desktop').classList.toggle('hidden', !isMyTurn);
     get('ap-counter-mobile').classList.toggle('hidden', !isMyTurn);
     if(isMyTurn) {
-        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
-        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
+        // AP FIX (v6.5.46): Add fallbacks to prevent undefined/undefined error.
+        const currentAp = myPlayer.currentAp || 0;
+        const maxAp = myPlayer.stats.maxAP || 0;
+        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${currentAp}/${maxAp}`;
+        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${currentAp}/${maxAp}`;
     }
 
     // Action Bars

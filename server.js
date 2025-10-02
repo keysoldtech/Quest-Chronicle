@@ -249,13 +249,12 @@ class GameManager {
         
         // 5. Finalize stats and AP for all players
         Object.values(room.players).forEach(p => {
-            p.stats = this.calculatePlayerStats(p); // This calculates total AP and puts it in p.stats.ap
+            p.stats = this.calculatePlayerStats(p);
             p.stats.currentHp = p.stats.maxHp;
             
-            // SURGICAL AP FIX (v6.5.45): Unify all AP values in a single assignment.
-            // This ensures the root `currentAp` (for the header) and the nested `stats.maxAP` 
-            // are both correctly set from the final calculated `stats.ap` value.
-            p.currentAp = p.stats.maxAP = p.stats.ap;
+            // AP FIX (v6.5.46): Set the initial current AP from the final calculated stat.
+            // `calculatePlayerStats` now correctly sets `stats.maxAP` itself.
+            p.currentAp = p.stats.ap;
         });
 
         // 6. Set turn order and start the game
@@ -441,7 +440,7 @@ class GameManager {
     }
 
     calculatePlayerStats(player) {
-        const baseStats = { maxHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
+        const baseStats = { maxHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
         if (!player.class) return baseStats;
     
         const classData = gameData.classes[player.class];
@@ -482,6 +481,9 @@ class GameManager {
             newStats.currentHp = newStats.maxHp;
         }
         
+        // AP FIX (v6.5.46): Always set maxAP equal to the final calculated AP total.
+        newStats.maxAP = newStats.ap;
+
         return newStats;
     }
 
@@ -520,7 +522,7 @@ class GameManager {
         if (!player) return;
     
         player.stats = this.calculatePlayerStats(player);
-        player.currentAp = player.stats.maxAP; // Refresh AP to max (from base class)
+        player.currentAp = player.stats.maxAP; // Refresh AP to the new, correct max.
     
         this.emitGameState(roomId);
     
