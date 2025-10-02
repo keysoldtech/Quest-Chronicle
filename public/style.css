@@ -1114,3 +1114,37 @@ body.in-game {
         overflow-y: auto; 
     }
 }
+
+/* --- Menu Input & Button Style Overrides --- */
+#player-name-input, #room-code-input {
+    padding: 12px 15px;
+    border: 1px solid #555;
+    border-radius: 5px;
+    background-color: #333;
+    color: white;
+    font-size: 1.1em;
+    font-family: var(--font-body);
+}
+
+#create-room-btn, #join-room-btn {
+    padding: 10px 20px;
+    font-size: 1.2em;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+#create-room-btn {
+    background-color: #4CAF50; /* Green */
+}
+
+#join-room-btn {
+    background-color: #2196F3; /* Blue */
+}
+
+#create-room-btn:hover {
+    background-color: #45a049;
+}
+
+#join-room-btn:hover {
+    background-color: #0b7dda;
+}
