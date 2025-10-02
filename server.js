@@ -127,7 +127,7 @@ class GameManager {
             isGuaranteedCrit: false, // For server-side crit tracking
             role: null,
             class: null,
-            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, currentAp: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
             hand: [],
             equipment: { weapon: null, armor: null },
             statusEffects: [],
@@ -148,7 +148,7 @@ class GameManager {
             isGuaranteedCrit: false,
             role: null,
             class: null,
-            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+            stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, currentAp: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
             hand: [], // Explicitly initialized as an empty array.
             equipment: { weapon: null, armor: null }, // Using stable, single-slot equipment structure.
             statusEffects: [], // Explicitly initialized as an empty array.
@@ -249,8 +249,7 @@ class GameManager {
         Object.values(room.players).forEach(p => {
             p.stats = this.calculatePlayerStats(p);
             p.stats.currentHp = p.stats.maxHp;
-            p.stats.maxAp = p.stats.ap;
-            p.currentAp = p.stats.ap;
+            p.stats.currentAp = p.stats.ap;
         });
 
         // 6. Set turn order and start the game
@@ -515,7 +514,7 @@ class GameManager {
         if (!player) return;
     
         player.stats = this.calculatePlayerStats(player);
-        player.currentAp = player.stats.ap;
+        player.stats.currentAp = player.stats.ap;
     
         this.emitGameState(roomId);
     
@@ -644,8 +643,8 @@ class GameManager {
             const weaponApCost = weapon?.apCost || 2;
             const unarmedApCost = 1;
 
-            const canUseWeapon = weapon && player.currentAp >= weaponApCost;
-            const canUseUnarmed = player.currentAp >= unarmedApCost;
+            const canUseWeapon = weapon && player.stats.currentAp >= weaponApCost;
+            const canUseUnarmed = player.stats.currentAp >= unarmedApCost;
 
             if (canUseWeapon || canUseUnarmed) {
                 const weaponId = canUseWeapon ? weapon.id : 'unarmed';
@@ -659,8 +658,8 @@ class GameManager {
             }
         }
 
-        if (!actionTaken && player.currentAp >= 1) {
-             player.currentAp -= 1;
+        if (!actionTaken && player.stats.currentAp >= 1) {
+             player.stats.currentAp -= 1;
              player.stats.shieldHp += player.equipment.armor?.guardBonus || 2;
              actionTaken = true;
         }
@@ -714,7 +713,7 @@ class GameManager {
         if (!player || player.isDowned || room.gameState.turnOrder[room.gameState.currentPlayerIndex] !== player.id) return;
         
         // P0 FIX: Halt any new player-initiated action if they have no AP.
-        if (player.currentAp <= 0 && data.action !== 'resolve_hit' && data.action !== 'resolve_damage') {
+        if (player.stats.currentAp <= 0 && data.action !== 'resolve_hit' && data.action !== 'resolve_damage') {
             socket.emit('apZeroPrompt');
             return; // Halt the action immediately.
         }
@@ -763,13 +762,13 @@ class GameManager {
             }
             case 'guard': {
                 const guardCost = gameData.actionCosts.guard;
-                if (player.currentAp >= guardCost) {
+                if (player.stats.currentAp >= guardCost) {
                     const conBonus = this._getStatModifier(player, 'con');
                     const shieldGain = (player.equipment.armor?.guardBonus || 2) + conBonus;
-                    player.currentAp -= guardCost;
+                    player.stats.currentAp -= guardCost;
                     player.stats.shieldHp += shieldGain;
                     socket.emit('showToast', { message: `You gain ${shieldGain} Shield.` });
-                    if (player.currentAp <= 0) {
+                    if (player.stats.currentAp <= 0) {
                         socket.emit('apZeroPrompt');
                     }
                 }
@@ -778,11 +777,11 @@ class GameManager {
             }
             case 'respite': {
                 const cost = 1;
-                if (player.currentAp < cost) return;
+                if (player.stats.currentAp < cost) return;
                 player.stats.shieldHp = (player.stats.shieldHp || 0) + 1;
-                player.currentAp -= cost;
+                player.stats.currentAp -= cost;
                 socket.emit('showToast', { message: 'You take a brief respite and restore 1 Shield.' });
-                if (player.currentAp <= 0) {
+                if (player.stats.currentAp <= 0) {
                     socket.emit('apZeroPrompt');
                 }
                 this.emitGameState(room.id);
@@ -790,11 +789,11 @@ class GameManager {
             }
             case 'rest': {
                 const cost = 2;
-                if (player.currentAp < cost) return;
+                if (player.stats.currentAp < cost) return;
                 player.stats.currentHp = Math.min(player.stats.currentHp + 5, player.stats.maxHp);
-                player.currentAp -= cost;
+                player.stats.currentAp -= cost;
                 socket.emit('showToast', { message: 'You rest and restore 5 HP.' });
-                if (player.currentAp <= 0) {
+                if (player.stats.currentAp <= 0) {
                     socket.emit('apZeroPrompt');
                 }
                 this.emitGameState(room.id);
@@ -832,7 +831,7 @@ class GameManager {
         if (!isUnarmed && (!weapon || weapon.id !== weaponId)) return;
 
         const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
-        if (player.currentAp < apCost) return;
+        if (player.stats.currentAp < apCost) return;
 
         if (narrative && narrative.trim().length > 0) {
             room.chatLog.push({ type: 'narrative', playerName: player.name, text: narrative });
@@ -862,7 +861,7 @@ class GameManager {
         if (!isUnarmed && (!weapon || weapon.id !== weaponId)) return;
 
         const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
-        if (attacker.currentAp < apCost) return;
+        if (attacker.stats.currentAp < apCost) return;
         
         const strBonus = this._getStatModifier(attacker, 'str');
         const toHitBonus = strBonus + (attacker.stats.hitBonus || 0);
@@ -905,8 +904,8 @@ class GameManager {
         room.chatLog.push({ type: 'system', text: `${attacker.name} attacks ${target.name}... ${result.outcome}! (Rolled ${result.total})` });
 
         if (!hit) {
-            attacker.currentAp -= apCost;
-            if (attacker.currentAp <= 0) {
+            attacker.stats.currentAp -= apCost;
+            if (attacker.stats.currentAp <= 0) {
                 const socket = io.sockets.sockets.get(attacker.id);
                 if (socket) socket.emit('apZeroPrompt');
             }
@@ -931,8 +930,8 @@ class GameManager {
         if (!isUnarmed && (!weapon || weapon.id !== weaponId)) return;
         
         const apCost = isUnarmed ? 1 : (weapon.apCost || 2);
-        if (attacker.currentAp < apCost) return;
-        attacker.currentAp -= apCost;
+        if (attacker.stats.currentAp < apCost) return;
+        attacker.stats.currentAp -= apCost;
 
         const damageDice = isUnarmed ? '1d4' : weapon.effect.dice;
         let damageRoll = this.rollDice(damageDice);
@@ -965,7 +964,7 @@ class GameManager {
             damageBonus: attacker.stats.damageBonus
         });
         
-        if (attacker.currentAp <= 0) {
+        if (attacker.stats.currentAp <= 0) {
             const socket = io.sockets.sockets.get(attacker.id);
             if (socket) socket.emit('apZeroPrompt');
         }
@@ -1037,7 +1036,7 @@ class GameManager {
             await pause(1000);
         }
 
-        attacker.currentAp -= apCost;
+        attacker.stats.currentAp -= apCost;
         if (target.currentHp > 0) this.emitGameState(room.id); // Emit state to update HP and AP
     }
 
@@ -1179,7 +1178,7 @@ class GameManager {
         const ability = gameData.classes[player.class].ability;
         if (!ability || ability.name !== data.abilityName) return;
 
-        if (player.currentAp < ability.apCost) {
+        if (player.stats.currentAp < ability.apCost) {
             return socket.emit('actionError', "Not enough AP to use this ability.");
         }
 
@@ -1191,7 +1190,7 @@ class GameManager {
             room.chatLog.push({ type: 'system', text: `${player.name} discards ${discardedCard.name} to use ${ability.name}.` });
         }
 
-        player.currentAp -= ability.apCost;
+        player.stats.currentAp -= ability.apCost;
         let successMessage = `${player.name} used ${ability.name}!`;
 
         switch(ability.name) {
@@ -1240,11 +1239,11 @@ class GameManager {
         if (cardIndex === -1) return socket.emit('actionError', "Card not found in hand.");
         
         const card = player.hand[cardIndex];
-        if (card.type !== 'Consumable' || player.currentAp < (card.apCost || 1)) {
+        if (card.type !== 'Consumable' || player.stats.currentAp < (card.apCost || 1)) {
             return socket.emit('actionError', "Cannot use this item.");
         }
 
-        player.currentAp -= (card.apCost || 1);
+        player.stats.currentAp -= (card.apCost || 1);
         const [usedCard] = player.hand.splice(cardIndex, 1);
         room.gameState.discardPile.push(usedCard);
 

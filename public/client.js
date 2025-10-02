@@ -308,20 +308,20 @@ function renderGameplayState(myPlayer, gameState) {
 
     if ((gameState.phase === 'started' || gameState.phase === 'skill_challenge') && myPlayer.stats.maxHp > 0) {
         const healthPercent = myPlayer.stats.maxHp > 0 ? (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100 : 0;
-        const apPercent = myPlayer.stats.ap > 0 ? (myPlayer.currentAp / myPlayer.stats.ap) * 100 : 0;
+        const apPercent = myPlayer.stats.ap > 0 ? (myPlayer.stats.currentAp / myPlayer.stats.ap) * 100 : 0;
         
         // Desktop
         get('player-health-bar-desktop').style.width = `${healthPercent}%`;
         get('player-health-text-desktop').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
         get('player-ap-bar-desktop').style.width = `${apPercent}%`;
-        get('ap-counter-text-desktop').textContent = `${myPlayer.currentAp}/${myPlayer.stats.ap}`;
+        get('ap-counter-text-desktop').textContent = `${myPlayer.stats.currentAp}/${myPlayer.stats.ap}`;
         healthApDesktop.classList.remove('hidden');
 
         // Mobile
         get('player-health-bar-mobile').style.width = `${healthPercent}%`;
         get('player-health-text-mobile').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
         get('player-ap-bar-mobile').style.width = `${apPercent}%`;
-        get('ap-counter-text-mobile').textContent = `${myPlayer.currentAp}/${myPlayer.stats.ap}`;
+        get('ap-counter-text-mobile').textContent = `${myPlayer.stats.currentAp}/${myPlayer.stats.ap}`;
         healthApMobile.classList.remove('hidden');
 
     } else {
