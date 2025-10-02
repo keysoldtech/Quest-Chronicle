@@ -54,8 +54,21 @@ function createCardElement(card, options = {}) {
     const weaponDiceHTML = card.type === 'Weapon' ? `<div class="card-bonus" title="Damage Dice"><span class="material-symbols-outlined">casino</span>${card.effect.dice}</div>` : '';
     const apCostHTML = card.apCost ? `<div class="card-bonus" title="AP Cost"><span class="material-symbols-outlined">bolt</span>${card.apCost}</div>` : '';
     
-    // REVERTED (v6.5.45): Stat bonuses are no longer displayed directly on the card for UI stability.
-    const bonusesHTML = '';
+    const bonuses = card.effect?.bonuses;
+    let bonusesHTML = '';
+    if (bonuses) {
+        const bonusIconMap = {
+            ap: 'bolt', damageBonus: 'swords', shieldBonus: 'security', hp: 'favorite',
+            str: 'fitness_center', dex: 'sprint', con: 'shield_person'
+        };
+        bonusesHTML = Object.entries(bonuses).map(([key, value]) => {
+            if (value === 0) return '';
+            const icon = bonusIconMap[key];
+            if (!icon) return ''; // Only render bonuses we have icons for
+            const sign = value > 0 ? '+' : '';
+            return `<div class="card-bonus" title="${key}"><span class="material-symbols-outlined">${icon}</span>${sign}${value}</div>`;
+        }).join('');
+    }
 
     cardDiv.innerHTML = `
         <div class="card-header">
@@ -339,11 +352,12 @@ function renderGameplayState(myPlayer, gameState) {
     get('turn-indicator').textContent = turnText;
     get('mobile-turn-indicator').textContent = turnText;
     get('ap-counter-desktop').classList.toggle('hidden', !isMyTurn);
+    get('mobile-header-player-stats').classList.toggle('hidden', myPlayer.isDowned);
     get('ap-counter-mobile').classList.toggle('hidden', !isMyTurn);
     if(isMyTurn) {
-        // AP FIX (v6.5.46): Add fallbacks to prevent undefined/undefined error.
-        const currentAp = myPlayer.currentAp || 0;
-        const maxAp = myPlayer.stats.maxAP || 0;
+        const currentAp = myPlayer.currentAp ?? 0;
+        // FIX #47: Ensure maxAP is read from the final calculated stats object.
+        const maxAp = myPlayer.stats.maxAP ?? 0;
         get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${currentAp}/${maxAp}`;
         get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${currentAp}/${maxAp}`;
     }
@@ -391,480 +405,360 @@ function renderGameplayState(myPlayer, gameState) {
 }
 
 function renderCharacterPanel(desktopContainer, mobileContainer, player, isMyTurn) {
-    const { stats, class: className } = player;
+    const { stats, class: className, baseStats, statBonuses } = player;
+
+    if (!baseStats || !statBonuses) return; // Don't render if data is missing
+
     const classData = currentRoomState.staticData.classes[className];
+
+    // FIX #48: Helper now adds 'stat-debuff' class for negative bonuses.
+    const renderStatLine = (label, icon, iconColor, baseValue, bonusValue, isPrefix = false) => {
+        let bonusHtml = '';
+        if (bonusValue && bonusValue !== 0) {
+            const sign = bonusValue > 0 ? '+' : '';
+            const bonusClass = bonusValue > 0 ? 'stat-bonus' : 'stat-debuff';
+            bonusHtml = ` <span class="${bonusClass}">(${sign}${bonusValue})</span>`;
+        }
+        const prefix = (isPrefix && baseValue > 0) ? '+' : '';
+        return `<div class="stat-line">
+                    <span class="material-symbols-outlined" style="color:var(--stat-color-${iconColor})">${icon}</span>
+                    <span class="stat-label">${label}</span>
+                    <span class="stat-value">${prefix}${baseValue}${bonusHtml}</span>
+                </div>`;
+    };
+
     const statsHTML = `
         <h2 class="panel-header player-class-header">${player.name} - ${className}</h2>
         <div class="panel-content">
             <div class="player-stats">
                  <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-hp)">favorite</span><span class="stat-label">Health</span><span class="stat-value">${stats.currentHp} / ${stats.maxHp}</span></div>
                  <div class="stat-line shield-hp-line ${stats.shieldHp > 0 ? '' : 'hidden'}"><span class="material-symbols-outlined" style="color:var(--stat-color-shield-hp)">shield</span><span class="stat-label">Shield</span><span class="stat-value">+${stats.shieldHp}</span></div>
-                 <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-ap)">bolt</span><span class="stat-label">Action Points</span><span class="stat-value">${stats.ap}</span></div>
-                 <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-damage)">swords</span><span class="stat-label">Damage Bonus</span><span class="stat-value">+${stats.damageBonus}</span></div>
-                 <div class="stat-line"><span class="material-symbols-outlined" style="color:var(--stat-color-shield)">security</span><span class="stat-label">Shield Bonus</span><span class="stat-value">+${stats.shieldBonus}</span></div>
+                 ${renderStatLine('Action Points', 'bolt', 'ap', baseStats.ap || 0, statBonuses.ap || 0)}
+                 ${renderStatLine('Damage Bonus', 'swords', 'damage', baseStats.damageBonus || 0, statBonuses.damageBonus || 0, true)}
+                 ${renderStatLine('Shield Bonus', 'security', 'shield', baseStats.shieldBonus || 0, statBonuses.shieldBonus || 0, true)}
+                 ${renderStatLine('Hit Bonus', 'colorize', 'int', baseStats.hitBonus || 0, statBonuses.hitBonus || 0, true)}
             </div>
-            ${classData && classData.ability ? `<div class="class-ability-card">
-                <p class="ability-title">${classData.ability.name} (${classData.ability.apCost} AP)</p>
-                <p class="ability-desc">${classData.ability.description}</p>
-                <button class="btn btn-sm btn-special ability-button" data-ability-name="${classData.ability.name}" ${isMyTurn ? '' : 'disabled'}>Use Ability</button>
-            </div>` : ''}
-        </div>`;
+            <div class="player-stats core-stats">
+                 ${renderStatLine('Strength', 'fitness_center', 'str', baseStats.str || 0, statBonuses.str || 0)}
+                 ${renderStatLine('Dexterity', 'sprint', 'dex', baseStats.dex || 0, statBonuses.dex || 0)}
+                 ${renderStatLine('Constitution', 'shield_person', 'con', baseStats.con || 0, statBonuses.con || 0)}
+                 ${renderStatLine('Intelligence', 'school', 'int', baseStats.int || 0, statBonuses.int || 0)}
+                 ${renderStatLine('Wisdom', 'self_improvement', 'wis', baseStats.wis || 0, statBonuses.wis || 0)}
+                 ${renderStatLine('Charisma', 'star', 'cha', baseStats.cha || 0, statBonuses.cha || 0)}
+            </div>
+             ${classData && isMyTurn ? `
+                 <div class="class-ability-card">
+                     <p class="ability-title">${classData.ability.name} (${classData.ability.apCost} AP)</p>
+                     <p class="ability-desc">${classData.ability.description}</p>
+                     <button id="use-ability-btn" class="btn btn-special btn-sm ability-button">Use Ability</button>
+                 </div>
+             ` : ''}
+        </div>
+    `;
 
-    desktopContainer.innerHTML = statsHTML;
-    mobileContainer.innerHTML = `<div class="panel mobile-panel">${statsHTML}</div>`;
+    if (isDesktop()) {
+        desktopContainer.innerHTML = statsHTML;
+    } else {
+        mobileContainer.innerHTML = `<div class="panel mobile-panel">${statsHTML}</div>`;
+    }
 }
 
-// REFACTORED: Renders hand/equipment for both desktop and mobile without cloning to fix mobile attack bug.
 function renderHandAndEquipment(player, isMyTurn) {
-    const get = id => document.getElementById(id);
-    const equippedContainers = [get('equipped-items'), get('mobile-equipped-items')];
-    const handContainers = [get('player-hand'), get('mobile-player-hand')];
+    const handContainers = [document.getElementById('player-hand'), document.getElementById('mobile-player-hand')];
+    const equippedContainers = [document.getElementById('equipped-items'), document.getElementById('mobile-equipped-items')];
     
-    equippedContainers.forEach(c => c.innerHTML = '');
     handContainers.forEach(c => c.innerHTML = '');
+    equippedContainers.forEach(c => c.innerHTML = '');
 
-    // RENDER EQUIPPED
-    const unarmedData = { id: 'unarmed', name: 'Fists', type: 'Unarmed', apCost: 1, effect: { dice: '1d4', description: 'Costs 1 AP. Deals 1d4 damage.' } };
-    const weaponData = player.equipment.weapon || unarmedData;
+    // Render Hand
+    player.hand.forEach(card => {
+        const isEquippable = (card.type === 'Weapon' || card.type === 'Armor');
+        const isConsumable = card.type === 'Consumable';
+        handContainers.forEach(container => {
+            container.appendChild(createCardElement(card, { isEquippable, isConsumable, isDiscardable: isMyTurn }));
+        });
+    });
 
-    equippedContainers.forEach(container => {
-        // Weapon
-        const weaponCard = createCardElement(weaponData, { isAttackable: isMyTurn });
-        weaponCard.onclick = () => {
-            if (!isMyTurn) return;
-            selectedWeaponId = (selectedWeaponId === weaponData.id) ? null : weaponData.id;
-            renderUI();
-        };
-        container.appendChild(weaponCard);
-
-        // Armor
-        if (player.equipment.armor) {
-            container.appendChild(createCardElement(player.equipment.armor));
+    // Render Equipment
+    Object.values(player.equipment).forEach(item => {
+        if (item) {
+            const isAttackable = item.type === 'Weapon' && isMyTurn;
+            equippedContainers.forEach(container => {
+                const cardEl = createCardElement(item, { isAttackable });
+                if (isAttackable) {
+                    cardEl.onclick = () => {
+                        selectedWeaponId = selectedWeaponId === item.id ? null : item.id;
+                        renderUI();
+                    };
+                }
+                container.appendChild(cardEl);
+            });
         }
     });
 
-    // RENDER HAND
-    player.hand.forEach(card => {
-        const isEquippable = (card.type === 'Weapon' || card.type === 'Armor') && isMyTurn;
-        const isConsumable = card.type === 'Consumable' && isMyTurn;
-        handContainers.forEach(container => {
-            container.appendChild(createCardElement(card, { isEquippable, isDiscardable: isMyTurn, isConsumable }));
+    // Add unarmed attack "card" if it's my turn
+    if (isMyTurn) {
+        const unarmed = { id: 'unarmed', name: 'Unarmed Strike', type: 'Weapon', apCost: 1, effect: { dice: '1d4' } };
+        equippedContainers.forEach(container => {
+            const cardEl = createCardElement(unarmed, { isAttackable: true });
+            cardEl.onclick = () => {
+                selectedWeaponId = selectedWeaponId === unarmed.id ? null : unarmed.id;
+                renderUI();
+            };
+            container.appendChild(cardEl);
         });
-    });
+    }
 }
 
-function renderGameLog(chatLog) {
-    const logContainers = [
-        document.getElementById('game-log-content'),
-        document.getElementById('chat-log'),
-        document.getElementById('mobile-chat-log')
-    ];
 
+function renderGameLog(log) {
+    const logContainers = [document.getElementById('game-log-content'), document.getElementById('mobile-chat-log')];
     logContainers.forEach(container => {
-        if (!container) return;
-        container.innerHTML = '';
-        chatLog.forEach(msg => {
-            const p = document.createElement('p');
-            p.className = `chat-message ${msg.type || 'system'}`;
+        if(!container) return;
+        
+        const shouldScroll = Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) < 5;
 
-            if (msg.type === 'narrative') {
-                p.innerHTML = `<strong>${escapeHTML(msg.playerName)}:</strong> <em>"${escapeHTML(msg.text)}"</em>`;
-            } else if (msg.type === 'chat') {
-                const senderClass = msg.playerId === myId ? 'self' : '';
-                const channelClass = msg.channel || 'game';
-                p.innerHTML = `[<span class="channel ${channelClass}">${channelClass.toUpperCase()}</span>] <strong class="sender ${senderClass}">${escapeHTML(msg.playerName)}:</strong> ${escapeHTML(msg.text)}`;
-            } else {
-                 p.textContent = msg.text;
+        container.innerHTML = log.map(entry => {
+            let content = '';
+            switch (entry.type) {
+                case 'chat':
+                    const senderClass = entry.playerId === myId ? 'self' : '';
+                    const channelClass = entry.channel.toLowerCase();
+                    content = `<span class="channel ${channelClass}">[${entry.channel}]</span> <span class="sender ${senderClass}">${entry.playerName}:</span> ${entry.text}`;
+                    break;
+                case 'system-good':
+                case 'system-bad':
+                case 'combat':
+                case 'combat-hit':
+                case 'dm':
+                case 'system':
+                case 'action':
+                case 'action-good':
+                    content = entry.text;
+                    break;
+                case 'narrative':
+                     content = `<span class="narrative-text">"${entry.text}"</span> - <span class="narrative-sender">${entry.playerName}</span>`;
+                     break;
+                default:
+                    content = entry.text || '';
             }
-
-            container.appendChild(p);
-        });
-        container.scrollTop = container.scrollHeight;
+            return `<div class="chat-message ${entry.type}">${content}</div>`;
+        }).join('');
+        
+        if (shouldScroll) {
+            container.scrollTop = container.scrollHeight;
+        }
     });
 }
 
+// --- 3. UI INITIALIZATION & EVENT LISTENERS ---
+function initializeUI() {
+    // --- Menu Screen Listeners ---
+    const playerNameInput = document.getElementById('player-name-input');
+    const roomCodeInput = document.getElementById('room-code-input');
+    const createBtn = document.getElementById('create-room-btn');
+    const joinBtn = document.getElementById('join-room-btn');
 
-// --- 3. UI EVENT LISTENERS ---
-document.addEventListener('DOMContentLoaded', () => {
-    // Menu Screen Listeners
-    const get = id => document.getElementById(id);
-    const playerNameInput = get('player-name-input');
-    const createRoomBtn = get('create-room-btn');
-    const joinRoomBtn = get('join-room-btn');
-    const roomCodeInput = get('room-code-input');
-    const customSettingsDiv = get('custom-settings');
-    const modeButtons = document.querySelectorAll('.mode-btn');
-
-    function validateCreateButton() {
-        createRoomBtn.disabled = !(playerNameInput.value.trim().length > 0 && selectedGameMode !== null);
+    function validateMenu() {
+        const hasName = playerNameInput.value.trim().length > 0;
+        const hasMode = selectedGameMode !== null;
+        createBtn.disabled = !hasName || !hasMode;
+        joinBtn.disabled = !hasName || roomCodeInput.value.trim().length !== 4;
     }
 
-    modeButtons.forEach(btn => btn.addEventListener('click', () => {
-        modeButtons.forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        selectedGameMode = btn.dataset.mode;
-        customSettingsDiv.classList.toggle('hidden', selectedGameMode !== 'Custom');
-        validateCreateButton();
-    }));
-
-    playerNameInput.addEventListener('input', validateCreateButton);
-
-    createRoomBtn.addEventListener('click', () => {
-        myPlayerName = playerNameInput.value.trim();
-        socket.emit('createRoom', { 
-            playerName: myPlayerName, 
-            gameMode: selectedGameMode, 
-            customSettings: selectedGameMode === 'Custom' ? {
-                startWithWeapon: get('setting-weapon').checked,
-                startWithArmor: get('setting-armor').checked,
-                startingItems: parseInt(get('setting-items').value),
-                startingSpells: parseInt(get('setting-spells').value),
-                lootDropRate: parseInt(get('setting-loot-rate').value)
-            } : null
+    playerNameInput.addEventListener('input', validateMenu);
+    roomCodeInput.addEventListener('input', validateMenu);
+    
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedGameMode = btn.dataset.mode;
+            document.getElementById('custom-settings').classList.toggle('hidden', selectedGameMode !== 'Custom');
+            validateMenu();
         });
+    });
+
+    createBtn.addEventListener('click', () => {
+        myPlayerName = playerNameInput.value.trim();
+        let payload = { playerName: myPlayerName, gameMode: selectedGameMode };
+        if (selectedGameMode === 'Custom') {
+            payload.customSettings = {
+                startWithWeapon: document.getElementById('setting-weapon').checked,
+                startWithArmor: document.getElementById('setting-armor').checked,
+                startingItems: parseInt(document.getElementById('setting-items').value, 10),
+                startingSpells: parseInt(document.getElementById('setting-spells').value, 10),
+                lootDropRate: parseInt(document.getElementById('setting-loot-rate').value, 10)
+            };
+        }
+        socket.emit('createRoom', payload);
+    });
+
+    joinBtn.addEventListener('click', () => {
+        myPlayerName = playerNameInput.value.trim();
+        const roomId = roomCodeInput.value.trim().toUpperCase();
+        socket.emit('joinRoom', { playerName: myPlayerName, roomId });
     });
     
-    joinRoomBtn.addEventListener('click', () => {
-        myPlayerName = playerNameInput.value.trim();
-        socket.emit('joinRoom', { 
-            roomId: roomCodeInput.value.trim().toUpperCase(), 
-            playerName: myPlayerName
-        });
-    });
-
-    get('game-over-leave-btn').addEventListener('click', () => {
-        sessionStorage.removeItem('qc_playerId');
-        sessionStorage.removeItem('qc_roomId');
-        window.location.reload();
-    });
-
-    // End Turn Modal Listeners
-    get('end-turn-confirm-btn').addEventListener('click', () => {
-        socket.emit('endTurn');
-        get('end-turn-confirm-modal').classList.add('hidden');
-    });
-    get('end-turn-cancel-btn').addEventListener('click', () => {
-        get('end-turn-confirm-modal').classList.add('hidden');
-    });
-    // v6.5.0: Wire up cancel button for new modals
-    get('claim-loot-cancel-btn').addEventListener('click', () => {
-        get('claim-loot-modal').classList.add('hidden');
-    });
-});
+    // --- Attempt Rejoin on Load ---
+    const storedRoomId = sessionStorage.getItem('qc_roomId');
+    const storedPlayerId = sessionStorage.getItem('qc_playerId');
+    if (storedRoomId && storedPlayerId) {
+        socket.emit('rejoinRoom', { roomId: storedRoomId, playerId: storedPlayerId });
+    }
+}
 
 function initializeGameUIListeners() {
-    const get = id => document.getElementById(id);
-    // Event delegation for dynamically created elements
+    // --- Universal Listeners (called once) ---
     document.body.addEventListener('click', (e) => {
-        const classBtn = e.target.closest('.select-class-btn');
-        if (classBtn?.dataset?.classId) {
-            socket.emit('chooseClass', { classId: classBtn.dataset.classId });
-            return;
-        }
-
-        const abilityBtn = e.target.closest('.ability-button');
-        if (abilityBtn?.dataset?.abilityName) {
-            socket.emit('playerAction', { 
-                action: 'useAbility', 
-                abilityName: abilityBtn.dataset.abilityName 
-            });
-            return;
-        }
-
-        const navBtn = e.target.closest('.nav-btn');
-        if (navBtn?.dataset?.screen) {
-            switchMobileScreen(navBtn.dataset.screen);
-            return;
+        // Class selection (mobile)
+        if (e.target.classList.contains('select-class-btn')) {
+            const classId = e.target.dataset.classId;
+            socket.emit('chooseClass', { classId });
         }
         
-        const endTurnBtn = e.target.closest('#action-end-turn-btn, #mobile-action-end-turn-btn');
-        if (endTurnBtn) {
-            const modal = get('end-turn-confirm-modal');
-            modal.querySelector('h2').textContent = 'End Your Turn?';
-            modal.querySelector('p').textContent = 'Are you sure you want to end your turn?';
-            modal.classList.remove('hidden');
-            return;
-        }
-        
-        const guardBtn = e.target.closest('#action-guard-btn, #mobile-action-guard-btn');
-        if (guardBtn) {
-            socket.emit('playerAction', { action: 'guard' });
-            return;
-        }
-
-        const respiteBtn = e.target.closest('#action-brief-respite-btn, #mobile-action-brief-respite-btn');
-        if (respiteBtn) {
-            socket.emit('playerAction', { action: 'respite' });
-            return;
-        }
-
-        const restBtn = e.target.closest('#action-full-rest-btn, #mobile-action-full-rest-btn');
-        if (restBtn) {
-            socket.emit('playerAction', { action: 'rest' });
-            return;
-        }
-
-        const tabBtn = e.target.closest('.tab-btn');
-        if (tabBtn?.dataset?.tab) {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            tabBtn.classList.add('active');
-            get(tabBtn.dataset.tab).classList.add('active');
-            return;
-        }
-        
-        const leaveBtn = e.target.closest('#leave-game-btn, #mobile-leave-game-btn');
-        if (leaveBtn) {
-            sessionStorage.removeItem('qc_playerId');
-            sessionStorage.removeItem('qc_roomId');
-            window.location.reload();
-            return;
+        // Use Ability Button
+        if (e.target.id === 'use-ability-btn') {
+            const playerClass = currentRoomState.players[myId]?.class;
+            if (playerClass) {
+                const abilityName = currentRoomState.staticData.classes[playerClass].ability.name;
+                socket.emit('playerAction', { action: 'useAbility', abilityName });
+            }
         }
     });
 
-    // Chat form listeners
-    const chatForm = get('chat-form');
-    chatForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const input = get('chat-input');
-        const channel = get('chat-channel');
-        if (input.value.trim()) {
-            socket.emit('chatMessage', { channel: channel.value, message: input.value.trim() });
-            input.value = '';
-        }
-    });
-
-    const mobileChatForm = get('mobile-chat-form');
-    mobileChatForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const input = get('mobile-chat-input');
-        const channel = get('mobile-chat-channel');
-        if (input.value.trim()) {
-            socket.emit('chatMessage', { channel: channel.value, message: input.value.trim() });
-            input.value = '';
-        }
-    });
-}
-
-// --- 4. SOCKET EVENT HANDLERS ---
-socket.on('connect', () => { 
-    myId = socket.id;
-    console.log(`Socket connected with ID: ${myId}`);
-
-    const persistentId = sessionStorage.getItem('qc_playerId');
-    const roomId = sessionStorage.getItem('qc_roomId');
-
-    // If we have session data, attempt to rejoin the previous game.
-    if (persistentId && roomId) {
-        console.log(`Attempting to rejoin room ${roomId} with persistent ID ${persistentId}`);
-        socket.emit('rejoinRoom', { roomId, playerId: persistentId });
-    }
-});
-
-socket.on('playerIdentity', ({ playerId, roomId }) => {
-    console.log(`Received identity: ${playerId} for room ${roomId}`);
-    sessionStorage.setItem('qc_playerId', playerId);
-    sessionStorage.setItem('qc_roomId', roomId);
-});
-
-
-socket.on('disconnect', (reason) => {
-    console.log(`Socket disconnected: ${reason}.`);
-    showToast('Connection lost. Reconnecting...', 'error');
-});
-
-socket.on('gameStateUpdate', (newState) => {
-    currentRoomState = newState;
-    requestAnimationFrame(renderUI);
-});
-
-socket.on('actionError', (message) => {
-    showToast(`Error: ${message}`, 'error');
-});
-
-socket.on('showToast', (data) => {
-    showToast(data.message, data.type || 'info');
-});
-
-socket.on('apZeroPrompt', () => {
-    const modal = document.getElementById('end-turn-confirm-modal');
-    modal.querySelector('h2').textContent = 'Out of AP';
-    modal.querySelector('p').textContent = 'You have 0 AP remaining. End your turn?';
-    modal.classList.remove('hidden');
-});
-
-socket.on('promptAttackRoll', (data) => {
-    clearTimeout(rollModalCloseTimeout);
-    currentRollData = data;
-    const get = id => document.getElementById(id);
-    const modal = get('dice-roll-modal');
-    get('dice-roll-title').textContent = data.title;
-    get('dice-roll-description').textContent = `You need to roll a ${data.dice} + ${data.bonus} to beat a target of ${data.targetAC}.`;
-    
-    get('dice-roll-result-container').classList.add('hidden');
-    get('dice-roll-confirm-btn').classList.remove('hidden');
-    get('dice-roll-confirm-btn').disabled = false;
-    get('dice-roll-confirm-btn').textContent = "Roll to Hit";
-    get('dice-roll-close-btn').classList.add('hidden');
-    
-    const animContainer = get('dice-animation-container');
-    const diceSides = parseInt(data.dice.split('d')[1]);
-    animContainer.innerHTML = getDiceSVG(diceSides);
-    
-    modal.classList.remove('hidden');
-
-    get('dice-roll-confirm-btn').onclick = () => {
-        get('dice-roll-confirm-btn').disabled = true;
-        startDiceAnimation(diceSides);
-        socket.emit('playerAction', { 
-            action: 'resolve_hit',
-            weaponId: data.weaponId,
-            targetId: data.targetId
+    // --- Chat ---
+    ['chat-form', 'mobile-chat-form'].forEach(id => {
+        const form = document.getElementById(id);
+        const input = document.getElementById(id.replace('form', 'input'));
+        const channel = document.getElementById(id.replace('form', 'channel'));
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = input.value.trim();
+            if (message) {
+                socket.emit('chatMessage', { channel: channel.value, message });
+                input.value = '';
+            }
         });
-    };
-});
-
-socket.on('attackResult', (data) => {
-    let toastMsg = `${data.rollerName} ${data.action.toLowerCase()}s ${data.targetName}. They rolled ${data.total} (${data.roll}+${data.bonus}) and... ${data.outcome}!`;
-    showToast(toastMsg, data.outcome.toLowerCase().includes('miss') ? 'miss' : 'hit');
-
-    // If I was the one rolling, update my modal
-    if (data.rollerId === myId && currentRollData) {
-        stopDiceAnimation(data.roll);
-        const get = id => document.getElementById(id);
-        const resultLine = get('dice-roll-result-line');
-        const detailsLine = get('dice-roll-details');
-
-        resultLine.textContent = `${data.outcome}! (${data.total})`;
-        resultLine.className = `result-line ${data.outcome.toLowerCase().includes('miss') ? 'miss' : 'hit'}`;
-        detailsLine.textContent = `You rolled a ${data.roll} + ${data.bonus} accuracy bonus.`;
-
-        get('dice-roll-result-container').classList.remove('hidden');
-        get('dice-roll-confirm-btn').classList.add('hidden');
-        
-        if (data.needsDamageRoll) {
-            // Re-purpose the modal for damage roll
-            setTimeout(() => {
-                get('dice-roll-title').textContent = "Damage Roll";
-                get('dice-roll-description').textContent = `You hit! Now roll ${data.damageDice} for damage.`;
-                const damageDiceSides = parseInt(data.damageDice.split('d')[1]);
-                get('dice-animation-container').innerHTML = getDiceSVG(damageDiceSides);
-                get('dice-roll-result-container').classList.add('hidden');
-                get('dice-roll-confirm-btn').classList.remove('hidden');
-                get('dice-roll-confirm-btn').disabled = false;
-                get('dice-roll-confirm-btn').textContent = "Roll Damage";
-                
-                get('dice-roll-confirm-btn').onclick = () => {
-                    get('dice-roll-confirm-btn').disabled = true;
-                    startDiceAnimation(damageDiceSides);
-                    socket.emit('playerAction', {
-                        action: 'resolve_damage',
-                        weaponId: data.weaponId,
-                        targetId: data.targetId,
-                    });
-                };
-            }, 1500);
-        } else {
-            // It's a miss, close the modal
-            const closeBtn = get('dice-roll-close-btn');
-            closeBtn.classList.remove('hidden');
-            const closeModal = () => {
-                get('dice-roll-modal').classList.add('hidden');
-                currentRollData = null;
-            };
-            closeBtn.onclick = closeModal;
-            clearTimeout(rollModalCloseTimeout);
-            rollModalCloseTimeout = setTimeout(closeModal, 4000);
-        }
-    }
-});
-
-socket.on('damageResult', (data) => {
-    let toastMsg = `${data.rollerName} dealt ${data.damage} damage to ${data.targetName}! (${data.damageRoll} + ${data.damageBonus} bonus)`;
-    showToast(toastMsg, 'hit');
-
-    if (data.rollerId === myId && currentRollData) {
-        stopDiceAnimation(data.damageRoll);
-        const get = id => document.getElementById(id);
-        const resultLine = get('dice-roll-result-line');
-        const detailsLine = get('dice-roll-details');
-        
-        resultLine.textContent = `${data.damage} Damage!`;
-        resultLine.className = 'result-line hit';
-        detailsLine.textContent = `You rolled ${data.damageRoll} + ${data.damageBonus} bonus.`;
-
-        get('dice-roll-result-container').classList.remove('hidden');
-        get('dice-roll-confirm-btn').classList.add('hidden');
-        
-        const closeBtn = get('dice-roll-close-btn');
-        closeBtn.classList.remove('hidden');
-        const closeModal = () => {
-            get('dice-roll-modal').classList.add('hidden');
-            currentRollData = null;
-        };
-        closeBtn.onclick = closeModal;
-        clearTimeout(rollModalCloseTimeout);
-        rollModalCloseTimeout = setTimeout(closeModal, 4000);
-    }
-});
-
-socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
-    const get = id => document.getElementById(id);
-    const modal = get('choose-discard-modal');
-    const newCardContainer = get('new-card-to-discard-container');
-    const handContainer = get('hand-cards-to-discard-container');
-    const confirmBtn = get('confirm-discard-btn');
-
-    newCardContainer.innerHTML = '';
-    handContainer.innerHTML = '';
-    let selectedCardId = null;
-
-    const selectCard = (cardEl, cardId) => {
-        // Remove selection from all cards
-        modal.querySelectorAll('.card').forEach(c => c.classList.remove('selected-for-discard'));
-        // Add selection to clicked card
-        cardEl.classList.add('selected-for-discard');
-        selectedCardId = cardId;
-        confirmBtn.disabled = false;
-    };
-
-    const newCardEl = createCardElement(newCard);
-    newCardEl.onclick = () => selectCard(newCardEl, newCard.id);
-    newCardContainer.appendChild(newCardEl);
-
-    currentHand.forEach(card => {
-        const cardEl = createCardElement(card);
-        cardEl.onclick = () => selectCard(cardEl, card.id);
-        handContainer.appendChild(cardEl);
     });
 
-    confirmBtn.onclick = () => {
-        if (selectedCardId) {
-            socket.emit('playerAction', {
-                action: 'chooseNewCardDiscard',
-                cardToDiscardId: selectedCardId,
-                newCard: newCard
-            });
-            modal.classList.add('hidden');
-            confirmBtn.onclick = null; // Clean up listener
+    // --- Action Bars ---
+    ['fixed-action-bar', 'mobile-action-bar'].forEach(id => {
+        const bar = document.getElementById(id);
+        bar.addEventListener('click', (e) => {
+            const targetId = e.target.id;
+            if (targetId.includes('end-turn-btn')) {
+                socket.emit('endTurn');
+            } else if (targetId.includes('guard-btn')) {
+                socket.emit('playerAction', { action: 'guard' });
+            } else if (targetId.includes('brief-respite-btn')) {
+                socket.emit('playerAction', { action: 'respite' });
+            } else if (targetId.includes('full-rest-btn')) {
+                socket.emit('playerAction', { action: 'rest' });
+            } else if (targetId.includes('skill-challenge-btn')) {
+                socket.emit('playerAction', { action: 'resolveSkillCheck' });
+            }
+        });
+    });
+
+    // --- Menus & Toggles ---
+    document.getElementById('chat-toggle-btn').addEventListener('click', () => {
+        document.getElementById('chat-overlay').classList.toggle('hidden');
+    });
+    document.getElementById('chat-close-btn').addEventListener('click', () => {
+        document.getElementById('chat-overlay').classList.add('hidden');
+    });
+
+    ['menu-toggle-btn', 'mobile-menu-toggle-btn'].forEach(id => {
+        const btn = document.getElementById(id);
+        const dropdown = document.getElementById(id.replace('toggle', 'dropdown'));
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+    });
+    
+    document.addEventListener('click', () => {
+        document.getElementById('menu-dropdown').classList.add('hidden');
+        document.getElementById('mobile-menu-dropdown').classList.add('hidden');
+    });
+
+    // --- Info Panel Tabs (Desktop) ---
+    document.querySelector('.info-tabs-panel .tab-buttons').addEventListener('click', (e) => {
+        if (e.target.classList.contains('tab-btn')) {
+            const tabId = e.target.dataset.tab;
+            document.querySelectorAll('.info-tabs-panel .tab-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            document.querySelectorAll('.info-tabs-panel .tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
         }
-    };
+    });
 
-    modal.classList.remove('hidden');
-});
+    // --- Mobile Bottom Nav ---
+    document.querySelector('.mobile-bottom-nav').addEventListener('click', (e) => {
+        const navBtn = e.target.closest('.nav-btn');
+        if (navBtn) {
+            switchMobileScreen(navBtn.dataset.screen);
+        }
+    });
+    
+    // --- Dice Modal ---
+    document.getElementById('dice-roll-confirm-btn').addEventListener('click', handleDiceRoll);
+    document.getElementById('dice-roll-close-btn').addEventListener('click', () => {
+        document.getElementById('dice-roll-modal').classList.add('hidden');
+        if(rollModalCloseTimeout) clearTimeout(rollModalCloseTimeout);
+    });
+    
+    // --- Narrative Modal ---
+    document.getElementById('narrative-confirm-btn').addEventListener('click', () => {
+        if (!activeItem) return;
+        const narrative = document.getElementById('narrative-input').value.trim();
+        socket.emit('playerAction', {
+            action: 'attack',
+            cardId: activeItem.weaponId,
+            targetId: activeItem.targetId,
+            narrative: narrative || null
+        });
+        document.getElementById('narrative-modal').classList.add('hidden');
+        activeItem = null;
+    });
+     document.getElementById('narrative-cancel-btn').addEventListener('click', () => {
+        document.getElementById('narrative-modal').classList.add('hidden');
+        activeItem = null;
+     });
+     
+    // --- Discard Modal ---
+    document.getElementById('confirm-discard-btn').addEventListener('click', () => {
+        if (!activeItem || !activeItem.selectedCardId) return;
+        socket.emit('playerAction', {
+            action: 'chooseNewCardDiscard',
+            cardToDiscardId: activeItem.selectedCardId,
+            newCard: activeItem.newCard
+        });
+        document.getElementById('choose-discard-modal').classList.add('hidden');
+        activeItem = null;
+    });
 
-// --- 5. HELPER FUNCTIONS ---
-function escapeHTML(str) {
-    const p = document.createElement('p');
-    p.appendChild(document.createTextNode(str));
-    return p.innerHTML;
+    // --- Claim Loot Modal ---
+     document.getElementById('claim-loot-cancel-btn').addEventListener('click', () => {
+        document.getElementById('claim-loot-modal').classList.add('hidden');
+        activeItem = null;
+     });
+     
+     // --- Game Over Modal ---
+     document.getElementById('game-over-leave-btn').addEventListener('click', () => {
+         sessionStorage.removeItem('qc_roomId');
+         sessionStorage.removeItem('qc_playerId');
+         window.location.reload();
+     });
 }
 
+// --- 4. MODAL & POPUP LOGIC ---
 function switchMobileScreen(screenName) {
     document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('.nav-btn').forEach(n => n.classList.remove('active'));
-    document.getElementById(`mobile-screen-${screenName}`)?.classList.add('active');
-    document.querySelector(`.nav-btn[data-screen="${screenName}"]`)?.classList.add('active');
+    document.getElementById(`mobile-screen-${screenName}`).classList.add('active');
+    document.querySelectorAll('.mobile-bottom-nav .nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.mobile-bottom-nav .nav-btn[data-screen="${screenName}"]`).classList.add('active');
 }
 
 function showToast(message, type = 'info') {
@@ -872,208 +766,290 @@ function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
-    
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-20px)';
     container.appendChild(toast);
-    
-    requestAnimationFrame(() => {
-        toast.style.opacity = '1';
-        toast.style.transform = 'translateY(0)';
-    });
-
     setTimeout(() => {
+        toast.style.transform = 'translateX(120%)';
         toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-20px)';
-        toast.addEventListener('transitionend', () => toast.remove());
-    }, 5000);
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function showYourTurnPopup() {
+    const popup = document.getElementById('your-turn-popup');
+    popup.classList.remove('hidden');
+    setTimeout(() => popup.classList.add('hidden'), 2500);
 }
 
 function showNarrativeModal(weaponId, targetId) {
-    const get = id => document.getElementById(id);
-    const modal = get('narrative-modal');
-    const input = get('narrative-input');
-    const confirmBtn = get('narrative-confirm-btn');
-    const cancelBtn = get('narrative-cancel-btn');
-
-    input.value = '';
-    modal.classList.remove('hidden');
-    input.focus();
-
-    const onConfirm = () => {
-        socket.emit('playerAction', {
-            action: 'attack',
-            cardId: weaponId,
-            targetId: targetId,
-            narrative: input.value.trim()
-        });
-        cleanup();
-    };
-
-    const onCancel = () => {
-        cleanup();
-    };
-
-    const cleanup = () => {
-        modal.classList.add('hidden');
-        confirmBtn.replaceWith(confirmBtn.cloneNode(true)); // Remove listeners
-        cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-    };
-
-    confirmBtn.onclick = onConfirm;
-    cancelBtn.onclick = onCancel;
+    activeItem = { weaponId, targetId };
+    const weapon = Object.values(currentRoomState.players[myId].equipment).find(e => e?.id === weaponId) || { name: 'Unarmed Strike' };
+    document.getElementById('narrative-prompt').textContent = `How do you use your ${weapon.name}?`;
+    document.getElementById('narrative-input').value = '';
+    document.getElementById('narrative-modal').classList.remove('hidden');
 }
 
 function showGameOverModal(winner) {
-    const get = id => document.getElementById(id);
-    const modal = get('game-over-modal');
-    const title = get('game-over-title');
-    const message = get('game-over-message');
-
-    if (winner === 'Monsters') {
-        title.textContent = 'You Have Been Defeated';
-        message.textContent = 'The darkness consumes you. Better luck next time, adventurer.';
+    const title = document.getElementById('game-over-title');
+    const message = document.getElementById('game-over-message');
+    
+    if (winner === 'Explorers') {
+        title.textContent = "Victory!";
+        message.textContent = "You have overcome the challenges and completed your quest!";
     } else {
-        title.textContent = 'Victory!';
-        message.textContent = 'You have overcome the challenges and emerged triumphant!';
+        title.textContent = "Defeat...";
+        message.textContent = "Your party has fallen. The darkness claims another victory.";
     }
-    modal.classList.remove('hidden');
+    document.getElementById('game-over-modal').classList.remove('hidden');
 }
 
 function showClaimLootModal(item) {
     activeItem = item;
-    const modal = document.getElementById('claim-loot-modal');
     const playerList = document.getElementById('claim-loot-player-list');
-    modal.querySelector('#claim-loot-title').textContent = `Claim ${item.name}`;
-    modal.querySelector('#claim-loot-prompt').textContent = 'Who should receive this item?';
     playerList.innerHTML = '';
-
-    Object.values(currentRoomState.players)
-        .filter(p => p.role === 'Explorer' && !p.isNpc && !p.isDowned)
-        .forEach(player => {
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-primary';
-            btn.textContent = player.name;
-            btn.onclick = () => {
-                socket.emit('playerAction', {
-                    action: 'claimLoot',
-                    itemId: activeItem.id,
-                    targetPlayerId: player.id
-                });
-                modal.classList.add('hidden');
-            };
-            playerList.appendChild(btn);
-        });
     
-    modal.classList.remove('hidden');
+    Object.values(currentRoomState.players).filter(p => p.role === 'Explorer').forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary';
+        btn.textContent = p.name;
+        btn.onclick = () => {
+            socket.emit('playerAction', {
+                action: 'claimLoot',
+                itemId: activeItem.id,
+                targetPlayerId: p.id
+            });
+            document.getElementById('claim-loot-modal').classList.add('hidden');
+            activeItem = null;
+        };
+        playerList.appendChild(btn);
+    });
+
+    document.getElementById('claim-loot-title').textContent = `Claim ${item.name}`;
+    document.getElementById('claim-loot-modal').classList.remove('hidden');
 }
 
 function handleUseConsumable(card) {
     const effect = card.effect;
-    if (!effect.target || effect.target === 'utility' || effect.target === 'self') {
-        socket.emit('playerAction', { action: 'useConsumable', cardId: card.id, targetId: myId });
-        return;
-    }
-
-    activeItem = card;
-    const modal = document.getElementById('claim-loot-modal'); // Re-using modal for targeting
-    const targetList = document.getElementById('claim-loot-player-list');
-    const title = document.getElementById('claim-loot-title');
-    const prompt = document.getElementById('claim-loot-prompt');
-    targetList.innerHTML = '';
-
-    let targets = [];
     if (effect.target === 'any-player') {
-        title.textContent = `Use ${card.name} On...`;
-        prompt.textContent = `Select a player to receive the effects of ${card.name}.`;
-        targets = Object.values(currentRoomState.players).filter(p => p.role === 'Explorer' && !p.isDowned);
+         // Show player list to target
+        activeItem = card;
+        const playerList = document.getElementById('claim-loot-player-list'); // Re-use the claim loot modal structure
+        playerList.innerHTML = '';
+        Object.values(currentRoomState.players).filter(p => p.role === 'Explorer').forEach(p => {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-secondary';
+            btn.textContent = p.name;
+            btn.onclick = () => {
+                socket.emit('playerAction', {
+                    action: 'useConsumable',
+                    cardId: activeItem.id,
+                    targetId: p.id
+                });
+                document.getElementById('claim-loot-modal').classList.add('hidden');
+                activeItem = null;
+            };
+            playerList.appendChild(btn);
+        });
+        document.getElementById('claim-loot-title').textContent = `Use ${card.name} on...`;
+        document.getElementById('claim-loot-modal').classList.remove('hidden');
+
     } else if (effect.target === 'any-monster') {
-        title.textContent = `Use ${card.name} On...`;
-        prompt.textContent = `Select a monster to target with ${card.name}.`;
-        targets = currentRoomState.gameState.board.monsters;
+        // Prompt for monster target
+        showToast('Select a monster to target with this item.', 'info');
+        // This is a complex UX, for now we will just allow targeting the first monster
+        const firstMonster = currentRoomState.gameState.board.monsters[0];
+        if (firstMonster) {
+            socket.emit('playerAction', { action: 'useConsumable', cardId: card.id, targetId: firstMonster.id });
+        } else {
+            showToast('No monsters to target!', 'error');
+        }
+    } else {
+        // Self-use or no target needed
+        socket.emit('playerAction', { action: 'useConsumable', cardId: card.id, targetId: myId });
     }
-
-    if (targets.length === 0) {
-        showToast('No valid targets available.', 'error');
-        return;
-    }
-
-    targets.forEach(target => {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-primary';
-        btn.textContent = target.name;
-        btn.onclick = () => {
-            socket.emit('playerAction', {
-                action: 'useConsumable',
-                cardId: activeItem.id,
-                targetId: target.id
-            });
-            modal.classList.add('hidden');
-        };
-        targetList.appendChild(btn);
-    });
-    
-    modal.classList.remove('hidden');
 }
-
 
 function showSkillChallengeModal(challenge) {
-    if (!challenge) return;
-    const modal = document.getElementById('skill-challenge-modal');
     document.getElementById('skill-challenge-title').textContent = challenge.name;
     document.getElementById('skill-challenge-description').textContent = challenge.description;
+    document.getElementById('skill-challenge-modal').classList.remove('hidden');
+    // The button to resolve is part of the action bar now
+}
+
+
+// --- 5. DICE ROLLING LOGIC ---
+function showDiceRollModal(data) {
+    currentRollData = data;
+    const { title, dice, bonus, targetAC } = data;
+    const modal = document.getElementById('dice-roll-modal');
+    document.getElementById('dice-roll-title').textContent = title;
     
-    const resolveBtn = document.getElementById('skill-challenge-resolve-btn');
-    resolveBtn.onclick = () => {
-        socket.emit('playerAction', { action: 'resolveSkillCheck' });
-        // The server will change game phase, which will cause renderUI to hide the modal
-    };
+    let description = `Roll ${dice}`;
+    if (bonus > 0) description += ` + ${bonus}`;
+    if (bonus < 0) description += ` - ${Math.abs(bonus)}`;
+    if (targetAC) description += ` vs Target AC of ${targetAC}`;
+    document.getElementById('dice-roll-description').textContent = description;
+
+    const container = document.getElementById('dice-animation-container');
+    container.innerHTML = `<svg viewBox="0 0 100 100"><rect class="dice-face" x="5" y="5" width="90" height="90" rx="10"/><text id="dice-text" class="dice-text" x="50" y="55">?</text></svg>`;
+    container.querySelector('svg').classList.remove('stopped');
+
+    document.getElementById('dice-roll-result-container').classList.add('hidden');
+    document.getElementById('dice-roll-confirm-btn').classList.remove('hidden');
+    document.getElementById('dice-roll-close-btn').classList.add('hidden');
     
     modal.classList.remove('hidden');
 }
 
-// --- DICE ANIMATION HELPERS ---
-const DICE_SVGS = {
-    d20: `<svg viewBox="0 0 100 100"><polygon class="dice-face" points="50 5, 95 25, 95 75, 50 95, 5 75, 5 25, 50 5"/><text x="50" y="55" class="dice-text">?</text></svg>`,
-    d12: `<svg viewBox="0 0 100 100"><polygon class="dice-face" points="50 5, 85 20, 95 50, 85 80, 50 95, 15 80, 5 50, 15 20, 50 5"/><text x="50" y="55" class="dice-text">?</text></svg>`,
-    d10: `<svg viewBox="0 0 100 100"><polygon class="dice-face" points="50 5, 95 40, 80 95, 20 95, 5 40, 50 5"/><text x="50" y="55" class="dice-text">?</text></svg>`,
-    d8: `<svg viewBox="0 0 100 100"><polygon class="dice-face" points="50 5, 95 50, 50 95, 5 50, 50 5"/><text x="50" y="55" class="dice-text">?</text></svg>`,
-    d6: `<svg viewBox="0 0 100 100"><rect class="dice-face" x="5" y="5" width="90" height="90" rx="10"/><text x="50" y="55" class="dice-text">?</text></svg>`,
-    d4: `<svg viewBox="0 0 100 100"><polygon class="dice-face" points="50 5, 95 85, 5 85, 50 5"/><text x="50" y="65" class="dice-text">?</text></svg>`,
-}
-
-function getDiceSVG(sides) {
-    if (sides >= 20) return DICE_SVGS.d20;
-    if (sides >= 12) return DICE_SVGS.d12;
-    if (sides >= 10) return DICE_SVGS.d10;
-    if (sides >= 8) return DICE_SVGS.d8;
-    if (sides >= 6) return DICE_SVGS.d6;
-    return DICE_SVGS.d4;
-}
-
-function startDiceAnimation(sides) {
-    const textEl = document.querySelector('#dice-animation-container .dice-text');
-    if (!textEl) return;
-    document.querySelector('#dice-animation-container svg').classList.remove('stopped');
-    clearInterval(diceAnimationInterval);
+function handleDiceRoll() {
+    if (!currentRollData) return;
+    
+    document.getElementById('dice-roll-confirm-btn').disabled = true;
+    const diceText = document.getElementById('dice-text');
+    
+    if (diceAnimationInterval) clearInterval(diceAnimationInterval);
     diceAnimationInterval = setInterval(() => {
-        textEl.textContent = Math.ceil(Math.random() * sides);
+        diceText.textContent = Math.ceil(Math.random() * 20);
     }, 50);
+
+    // After a short animation, send the roll request to the server
+    setTimeout(() => {
+        if (diceAnimationInterval) clearInterval(diceAnimationInterval);
+        if(currentRollData.action === 'attack'){
+             socket.emit('playerAction', { action: 'resolve_hit', ...currentRollData });
+        }
+    }, 1000);
 }
 
-function stopDiceAnimation(finalValue) {
-    clearInterval(diceAnimationInterval);
-    const svgEl = document.querySelector('#dice-animation-container svg');
-    const textEl = document.querySelector('#dice-animation-container .dice-text');
-    if (!svgEl || !textEl) return;
-    svgEl.classList.add('stopped');
-    textEl.textContent = finalValue;
+function displayAttackResult(data) {
+    const { roll, bonus, total, outcome, needsDamageRoll, rollerName, targetName, weaponId, targetId, damageDice } = data;
+
+    const isMyRoll = data.rollerId === myId;
+    const modal = document.getElementById('dice-roll-modal');
+
+    // Update dice animation to show the final roll
+    if (isMyRoll) {
+        if (diceAnimationInterval) clearInterval(diceAnimationInterval);
+        document.getElementById('dice-text').textContent = roll;
+        document.getElementById('dice-animation-container svg').classList.add('stopped');
+    }
+    
+    const resultLine = document.getElementById('dice-roll-result-line');
+    resultLine.textContent = `${total} - ${outcome.toUpperCase()}!`;
+    resultLine.className = `result-line ${outcome.toLowerCase()}`;
+    document.getElementById('dice-roll-details').textContent = `(${roll} + ${bonus} bonus)`;
+    
+    if (isMyRoll) {
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+    }
+
+    if (needsDamageRoll && isMyRoll) {
+        const damageBtn = document.createElement('button');
+        damageBtn.id = 'dice-roll-damage-btn';
+        damageBtn.className = 'btn btn-special';
+        damageBtn.textContent = `Roll for Damage (${damageDice})`;
+        damageBtn.onclick = () => {
+            socket.emit('playerAction', { action: 'resolve_damage', weaponId, targetId });
+            damageBtn.disabled = true;
+        };
+        const actions = modal.querySelector('.modal-actions');
+        // Clear previous damage buttons
+        const oldBtn = document.getElementById('dice-roll-damage-btn');
+        if (oldBtn) oldBtn.remove();
+        
+        actions.appendChild(damageBtn);
+
+    } else if (isMyRoll) {
+        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+        if(rollModalCloseTimeout) clearTimeout(rollModalCloseTimeout);
+        rollModalCloseTimeout = setTimeout(() => modal.classList.add('hidden'), 3000);
+    }
+    
+    showToast(`${rollerName} attacks ${targetName}... ${total} is a ${outcome}!`, outcome.toLowerCase());
+}
+
+function displayDamageResult(data) {
+    const { rollerName, targetName, damage } = data;
+    showToast(`${rollerName} dealt ${damage} damage to ${targetName}!`, 'hit');
+    
+    const isMyRoll = data.rollerId === myId;
+    if (isMyRoll) {
+        const modal = document.getElementById('dice-roll-modal');
+        const oldBtn = document.getElementById('dice-roll-damage-btn');
+        if (oldBtn) oldBtn.remove();
+
+        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+        if(rollModalCloseTimeout) clearTimeout(rollModalCloseTimeout);
+        rollModalCloseTimeout = setTimeout(() => modal.classList.add('hidden'), 3000);
+    }
 }
 
 
-// --- Service Worker ---
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed:', err));
+// --- 6. SOCKET.IO EVENT HANDLERS ---
+socket.on('gameStateUpdate', (newState) => {
+    currentRoomState = newState;
+    myId = socket.id; // Update myId in case it changed on reconnect
+    renderUI();
+});
+
+socket.on('playerIdentity', ({ playerId, roomId }) => {
+    sessionStorage.setItem('qc_playerId', playerId);
+    sessionStorage.setItem('qc_roomId', roomId);
+});
+
+socket.on('actionError', (message) => {
+    showToast(message, 'error');
+});
+
+socket.on('yourTurn', () => {
+    showYourTurnPopup();
+});
+
+socket.on('promptAttackRoll', (data) => {
+    showDiceRollModal({ action: 'attack', ...data });
+});
+
+socket.on('attackResult', (data) => {
+    displayAttackResult(data);
+});
+socket.on('damageResult', (data) => {
+    displayDamageResult(data);
+});
+
+socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
+    const modal = document.getElementById('choose-discard-modal');
+    const newCardContainer = document.getElementById('new-card-to-discard-container');
+    const handContainer = document.getElementById('hand-cards-to-discard-container');
+    const confirmBtn = document.getElementById('confirm-discard-btn');
+
+    activeItem = { newCard, selectedCardId: null };
+    confirmBtn.disabled = true;
+
+    newCardContainer.innerHTML = '';
+    handContainer.innerHTML = '';
+
+    const newCardEl = createCardElement(newCard);
+    newCardEl.onclick = () => {
+        document.querySelectorAll('.discard-choice-section .card').forEach(c => c.classList.remove('selected-for-discard'));
+        newCardEl.classList.add('selected-for-discard');
+        activeItem.selectedCardId = newCard.id;
+        confirmBtn.disabled = false;
+    };
+    newCardContainer.appendChild(newCardEl);
+
+    currentHand.forEach(card => {
+        const cardEl = createCardElement(card);
+        cardEl.onclick = () => {
+            document.querySelectorAll('.discard-choice-section .card').forEach(c => c.classList.remove('selected-for-discard'));
+            cardEl.classList.add('selected-for-discard');
+            activeItem.selectedCardId = card.id;
+            confirmBtn.disabled = false;
+        };
+        handContainer.appendChild(cardEl);
     });
-}
+
+    modal.classList.remove('hidden');
+});
+
+// --- INITIALIZE ---
+initializeUI();

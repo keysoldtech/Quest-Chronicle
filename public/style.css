@@ -6,7 +6,7 @@
 
 /* --- GLOBAL STYLES & TYPOGRAPHY --- */
 :root {
-    --font-title: var(--font-body);
+    --font-title: 'MedievalSharp', serif;
     --font-body: 'Inter', sans-serif;
     
     --color-bg-dark: #12181b;
@@ -91,8 +91,12 @@ body.in-game {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 1rem;
 }
-
+#game-screen {
+    width: 100%;
+    height: 100vh;
+}
 
 .background-animation {
     position: fixed;
@@ -112,7 +116,7 @@ body.in-game {
     100% { background-position: 100% 100%; }
 }
 
-.title-font { font-family: var(--font-body); }
+.title-font { font-family: var(--font-title); }
 .subtitle-font { font-family: var(--font-body); color: var(--color-text-secondary); }
 .turn-indicator-font { font-family: var(--font-title); font-size: 1.5rem; }
 .build-number-font { font-family: var(--font-body); font-size: 0.8rem; color: var(--color-text-secondary); }
@@ -120,141 +124,128 @@ body.in-game {
 .hidden { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
 
-/* --- LOBBY & FORMS --- */
-.lobby-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.5rem;
-    padding: 2rem;
-    max-width: 500px;
-    width: 100%;
-}
-
-#lobby-form-view {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.5rem;
-    width: 100%;
-}
-
-.lobby-container .title-font {
-    font-size: 3.5rem;
-    color: var(--color-text-primary);
-    position: relative;
-    text-align: center;
-}
-/* A sleeker, less clunky glow effect */
-.lobby-container .title-font::before {
-    content: attr(data-text);
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: -1;
-    text-shadow: 0 0 5px var(--color-glow), 0 0 10px var(--color-glow), 0 0 15px var(--color-glow);
-    animation: flicker 4s infinite linear;
-}
-
-@keyframes flicker {
-    0%, 18%, 22%, 25%, 53%, 57%, 100% { text-shadow: 0 0 2px var(--color-glow), 0 0 8px var(--color-glow), 0 0 15px var(--color-glow); }
-    20%, 24%, 55% { text-shadow: none; }
-}
-
-
-.input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    width: 100%;
-}
-
-/* This group now correctly stacks the create and join sections vertically */
-.button-group {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    width: 100%;
-    align-items: stretch;
-}
-
-/* This keeps the input field and its button on the same line */
-.join-group {
-    display: flex;
-    flex-direction: row;
-    gap: 0.75rem;
-}
-
-
-label {
-    font-weight: 700;
-    color: var(--color-text-secondary);
-}
-
-.input-field, .select-field {
-    background-color: var(--color-bg-dark);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    padding: 0.75rem;
-    color: var(--color-text-primary);
-    font-family: var(--font-body);
-    font-size: 1rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    flex-grow: 1;
-}
-.input-field:focus, .select-field:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
-}
-
-/* Radio Buttons */
-.radio-group { display: flex; gap: 0.5rem; }
-.radio-label {
-    flex-grow: 1;
-    text-align: center;
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.radio-label span {
-    display: block;
-    padding: 0.75rem;
+/* --- MENU / LOBBY STYLES --- */
+.menu-container {
     background-color: var(--color-surface);
-    border-radius: 3px;
-    transition: all 0.2s;
-}
-.radio-label:has(input:checked) span,
-.radio-label.active span {
-    background-color: var(--color-primary);
-    color: white;
-}
-.radio-label:has(input:checked) {
-    border-color: var(--color-primary);
-     box-shadow: 0 0 5px var(--color-primary);
-}
-.radio-label:hover span { background-color: var(--color-surface-light); }
-
-
-/* Custom Settings */
-.custom-settings-panel {
-    background-color: var(--color-surface);
-    padding: 1rem;
+    padding: 2rem 2.5rem;
     border-radius: 8px;
     border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-lg);
     width: 100%;
+    max-width: 600px;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.5rem;
+    text-align: center;
 }
-.slider-group, .toggle-group { display: flex; flex-direction: column; gap: 0.5rem; }
-.toggle-group { flex-direction: row; justify-content: space-between; align-items: center; }
-.slider { width: 100%; }
-.toggle-switch { appearance: none; width: 40px; height: 20px; background: var(--color-secondary); border-radius: 10px; position: relative; cursor: pointer; transition: 0.2s; }
-.toggle-switch::before { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: white; border-radius: 50%; transition: 0.2s; }
-.toggle-switch:checked { background: var(--color-primary); }
-.toggle-switch:checked::before { transform: translateX(20px); }
+
+.game-title {
+    font-family: var(--font-title);
+    font-size: 3rem;
+    color: var(--color-special);
+    text-shadow: 0 0 5px var(--color-glow);
+}
+
+.game-subtitle {
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    margin-top: -1.25rem;
+}
+
+.menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    text-align: left;
+}
+
+.menu-section h3 {
+    text-align: center;
+    font-family: var(--font-title);
+    color: var(--color-text-secondary);
+    font-size: 1.25rem;
+}
+
+.mode-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+}
+
+.mode-btn {
+    background-color: var(--color-surface-light);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+    padding: 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    text-align: center;
+}
+
+.mode-btn:hover {
+    background-color: var(--color-surface-light);
+    border-color: var(--color-primary);
+}
+
+.mode-btn.active {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary-hover);
+    color: white;
+    box-shadow: 0 0 8px var(--color-primary);
+}
+
+.mode-title {
+    font-weight: 700;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.mode-desc {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+}
+.mode-btn.active .mode-desc {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    background: var(--color-bg-dark);
+    padding: 1rem;
+    border-radius: 4px;
+}
+.settings-grid label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.or-divider {
+    text-align: center;
+    color: var(--color-text-secondary);
+    font-weight: bold;
+    position: relative;
+    margin: 0.5rem 0;
+}
+.or-divider::before, .or-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: var(--color-border);
+}
+.or-divider::before { left: 0; }
+.or-divider::after { right: 0; }
+
+.join-section {
+    display: flex;
+    gap: 0.5rem;
+}
 
 /* --- BUTTONS --- */
 .btn {
@@ -584,6 +575,10 @@ label {
     flex-direction: column;
     gap: 0.75rem;
 }
+.core-stats {
+    border-top: 1px solid var(--color-border);
+    padding-top: 1rem;
+}
 .stat-line {
     display: flex;
     align-items: center;
@@ -602,6 +597,17 @@ label {
     font-weight: 700;
     font-size: 1.2rem;
 }
+
+/* FIX #48: Stat Bonus/Debuff Colors */
+.stat-bonus {
+    color: #4caf50; /* Green */
+    font-weight: bold;
+}
+.stat-debuff {
+    color: var(--color-danger); /* Red */
+    font-weight: bold;
+}
+
 
 .shield-hp-line {
     background-color: rgba(100, 181, 246, 0.1);
@@ -704,7 +710,12 @@ label {
     pointer-events: auto;
 }
 
-
+.card-header {
+    padding: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
 .card-content { padding: 0.75rem; flex-grow: 1; overflow-y: auto; }
 .card-title { font-family: var(--font-title); font-size: 1.1rem; margin-bottom: 0.5rem; }
 .card[data-monster-id] .card-title { color: var(--color-danger); }
@@ -727,8 +738,8 @@ label {
 }
 .card-bonuses-grid {
     display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
     min-height: 20px;
 }
 .card-bonus {

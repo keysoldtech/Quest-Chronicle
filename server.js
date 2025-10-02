@@ -128,6 +128,8 @@ class GameManager {
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+            baseStats: {},
+            statBonuses: {},
             currentAp: 0,
             hand: [],
             equipment: { weapon: null, armor: null },
@@ -150,6 +152,8 @@ class GameManager {
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+            baseStats: {},
+            statBonuses: {},
             currentAp: 0,
             hand: [], // Explicitly initialized as an empty array.
             equipment: { weapon: null, armor: null }, // Using stable, single-slot equipment structure.
@@ -438,53 +442,76 @@ class GameManager {
         // As per user request: 1 point of bonus per 5 points of the stat.
         return Math.floor(player.stats[statName] / 5);
     }
-
+    
+    // REFACTORED for Fix #48
     calculatePlayerStats(player) {
-        const baseStats = { maxHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
-        if (!player.class) return baseStats;
+        const initialStats = { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0, hitBonus: 0 };
+        if (!player.class) {
+            player.baseStats = {};
+            player.statBonuses = {};
+            return initialStats;
+        }
     
         const classData = gameData.classes[player.class];
-        const newStats = {
-            ...baseStats,
+    
+        // 1. Establish BASE stats from class data
+        const baseStats = {
+            ...classData.stats, // str, dex, con etc.
             maxHp: classData.baseHp,
             damageBonus: classData.baseDamageBonus,
             shieldBonus: classData.baseShieldBonus,
-            ap: classData.baseAP,
-            ...classData.stats
+            ap: classData.baseAP, // The true base AP
+            hitBonus: 0, // Base hit bonus is 0, derived from core stats later
         };
+        player.baseStats = baseStats;
     
+        // 2. Calculate BONUS stats from equipment and status effects
+        const bonuses = { maxHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0, hitBonus: 0 };
+    
+        // Equipment bonuses
         for (const item of Object.values(player.equipment)) {
             if (item?.effect?.bonuses) {
                 Object.keys(item.effect.bonuses).forEach(key => {
-                    newStats[key] = (newStats[key] || 0) + item.effect.bonuses[key];
+                    bonuses[key] = (bonuses[key] || 0) + item.effect.bonuses[key];
                 });
             }
         }
         
-        newStats.hitBonus = 0; // Initialize temporary bonus
+        // Status effect bonuses
         for (const effect of player.statusEffects) {
             if (effect.type === 'stat_modifier' && effect.bonuses) {
                 Object.keys(effect.bonuses).forEach(key => {
-                    newStats[key] = (newStats[key] || 0) + effect.bonuses[key];
+                    bonuses[key] = (bonuses[key] || 0) + effect.bonuses[key];
                 });
             } else if (effect.type === 'damage_buff' && effect.damageBonus) {
-                newStats.damageBonus += effect.damageBonus;
+                bonuses.damageBonus += effect.damageBonus;
             } else if (effect.type === 'hit_buff' && effect.hitBonus) {
-                newStats.hitBonus += effect.hitBonus;
+                bonuses.hitBonus += effect.hitBonus;
             }
         }
+        player.statBonuses = bonuses;
+    
+        // 3. Calculate TOTAL stats by combining base and bonus
+        const totalStats = {};
+        // Use a set of all keys from both objects to ensure all stats are processed
+        const allStatKeys = new Set([...Object.keys(baseStats), ...Object.keys(bonuses)]);
+        
+        allStatKeys.forEach(key => {
+            totalStats[key] = (baseStats[key] || 0) + (bonuses[key] || 0);
+        });
+    
+        // 4. Final calculations based on totals
+        totalStats.maxAP = totalStats.ap;
     
         // Ensure current HP doesn't exceed new max HP
         if (player.stats.currentHp) {
-            newStats.currentHp = Math.min(player.stats.currentHp, newStats.maxHp);
+            totalStats.currentHp = Math.min(player.stats.currentHp, totalStats.maxHp);
         } else {
-            newStats.currentHp = newStats.maxHp;
+            totalStats.currentHp = totalStats.maxHp;
         }
-        
-        // AP FIX (v6.5.46): Always set maxAP equal to the final calculated AP total.
-        newStats.maxAP = newStats.ap;
-
-        return newStats;
+        totalStats.shieldHp = player.stats.shieldHp || 0;
+    
+        return totalStats;
     }
 
     equipItem(socket, { cardId }) {
