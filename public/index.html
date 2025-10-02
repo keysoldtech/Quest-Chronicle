@@ -1,3 +1,4 @@
+
 <!-- 
   --- INDEX ---
   1.  METADATA & STYLESHEETS
@@ -33,10 +34,10 @@
     <div class="background-animation"></div>
 
     <!-- INITIAL MENU SCREEN -->
-    <div id="menu-screen" class="screen">
+    <div id="menu-screen" class="screen active">
         <div class="menu-container">
             <h1 class="game-title">Quest & Chronicle</h1>
-            <p class="game-subtitle">v6.5.42</p>
+            <p class="game-subtitle">v6.5.26</p>
             
             <!-- Player Name Input -->
             <div class="menu-section">
@@ -113,24 +114,22 @@
                 <header class="game-header">
                     <div class="header-info">
                          <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
-                         <div id="health-ap-container-desktop" class="health-ap-container hidden">
-                            <div class="stat-display">
-                                <span class="stat-value" id="player-health-text-desktop">--/--</span>
-                                <div class="progress-bar health">
-                                    <div class="progress-bar-fill" id="player-health-bar-desktop"></div>
-                                </div>
-                            </div>
-                            <div class="stat-display">
-                                <span class="stat-value" id="ap-counter-text-desktop">--/--</span>
-                                <div class="progress-bar ap">
-                                    <div class="progress-bar-fill" id="player-ap-bar-desktop"></div>
-                                </div>
-                            </div>
-                        </div>
+                         <div id="header-player-stats" class="hidden">
+                             <div class="player-health-bar-container">
+                                 <span class="material-symbols-outlined">favorite</span>
+                                 <div class="progress-bar-wrapper">
+                                     <div class="progress-bar health">
+                                         <div id="player-health-bar" class="progress-bar-fill"></div>
+                                     </div>
+                                     <span id="player-health-text" class="progress-bar-text"></span>
+                                 </div>
+                             </div>
+                         </div>
+                         <p id="ap-counter-desktop" class="ap-counter hidden"></p>
                          <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v6.5.42</p>
+                        <p class="build-number-font">v6.5.26</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -153,32 +152,34 @@
                 </header>
     
                 <aside id="players-list-container" class="players-panel panel">
-                    <h2 class="panel-header">Players</h2>
-                    <div id="game-lobby-settings-display" class="lobby-settings-display hidden"></div>
-                    <ul id="player-list" class="player-list"></ul>
+                    <div id="player-list-display">
+                        <h2 class="panel-header">Players</h2>
+                        <div id="game-lobby-settings-display" class="lobby-settings-display hidden"></div>
+                        <ul id="player-list" class="player-list"></ul>
+                    </div>
+                    <div id="character-sheet-block">
+                        <!-- Content for class selection or player stats will be rendered here -->
+                    </div>
                 </aside>
                 
-                <div id="character-sheet-block">
-                    <!-- Content for class selection or player stats will be rendered here -->
-                </div>
-
-                <main id="game-board-container" class="board-panel panel">
-                    <h2 class="panel-header">Game Board</h2>
-                    <div id="board-cards" class="card-container-row"></div>
-                </main>
-                
-                <footer id="hand-equipment-container" class="hand-panel panel">
-                    <div class="player-hand-header">
-                       <h2 class="panel-header">Your Hand & Equipment</h2>
-                    </div>
-                   <div class="hand-and-equipped-container">
-                       <div id="equipped-items-container" class="equipped-items-container">
-                           <h3 class="sub-header-font">Equipped</h3>
-                           <div id="equipped-items" class="card-container-row"></div>
+                <div id="main-game-area-wrapper">
+                    <main id="game-board-container" class="board-panel panel">
+                        <h2 class="panel-header">Game Board</h2>
+                        <div id="board-cards" class="card-container-row"></div>
+                    </main>
+                    <footer id="hand-equipment-container" class="hand-panel panel">
+                        <div class="player-hand-header">
+                           <h2 class="panel-header">Your Hand & Equipment</h2>
+                        </div>
+                       <div class="hand-and-equipped-container">
+                           <div id="equipped-items-container" class="equipped-items-container">
+                               <h3 class="sub-header-font">Equipped</h3>
+                               <div id="equipped-items" class="card-container-row"></div>
+                           </div>
+                           <div id="player-hand" class="player-hand-container card-container-row"></div>
                        </div>
-                       <div id="player-hand" class="player-hand-container card-container-row"></div>
-                   </div>
-               </footer>
+                   </footer>
+                </div>
 
                 <aside class="info-tabs-panel panel">
                     <div class="tab-buttons">
@@ -224,20 +225,17 @@
                     </div>
                     <!-- Tier 2: Resources & Actions -->
                     <div class="header-tier bottom-tier">
-                        <div id="health-ap-container-mobile" class="health-ap-container hidden">
-                            <div class="stat-display">
-                                <span class="stat-value" id="player-health-text-mobile">--/--</span>
-                                <div class="progress-bar health">
-                                    <div class="progress-bar-fill" id="player-health-bar-mobile"></div>
-                                </div>
-                            </div>
-                            <div class="stat-display">
-                                <span class="stat-value" id="ap-counter-text-mobile">--/--</span>
-                                <div class="progress-bar ap">
-                                    <div class="progress-bar-fill" id="player-ap-bar-mobile"></div>
-                                </div>
-                            </div>
-                        </div>
+                         <div id="mobile-header-player-stats" class="hidden resource-stack">
+                             <div class="player-health-bar-container mobile">
+                                 <div class="progress-bar-wrapper">
+                                     <div class="progress-bar health">
+                                         <div id="mobile-player-health-bar" class="progress-bar-fill"></div>
+                                     </div>
+                                     <span id="mobile-player-health-text" class="progress-bar-text"></span>
+                                 </div>
+                             </div>
+                         </div>
+                         <p id="ap-counter-mobile" class="ap-counter hidden resource-stack"></p>
                          <button id="mobile-help-btn" class="btn btn-sm btn-icon action-button"><span class="material-symbols-outlined">help</span></button>
                          <div class="header-menu">
                              <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon action-button"><span class="material-symbols-outlined">menu</span></button>

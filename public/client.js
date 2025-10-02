@@ -1,3 +1,4 @@
+
 // REBUILT: Quest & Chronicle Client-Side Logic (v6.1.0)
 // This file has been completely rebuilt to use a unidirectional data flow model.
 // 1. The server is the single source of truth.
@@ -71,30 +72,6 @@ function createCardElement(card, options = {}) {
             <p class="card-type">${typeInfo}</p>
         </div>
     `;
-    
-    // --- NEW: Card Stat Display ---
-    const statsContainer = document.createElement('div');
-    statsContainer.className = 'card-stat-container';
-    
-    // Display Damage Bonus
-    if (card.effect?.bonuses?.damageBonus > 0) {
-        const dmgElement = document.createElement('div');
-        dmgElement.className = 'card-stat damage-stat';
-        dmgElement.innerHTML = `⚔️ +${card.effect.bonuses.damageBonus} DMG`; 
-        statsContainer.appendChild(dmgElement);
-    }
-    
-    // Display Shield Bonus
-    if (card.effect?.bonuses?.shieldBonus > 0) {
-        const shieldElement = document.createElement('div');
-        shieldElement.className = 'card-stat shield-stat';
-        shieldElement.innerHTML = `🛡️ +${card.effect.bonuses.shieldBonus} SHD`; 
-        statsContainer.appendChild(shieldElement);
-    }
-
-    if (statsContainer.hasChildNodes()) {
-        cardDiv.appendChild(statsContainer);
-    }
 
     const actionContainer = document.createElement('div');
     actionContainer.className = 'card-action-buttons';
@@ -153,10 +130,11 @@ function renderUI() {
     const get = id => document.getElementById(id);
 
     // --- Phase 1: Show/Hide Major Screens ---
-    const isGamePhase = phase === 'class_selection' || phase === 'started' || phase === 'game_over' || phase === 'skill_challenge';
-    document.body.classList.toggle('game-active', isGamePhase);
+    get('menu-screen').classList.toggle('active', phase === 'lobby');
+    const isGameActive = phase === 'class_selection' || phase === 'started' || phase === 'game_over' || phase === 'skill_challenge';
+    get('game-screen').classList.toggle('active', isGameActive);
     
-    if (isGamePhase && !gameUIInitialized) {
+    if (isGameActive && !gameUIInitialized) {
         initializeGameUIListeners();
         gameUIInitialized = true;
     }
@@ -326,39 +304,38 @@ function renderGameplayState(myPlayer, gameState) {
     const get = id => document.getElementById(id);
     const isMyTurn = gameState.turnOrder[gameState.currentPlayerIndex] === myPlayer.id && !myPlayer.isDowned;
 
-    // Health and AP Bars
-    const healthApDesktop = get('health-ap-container-desktop');
-    const healthApMobile = get('health-ap-container-mobile');
-
+    // Health bars
+    const headerStats = get('header-player-stats');
+    const mobileHeaderStats = get('mobile-header-player-stats');
     if ((gameState.phase === 'started' || gameState.phase === 'skill_challenge') && myPlayer.stats.maxHp > 0) {
-        const healthPercent = myPlayer.stats.maxHp > 0 ? (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100 : 0;
-        const apPercent = myPlayer.stats.ap > 0 ? (myPlayer.stats.currentAp / myPlayer.stats.ap) * 100 : 0;
+        const healthPercent = (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100;
         
         // Desktop
-        get('player-health-bar-desktop').style.width = `${healthPercent}%`;
-        get('player-health-text-desktop').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
-        get('player-ap-bar-desktop').style.width = `${apPercent}%`;
-        get('ap-counter-text-desktop').textContent = `${myPlayer.stats.currentAp}/${myPlayer.stats.ap}`;
-        healthApDesktop.classList.remove('hidden');
+        get('player-health-bar').style.width = `${healthPercent}%`;
+        get('player-health-text').textContent = `${myPlayer.stats.currentHp} / ${myPlayer.stats.maxHp}`;
+        headerStats.classList.remove('hidden');
 
         // Mobile
-        get('player-health-bar-mobile').style.width = `${healthPercent}%`;
-        get('player-health-text-mobile').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
-        get('player-ap-bar-mobile').style.width = `${apPercent}%`;
-        get('ap-counter-text-mobile').textContent = `${myPlayer.stats.currentAp}/${myPlayer.stats.ap}`;
-        healthApMobile.classList.remove('hidden');
-
+        get('mobile-player-health-bar').style.width = `${healthPercent}%`;
+        get('mobile-player-health-text').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
+        mobileHeaderStats.classList.remove('hidden');
     } else {
-        healthApDesktop.classList.add('hidden');
-        healthApMobile.classList.add('hidden');
+        headerStats.classList.add('hidden');
+        mobileHeaderStats.classList.add('hidden');
     }
 
-    // Turn Indicator
+    // Turn Indicator & AP
     const turnPlayer = currentRoomState.players[gameState.turnOrder[gameState.currentPlayerIndex]];
     const turnText = turnPlayer ? `${turnPlayer.name}'s Turn` : "Loading...";
     get('turn-indicator').textContent = turnText;
     get('mobile-turn-indicator').textContent = turnText;
-    
+    get('ap-counter-desktop').classList.toggle('hidden', !isMyTurn);
+    get('ap-counter-mobile').classList.toggle('hidden', !isMyTurn);
+    if(isMyTurn) {
+        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.ap}`;
+        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.ap}`;
+    }
+
     // Action Bars
     get('fixed-action-bar').classList.toggle('hidden', !isMyTurn);
     get('mobile-action-bar').classList.toggle('hidden', !isMyTurn);
