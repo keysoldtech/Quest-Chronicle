@@ -1,4 +1,3 @@
-
 // This file is the main Node.js server for the Quest & Chronicle application.
 // It uses Express to serve the static frontend files (HTML, CSS, JS) from the 'public' directory
 // and uses Socket.IO for real-time, event-based communication to manage the multiplayer game logic.
@@ -129,7 +128,6 @@ class GameManager {
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
-            currentAp: 0,
             hand: [],
             equipment: { weapon: null, armor: null },
             statusEffects: [],
@@ -151,7 +149,6 @@ class GameManager {
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
-            currentAp: 0,
             hand: [], // Explicitly initialized as an empty array.
             equipment: { weapon: null, armor: null }, // Using stable, single-slot equipment structure.
             statusEffects: [], // Explicitly initialized as an empty array.
