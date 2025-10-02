@@ -1,4 +1,3 @@
-
 // REBUILT: Quest & Chronicle Client-Side Logic (v6.1.0)
 // This file has been completely rebuilt to use a unidirectional data flow model.
 // 1. The server is the single source of truth.
@@ -130,11 +129,10 @@ function renderUI() {
     const get = id => document.getElementById(id);
 
     // --- Phase 1: Show/Hide Major Screens ---
-    get('menu-screen').classList.toggle('active', phase === 'lobby');
-    const isGameActive = phase === 'class_selection' || phase === 'started' || phase === 'game_over' || phase === 'skill_challenge';
-    get('game-screen').classList.toggle('active', isGameActive);
+    const isGamePhase = phase === 'class_selection' || phase === 'started' || phase === 'game_over' || phase === 'skill_challenge';
+    document.body.classList.toggle('game-active', isGamePhase);
     
-    if (isGameActive && !gameUIInitialized) {
+    if (isGamePhase && !gameUIInitialized) {
         initializeGameUIListeners();
         gameUIInitialized = true;
     }

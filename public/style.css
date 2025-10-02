@@ -59,9 +59,8 @@
 }
 
 html, body {
-    min-height: 100%; /* REVERSION: Allow content to define height */
-    overflow-y: auto; /* Allow vertical scroll */
-    overflow-x: hidden !important;
+    height: 100%;
+    overflow: hidden;
 }
 
 body {
@@ -73,11 +72,6 @@ body {
     justify-content: center;
     text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
 }
-body.in-game {
-    align-items: stretch;
-    justify-content: stretch;
-}
-
 
 .background-animation {
     position: fixed;
@@ -98,28 +92,31 @@ body.in-game {
 }
 
 /* --- SCREEN MANAGEMENT --- */
-/* REVERSION: Remove aggressive height, allow scrolling */
 .screen {
-    display: none;
     width: 100%;
-    min-height: 100%;
-    overflow-y: auto;
+    height: 100%;
 }
 
-/* REVERSION: Simplify active screen display, handle specifics per-screen */
-.screen.active {
+#menu-screen {
     display: flex;
-}
-
-/* Keep menu centered */
-#menu-screen.active {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    overflow-y: auto;
+    padding: 1rem;
 }
 
-/* Set mobile-first default for game screen */
-#game-screen.active {
+#game-screen {
+    display: none; /* Hidden by default */
+}
+
+/* body.game-active controls which screen is visible */
+body.game-active #menu-screen {
+    display: none;
+}
+
+body.game-active #game-screen {
+    display: flex;
     flex-direction: column;
 }
 
@@ -306,8 +303,8 @@ label {
 
 /* --- GAME AREA LAYOUT --- */
 .game-area {
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     padding: 1rem;
 }
 .game-area-desktop {
@@ -784,8 +781,67 @@ label {
 .tab-content { display: none; flex-grow: 1; overflow: hidden; }
 .tab-content.active { display: flex; flex-direction: column; }
 
+/* --- MOBILE UI RESTORATION --- */
+.mobile-main {
+    flex-grow: 1;
+    overflow-y: auto;
+    position: relative;
+    padding-bottom: 60px; /* Space for the nav bar */
+}
+.mobile-screen {
+    display: none;
+    height: 100%;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    overflow-y: auto;
+}
+.mobile-screen.active {
+    display: flex;
+}
+.mobile-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background-color: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 100;
+}
+.nav-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 1;
+    height: 100%;
+    font-size: 0.75rem;
+    gap: 2px;
+    cursor: pointer;
+    transition: color 0.2s;
+    font-family: var(--font-body);
+    font-weight: 700;
+}
+.nav-btn.active, .nav-btn:hover {
+    color: var(--color-special);
+}
+.nav-btn .material-symbols-outlined {
+    font-size: 1.5rem;
+}
+
+
 /* --- RESPONSIVE LAYOUT --- */
 @media (min-width: 1024px) {
+    .mobile-bottom-nav {
+        display: none;
+    }
     .game-area-mobile {
         display: none;
     }
@@ -811,14 +867,10 @@ label {
     .info-tabs-panel { grid-area: info; }
     #fixed-action-bar { grid-area: actions; }
 
-    /* --- Desktop Layout Stability Fixes --- */
     #game-board-container {
         min-height: 250px;
     }
     #hand-equipment-container {
-        max-height: 50vh; /* Prevents hand from pushing board away */
-    }
-    #players-list-container, #character-sheet-block, #game-board-container, #hand-equipment-container, .info-tabs-panel {
-        position: static; /* Enforce grid flow */
+        max-height: 50vh; 
     }
 }
