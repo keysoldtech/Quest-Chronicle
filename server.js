@@ -1139,7 +1139,12 @@ class GameManager {
         else if (roll <= 19) rarityBoost = 25; // 20% chance rare
         else rarityBoost = 40; // 5% chance legendary
 
-        room.chatLog.push({ type: 'system', text: `${player.name} rolls a ${roll} for their discovery's fortune!`, timestamp: Date.now() });
+        // Emit the roll result back to the player so they can see it
+        socket.emit('discoveryRollResolved', {
+            rollerId: player.id,
+            rollerName: player.name,
+            roll: roll,
+        });
 
         const discoveredItem = this.generateLoot(room.id, player.class, rarityBoost);
         if (discoveredItem) {
@@ -1154,13 +1159,20 @@ class GameManager {
 
     resolveDiscovery(room, player, { keptItemId }) {
         if (!player.isResolvingDiscovery || !player.discoveryItem) return;
-
+    
         const newCard = player.discoveryItem;
-        const itemType = newCard.type.toLowerCase(); // 'weapon' or 'armor'
+        // Ensure itemType is either 'weapon' or 'armor' to prevent errors
+        const itemType = (newCard.type || '').toLowerCase();
+        if (itemType !== 'weapon' && itemType !== 'armor') {
+            player.isResolvingDiscovery = false;
+            player.discoveryItem = null;
+            this.emitGameState(room.id);
+            return;
+        }
+    
         const currentlyEquipped = player.equipment[itemType];
-
         let unkeptItem = null;
-
+    
         if (keptItemId === newCard.id) {
             // Player kept the new item. The old item (if it exists) is unkept.
             player.equipment[itemType] = newCard;
@@ -1175,9 +1187,13 @@ class GameManager {
             unkeptItem = newCard;
             room.chatLog.push({ type: 'system', text: `${player.name} decided to keep their ${currentlyEquipped.name} instead of the ${newCard.name}.`, timestamp: Date.now() });
         } else {
-             // If keptItemId is something else (like "decline"), treat it as keeping the old item.
+             // Failsafe: if the keptItemId is invalid, assume they kept their old gear.
              unkeptItem = newCard;
-             room.chatLog.push({ type: 'system', text: `${player.name} decided to leave the ${newCard.name} behind.`, timestamp: Date.now() });
+             if (currentlyEquipped) {
+                 room.chatLog.push({ type: 'system', text: `${player.name} decided to keep their ${currentlyEquipped.name} over the ${newCard.name}.`, timestamp: Date.now() });
+             } else {
+                 room.chatLog.push({ type: 'system', text: `${player.name} decided to leave the ${newCard.name} behind.`, timestamp: Date.now() });
+             }
         }
         
         // Return the unkept item to the treasure deck
@@ -1227,11 +1243,13 @@ class GameManager {
         if (!challenge || !room.gameState.skillChallenge.isActive) return;
 
         let roll;
+        let advantageText = '';
         if (payload.hasAdvantage) {
             const roll1 = this.rollDice('1d20');
             const roll2 = this.rollDice('1d20');
             roll = Math.max(roll1, roll2);
-            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage on the check!`, timestamp: Date.now() });
+            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage on the check! (Rolled ${roll1}, ${roll2})`, timestamp: Date.now() });
+            advantageText = ' w/ Adv';
         } else {
             roll = this.rollDice('1d20');
         }
@@ -1239,7 +1257,6 @@ class GameManager {
         const statBonus = player.stats[challenge.skill] || 0;
         const total = roll + statBonus;
         const outcome = total >= challenge.dc ? 'Success' : 'Failure';
-        const advantageText = payload.hasAdvantage ? ' w/ Adv' : '';
 
         if (outcome === 'Success') {
             room.chatLog.push({ type: 'system-good', text: `${player.name} succeeds the skill check! (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc})`, timestamp: Date.now() });
@@ -1255,10 +1272,12 @@ class GameManager {
         }
         
         io.to(room.id).emit('skillCheckResolved', {
+             rollerId: player.id,
              rollerName: player.name,
              roll,
              bonus: statBonus,
              total,
+             targetAC: challenge.dc,
              outcome,
         });
 

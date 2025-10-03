@@ -415,24 +415,27 @@
         <!-- Individual Discovery Modal -->
         <div id="discovery-modal" class="modal-overlay hidden">
             <div class="modal-content large">
-                <h2 class="panel-header">A Fateful Choice</h2>
-                <p>You have made a new discovery, but can only carry one. Select the item you wish to keep.</p>
-                <div class="discovery-choice-container">
-                    <div class="discovery-choice-section">
-                        <h3>Equipped Item</h3>
-                        <div id="discovery-equipped-container" class="card-container-row">
-                            <!-- Populated by JS -->
+                <div class="modal-header-fixed">
+                    <h2 class="panel-header">A Fateful Choice</h2>
+                    <p>You have made a new discovery, but can only carry one. Select the item you wish to keep.</p>
+                </div>
+                <div class="discovery-scroll-container">
+                    <div class="discovery-choice-container">
+                        <div class="discovery-choice-section">
+                            <h3>Equipped Item</h3>
+                            <div id="discovery-equipped-container" class="card-container-row">
+                                <!-- Populated by JS -->
+                            </div>
                         </div>
-                    </div>
-                    <div class="discovery-choice-section">
-                        <h3>Discovered Item</h3>
-                        <div id="discovery-new-item-container" class="card-container-row">
-                            <!-- Populated by JS -->
+                        <div class="discovery-choice-section">
+                            <h3>Discovered Item</h3>
+                            <div id="discovery-new-item-container" class="card-container-row">
+                                <!-- Populated by JS -->
+                            </div>
                         </div>
                     </div>
                 </div>
                 <div class="modal-actions">
-                    <button id="discovery-decline-btn" class="btn btn-secondary">Keep Equipped</button>
                     <button id="discovery-confirm-btn" class="btn btn-primary" disabled>Confirm Choice</button>
                 </div>
             </div>

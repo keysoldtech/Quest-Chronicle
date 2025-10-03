@@ -20,6 +20,7 @@ const clientState = {
     rollResponseTimeout: null,
     helpModalPage: 0,
     isFirstTurnTutorialActive: false,
+    hasSeenSkillChallengePrompt: false, // Prevents re-opening the modal
 };
 
 // --- VOICE CHAT MANAGER ---
@@ -415,10 +416,14 @@ function renderUI() {
         renderGameplayState(myPlayer, gameState);
     }
     
+    // Reworked skill challenge modal logic
+    const skillChallengeIsActiveForMe = gameState.skillChallenge.isActive && gameState.turnOrder[gameState.currentPlayerIndex] === myId;
     const skillChallengeModal = get('skill-challenge-modal');
-    if (gameState.skillChallenge.isActive && gameState.turnOrder[gameState.currentPlayerIndex] === myId) {
+
+    if (skillChallengeIsActiveForMe && !clientState.hasSeenSkillChallengePrompt) {
         showSkillChallengeModal(gameState.skillChallenge.details);
-    } else {
+        clientState.hasSeenSkillChallengePrompt = true; // Set flag so it doesn't reopen
+    } else if (!skillChallengeIsActiveForMe && !skillChallengeModal.classList.contains('hidden')) {
         skillChallengeModal.classList.add('hidden');
     }
 }
@@ -845,7 +850,10 @@ function initializeGameUIListeners() {
             else if (targetId.includes('guard-btn')) socket.emit('playerAction', { action: 'guard' });
             else if (targetId.includes('brief-respite-btn')) socket.emit('playerAction', { action: 'respite' });
             else if (targetId.includes('full-rest-btn')) socket.emit('playerAction', { action: 'rest' });
-            else if (targetId.includes('skill-challenge-btn')) socket.emit('playerAction', { action: 'resolveSkillCheck' });
+            else if (targetId.includes('skill-challenge-btn')) {
+                const challenge = currentRoomState.gameState.skillChallenge.details;
+                if (challenge) showSkillChallengeModal(challenge);
+            }
         });
     });
 
@@ -958,15 +966,7 @@ function initializeGameUIListeners() {
         document.getElementById('discovery-modal').classList.add('hidden');
         clientState.activeItem = null;
      });
-     document.getElementById('discovery-decline-btn').addEventListener('click', () => {
-        if (!clientState.activeItem || !clientState.activeItem.equippedCard) return;
-        // "Decline" means keeping the currently equipped item.
-        const keptId = clientState.activeItem.equippedCard ? clientState.activeItem.equippedCard.id : 'decline';
-        socket.emit('playerAction', { action: 'resolveDiscovery', keptItemId: keptId });
-        document.getElementById('discovery-modal').classList.add('hidden');
-        clientState.activeItem = null;
-     });
-
+     
      // Help Modal Listeners
      document.getElementById('help-btn').addEventListener('click', showHelpModal);
      document.getElementById('mobile-help-btn').addEventListener('click', showHelpModal);
@@ -1085,7 +1085,6 @@ function showDiscoveryModal({ newCard }) {
     const newItemContainer = document.getElementById('discovery-new-item-container');
     const equippedContainer = document.getElementById('discovery-equipped-container');
     const confirmBtn = document.getElementById('discovery-confirm-btn');
-    const declineBtn = document.getElementById('discovery-decline-btn');
 
     const itemType = newCard.type.toLowerCase(); // 'weapon' or 'armor'
     const equippedCard = myPlayer.equipment[itemType];
@@ -1113,9 +1112,6 @@ function showDiscoveryModal({ newCard }) {
         equippedCardEl.onclick = () => handleCardSelection(equippedCardEl, equippedCard.id);
     }
     equippedContainer.appendChild(equippedCardEl);
-    
-    // The "Decline" button now explicitly means "Keep my currently equipped item"
-    declineBtn.textContent = equippedCard ? `Keep ${equippedCard.name}` : `Leave It`;
 
     modal.classList.remove('hidden');
 }
@@ -1484,6 +1480,53 @@ function displayDamageRollResult(data) {
     }, MIN_ANIMATION_TIME);
 }
 
+function displaySkillCheckRollResult(data) {
+    const { rollerId, roll, bonus, total, outcome } = data;
+
+    // Show a toast for everyone.
+    showToast(`${data.rollerName}'s skill check... ${total} is a ${outcome}!`, outcome.toLowerCase());
+
+    // Only the roller sees the modal update.
+    if (rollerId !== myId) return;
+
+    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    clientState.rollResponseTimeout = null;
+
+    const MIN_ANIMATION_TIME = 750;
+    setTimeout(() => {
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+        clientState.diceAnimationInterval = null;
+
+        const dieSVG = document.querySelector('#dice-display-container .die-svg');
+        if (dieSVG) {
+            dieSVG.classList.remove('rolling');
+            dieSVG.querySelector('.die-text').textContent = roll;
+            dieSVG.querySelector('.die-shape').style.fill = outcome === 'Success' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
+            dieSVG.classList.add('result-glow');
+            setTimeout(() => dieSVG.classList.remove('result-glow'), 1000);
+        }
+
+        setTimeout(() => {
+            const resultContainer = document.getElementById('dice-roll-result-container');
+            const resultLine = document.getElementById('dice-roll-result-line');
+            const detailsLine = document.getElementById('dice-roll-details');
+
+            resultLine.textContent = `${total} - ${outcome.toUpperCase()}!`;
+            resultLine.className = `result-line ${outcome.toLowerCase()}`;
+            detailsLine.textContent = `(Roll: ${roll} + Bonus: ${bonus})`;
+
+            resultContainer.classList.remove('hidden');
+            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+
+            if (clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+            clientState.rollModalCloseTimeout = setTimeout(() => {
+                document.getElementById('dice-roll-modal').classList.add('hidden');
+            }, 3000);
+        }, 300);
+    }, MIN_ANIMATION_TIME);
+}
+
 
 // --- 6. SOCKET.IO EVENT HANDLERS ---
 socket.on('gameStateUpdate', (newState) => {
@@ -1498,6 +1541,7 @@ socket.on('gameStateUpdate', (newState) => {
         const wasMyTurnBefore = oldState.gameState ? oldState.gameState.turnOrder[oldState.gameState.currentPlayerIndex] === myId : false;
         if(isMyTurnNow && !wasMyTurnBefore && !myPlayer.isDowned) {
             showYourTurnPopup();
+            clientState.hasSeenSkillChallengePrompt = false; // Reset challenge prompt on new turn start
             // First turn tutorial logic
             if (!myPlayer.hasTakenFirstTurn) {
                 clientState.isFirstTurnTutorialActive = true;
@@ -1556,31 +1600,58 @@ socket.on('damageResolved', (data) => {
 
 socket.on('promptDiscoveryRoll', (data) => {
     showDiceRollModal(data, 'discovery');
-    // Hide the modal after a short delay automatically
-    if(clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    clientState.rollResponseTimeout = setTimeout(() => {
-        document.getElementById('dice-roll-modal').classList.add('hidden');
-    }, 4000);
 });
+
+socket.on('discoveryRollResolved', (data) => {
+    if (data.rollerId !== myId) return;
+
+    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    clientState.rollResponseTimeout = null;
+    
+    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+    clientState.diceAnimationInterval = null;
+
+    const dieSVG = document.querySelector('#dice-display-container .die-svg');
+    if (dieSVG) {
+        dieSVG.classList.remove('rolling');
+        dieSVG.querySelector('.die-text').textContent = data.roll;
+        
+        let outcome = 'A decent find.';
+        let outcomeClass = 'info';
+        if (data.roll <= 10) { outcome = 'A common find.'; outcomeClass = 'miss'; }
+        else if (data.roll <= 15) { outcome = 'An uncommon find!'; outcomeClass = 'hit'; }
+        else if (data.roll <= 19) { outcome = 'A rare find!'; outcomeClass = 'hit'; }
+        else { outcome = 'A legendary find!'; outcomeClass = 'hit'; }
+
+        const resultLine = document.getElementById('dice-roll-result-line');
+        resultLine.textContent = `You rolled a ${data.roll}!`;
+        resultLine.className = `result-line ${outcomeClass}`;
+        document.getElementById('dice-roll-details').textContent = outcome;
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+    }
+});
+
 
 socket.on('promptSkillCheckRoll', (data) => {
     showDiceRollModal(data, 'skillcheck');
 });
 
 socket.on('skillCheckResolved', (data) => {
-    const { rollerName, total, outcome } = data;
-    showToast(`${rollerName}'s skill check... ${total} is a ${outcome}!`, outcome.toLowerCase());
+    displaySkillCheckRollResult(data);
 });
 
 
 socket.on('promptIndividualDiscovery', (data) => {
-    // If a dice roll modal was open for discovery, close it.
+    // If a dice roll modal was open for discovery, close it after a delay
     if (clientState.currentRollData?.type === 'discovery') {
-        document.getElementById('dice-roll-modal').classList.add('hidden');
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        setTimeout(() => {
+            document.getElementById('dice-roll-modal').classList.add('hidden');
+            showDiscoveryModal(data);
+        }, 2000); // Wait 2 seconds to show the roll result before swapping modals
+    } else {
+        showDiscoveryModal(data);
     }
-    showDiscoveryModal(data);
 });
 
 socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
