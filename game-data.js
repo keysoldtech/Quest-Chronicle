@@ -34,6 +34,7 @@ const statusEffectDefinitions = {
     'Poisoned': { trigger: 'start', damage: '1d4', description: 'Takes 1d4 damage at the start of their turn.' },
     'Stunned': { cannotAct: true, description: 'Cannot take actions.' },
     'On Fire': { trigger: 'start', damage: '1d6', description: 'Takes 1d6 damage at the start of their turn.'},
+    'Frightened': { cannotAct: true, description: 'Cannot take actions for 1 turn.' },
 };
 
 // --- 3. ACTION COSTS ---
@@ -207,8 +208,6 @@ const itemCards = [
 ];
 
 // --- 6.5. Event Cards ---
-// Simplified into a single world event deck for easier management on the server.
-// The different types can be used for GM flavor.
 const worldEventCards = [
     // Beneficial
     { name: "A Moment of Clarity", type: "World Event", duration: 1, eventType: "skill_challenge", description: "A puzzling mystery becomes clear.", skill: "int", dc: 12 },
@@ -217,26 +216,81 @@ const worldEventCards = [
     { name: "Inspiration Surge", type: "World Event", duration: 2, eventType: "Beneficial", description: "The next ability check, attack roll, or saving throw for each player is made with advantage." },
     { name: "Lucky Find", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You spot something valuable, if you can perceive it.", skill: "wis", dc: 10 },
     // Hindrance
-    { name: "Dangerous Terrain", type: "World Event", duration: 1, eventType: "skill_challenge", description: "The path ahead is treacherous. Navigate it carefully.", skill: "str", dc: 11 },
     { name: "Sudden Illness", type: "World Event", duration: 2, eventType: "Hindrance", description: "A wave of nausea washes over the party. All players have disadvantage on STR checks.", skill: "con", dc: 14 },
     { name: "Wrong Turn", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You question your path. Can you find the way?", skill: "wis", dc: 10 },
     // Combat
     { name: "Critical Moment", type: "World Event", duration: 2, eventType: "Combat", description: "The air crackles with energy. All attacks have a +2 bonus to their roll." },
-    { name: "Environmental Hazard", type: "World Event", duration: 1, eventType: "skill_challenge", description: "The environment itself turns against you!", skill: "dex", dc: 13 },
     { name: "Last Stand", type: "World Event", duration: 2, eventType: "Combat", description: "All players gain 5 temporary hit points." },
     // Exploration
     { name: "Ancient Inscription", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You find an ancient text. Can you decipher it?", skill: "int", dc: 12 },
-    { name: "Collapsing Floor", type: "World Event", duration: 1, eventType: "skill_challenge", description: "The ground beneath you trembles!", skill: "dex", dc: 14 },
     { name: "Hidden Passage", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You notice an oddity in the stonework.", skill: "wis", dc: 13 },
     // Social
     { name: "False Accusation", type: "World Event", duration: 1, eventType: "skill_challenge", description: "Someone is wrongly blamed. Can you clear their name?", skill: "cha", dc: 14 },
     { name: "Offered a Bribe", type: "World Event", duration: 1, eventType: "skill_challenge", description: "An official offers you a deal. Do you take it?", skill: "wis", dc: 13 },
     // Weather
     { name: "Arctic Squall", type: "World Event", duration: 2, eventType: "Weather", description: "A sudden, biting wind howls. CON Save DC 12 each turn or take 1d4 cold damage.", skill: "con", dc: 12 },
-    { name: "Misty Veil", type: "World Event", duration: 2, eventType: "Weather", description: "An unnaturally thick mist rolls in. All ranged attacks have disadvantage.", skill: "wis", dc: 14 }
+    { name: "Misty Veil", type: "World Event", duration: 2, eventType: "Weather", description: "An unnaturally thick mist rolls in. All ranged attacks have disadvantage.", skill: "wis", dc: 14 },
+    // Multi-stage challenges
+    { 
+        name: "Collapsing Floor", 
+        type: "World Event", 
+        duration: 1, 
+        eventType: "multi_stage_skill_challenge",
+        stages: [
+            { description: "The ground shakes! Make a DEX check to keep your footing!", skill: "dex", dc: 12, failure: { type: "damage", value: "1d4", text: "You stumble and take damage!" } },
+            { description: "A chasm opens! Make a STR check to leap across!", skill: "str", dc: 14, failure: { type: "damage", value: "1d8", text: "You fall short and take heavy damage!" } }
+        ],
+        success: { text: "You navigate the collapsing floor and find a hidden shortcut!" }
+    },
+    { 
+        name: "Dangerous Terrain", 
+        type: "World Event", 
+        duration: 1, 
+        eventType: "multi_stage_skill_challenge",
+        stages: [
+            { description: "The path is slick with mud. Make a DEX check to stay upright.", skill: "dex", dc: 11, failure: { type: "damage", value: "1d4", text: "You slip and twist your ankle." } },
+            { description: "Thorny vines block the way. Make a STR check to push through.", skill: "str", dc: 13, failure: { type: "damage", value: "1d6", text: "The thorns tear at you as you struggle." } }
+        ],
+        success: { text: "You expertly navigate the treacherous terrain." }
+    },
 ];
 
 const partyEventCards = worldEventCards.filter(e => ['Social', 'Beneficial'].includes(e.eventType));
+
+const environmentalCards = [
+    {
+        name: "Crumbling Pillar",
+        type: "Environmental",
+        description: "A large, unstable stone pillar. It looks like a strong push could topple it.",
+        skillInteractions: [
+            { 
+                name: "Topple Pillar", 
+                apCost: 2, 
+                skill: "str", 
+                dc: 14, 
+                success: { type: "aoe_damage", value: "2d8", text: "With a mighty heave, the pillar crashes down on all monsters!" },
+                failure: { type: "self_damage", value: "1d6", text: "You strain yourself, taking damage as the pillar barely budges." }
+            }
+        ]
+    },
+    {
+        name: "Trapped Chest",
+        type: "Environmental",
+        description: "An old, sturdy chest. It seems too good to be true.",
+        skillInteractions: [
+            { 
+                name: "Disarm Trap", 
+                apCost: 1, 
+                eventType: "multi_stage_skill_challenge",
+                stages: [
+                    { description: "First, inspect the chest for traps. (WIS Check)", skill: "wis", dc: 13, failure: { type: "damage", value: "2d6", text: "You miss the trigger and a poisoned dart shoots out!" } },
+                    { description: "You've found the mechanism. Now, carefully disable it. (DEX Check)", skill: "dex", dc: 15, failure: { type: "damage", value: "1d10", text: "Your hand slips and the trap partially triggers!" } }
+                ],
+                success: { type: "loot", text: "You deftly disarm the trap and claim the treasure within!" }
+            }
+        ]
+    }
+];
 
 
 // --- 7. MONSTER DATA ---
@@ -244,7 +298,11 @@ const allMonsters = {
     // Tier 1
     phantomLight: { name: "Phantom Light", type: "Monster", maxHp: 5, attackBonus: 0, requiredRollToHit: 10, effect: { dice: "1d8", description: "Incorporeal. Deals 1d8 lightning to creatures ending turn within 5ft." }, ap: 1, weakness: "Radiant" },
     emberFlicker: { name: "Ember Flicker", type: "Monster", maxHp: 6, attackBonus: 4, requiredRollToHit: 12, effect: { dice: "1d10", description: "On miss, may ignite flammable objects." }, ap: 1, weakness: "Cold, Water" },
-    pestieProwler: { name: "Pestie Prowler", type: "Monster", maxHp: 7, attackBonus: 4, requiredRollToHit: 10, effect: { dice: "1d6", description: "Sneaky Escape: Can flee if HP is 3 or less." }, ap: 1 },
+    pestieProwler: { name: "Pestie Prowler", type: "Monster", maxHp: 7, attackBonus: 4, requiredRollToHit: 10, effect: { dice: "1d6", description: "Sneaky Escape: Can flee if HP is 3 or less." }, ap: 1, 
+        skillInteractions: [
+            { name: "Intimidate", apCost: 1, skill: "cha", dc: 12, success: { type: "status_effect", effect: "Frightened", duration: 2, text: "You scare the Pestie, causing it to freeze in fear!" }, failure: { type: "none", text: "The Pestie just snarls at you." } }
+        ]
+    },
     pestiePilferer: { name: "Pestie Pilferer", type: "Monster", maxHp: 8, attackBonus: 4, requiredRollToHit: 12, effect: { dice: "1d6+2", description: "Quick Feet: Can Break Away as a bonus action." }, ap: 1, weakness: "Psychic" },
     grottoWeaver: { name: "Grotto Weaver", type: "Monster", maxHp: 10, attackBonus: 4, requiredRollToHit: 12, effect: { dice: "1d6", description: "Web Shot: Can attempt to restrain a player (DC 10 STR save)." }, ap: 2 },
     flutterwingSwarm: { name: "Flutterwing Swarm", type: "Monster", maxHp: 10, attackBonus: 4, requiredRollToHit: 12, effect: { dice: "2d4", description: "Blind Flight: Immune to blindness. Disadvantage on Perception checks." }, ap: 1, weakness: "Thunder" },
@@ -261,7 +319,11 @@ const allMonsters = {
     causticSludge: { name: "Caustic Sludge", type: "Monster", maxHp: 24, attackBonus: 3, requiredRollToHit: 13, effect: { dice: "1d8", description: "Corrodes armor (-1 AC) on hit. Splits on Lightning damage." }, ap: 1, weakness: "Slashing, Cold" },
     skyLurer: { name: "Sky Lurer", type: "Monster", maxHp: 27, attackBonus: 4, requiredRollToHit: 14, effect: { dice: "1d6+1", description: "Swooping Attack. Captivating Song (DC 11 WIS save or charmed)." }, ap: 2, weakness: "Piercing" },
     highwayScourge: { name: "Highway Scourge", type: "Monster", maxHp: 28, attackBonus: 6, requiredRollToHit: 15, effect: { dice: "2d6+3", description: "Bonus Action: Shout (All Bandits get +1 attack for one round)." }, ap: 2, weakness: "Low Wisdom" },
-    ruinedSentinel: { name: "Ruined Sentinel", type: "Monster", maxHp: 33, attackBonus: 6, requiredRollToHit: 16, effect: { dice: "2d8", description: "Magic Resistance. DC 14 CON save or stunned on hit." }, ap: 2, weakness: "Thunder, Psychic" },
+    ruinedSentinel: { name: "Ruined Sentinel", type: "Monster", maxHp: 33, attackBonus: 6, requiredRollToHit: 16, effect: { dice: "2d8", description: "Magic Resistance. DC 14 CON save or stunned on hit." }, ap: 2, weakness: "Thunder, Psychic",
+        skillInteractions: [
+            { name: "Find Weakness", apCost: 1, skill: "int", dc: 15, success: { type: "apply_vulnerability", text: "You spot a crack in its armor! The next attack against it has advantage." }, failure: { type: "none", text: "The sentinel's construction is flawless." } }
+        ]
+     },
     shadowmawAlpha: { name: "Shadowmaw Alpha", type: "Monster", maxHp: 34, attackBonus: 5, requiredRollToHit: 14, effect: { dice: "2d6+2", description: "Pack Tactics. DC 12 STR save or prone on hit." }, ap: 2, weakness: "Fire" },
     stoneWing: { name: "Stone Wing", type: "Monster", maxHp: 35, attackBonus: 5, requiredRollToHit: 15, effect: { dice: "1d6+3", description: "Stone Form: Can become indistinguishable from statue." }, ap: 2, weakness: "Thunder" },
 
@@ -274,11 +336,11 @@ const allMonsters = {
     wrappedAncient: { name: "Wrapped Ancient (Mini-Boss)", type: "Monster", maxHp: 60, attackBonus: 5, requiredRollToHit: 15, effect: { dice: "2d6+3", description: "Undead Fortitude. Curse of the Mummy Rot." }, ap: 2, weakness: "Fire" },
     wateryCharmer: { name: "Watery Charmer (Mini-Boss)", type: "Monster", maxHp: 63, attackBonus: 6, requiredRollToHit: 16, effect: { dice: "1d6+3", description: "Captivating Song. Can cast Immobilize Foe or Suggestion." }, ap: 2, weakness: "Bludgeoning" },
     hillOaf: { name: "Hill Oaf (Mini-Boss)", type: "Monster", maxHp: 64, attackBonus: 6, requiredRollToHit: 14, effect: { dice: "2d8+4", description: "Powerful Blow (Once per turn, can add +2 to damage)." }, ap: 2, weakness: "Psychic" },
-    deathlordMarshal: { name: "Deathlord Marshal (Boss)", type: "Monster", maxHp: 78, attackBonus: 7, requiredRollToHit: 17, effect: { dice: "3d6+4", description: "Aura of Fear. Unholy Endurance." }, ap: 3, weakness: "Radiant" },
-    earthColossus: { name: "Earth Colossus (Boss)", type: "Monster", maxHp: 112, attackBonus: 8, requiredRollToHit: 18, effect: { dice: "2d10+5", description: "Immutable Form. Slows target on hit." }, ap: 3, weakness: "Thunder" },
-    winterJuggernaut: { name: "Winter Juggernaut (Boss)", type: "Monster", maxHp: 130, attackBonus: 9, requiredRollToHit: 18, effect: { dice: "3d12+6", description: "Icy Aura (Deals 1d4 cold damage to nearby creatures)." }, ap: 3, weakness: "Fire" },
-    hellfireSovereign: { name: "Hellfire Sovereign (Boss)", type: "Monster", maxHp: 195, attackBonus: 9, requiredRollToHit: 19, effect: { dice: "4d6+5", description: "Hellish Regeneration. Flaming Aura. Legendary Action (Hellfire Wave)." }, ap: 4, weakness: "Cold, Radiant" },
-    rotwoodBehemoth: { name: "Rotwood Behemoth (Boss)", type: "Monster", maxHp: 214, attackBonus: 8, requiredRollToHit: 18, effect: { dice: "3d8+4", description: "Rooted Horror (difficult terrain). Corruption Pulse." }, ap: 3, weakness: "Fire, Radiant" },
+    deathlordMarshal: { name: "Deathlord Marshal (Boss)", isBoss: true, maxHp: 78, attackBonus: 7, requiredRollToHit: 17, effect: { dice: "3d6+4", description: "Aura of Fear. Unholy Endurance." }, ap: 3, weakness: "Radiant" },
+    earthColossus: { name: "Earth Colossus (Boss)", isBoss: true, maxHp: 112, attackBonus: 8, requiredRollToHit: 18, effect: { dice: "2d10+5", description: "Immutable Form. Slows target on hit." }, ap: 3, weakness: "Thunder" },
+    winterJuggernaut: { name: "Winter Juggernaut (Boss)", isBoss: true, maxHp: 130, attackBonus: 9, requiredRollToHit: 18, effect: { dice: "3d12+6", description: "Icy Aura (Deals 1d4 cold damage to nearby creatures)." }, ap: 3, weakness: "Fire" },
+    hellfireSovereign: { name: "Hellfire Sovereign (Boss)", isBoss: true, maxHp: 195, attackBonus: 9, requiredRollToHit: 19, effect: { dice: "4d6+5", description: "Hellish Regeneration. Flaming Aura. Legendary Action (Hellfire Wave)." }, ap: 4, weakness: "Cold, Radiant" },
+    rotwoodBehemoth: { name: "Rotwood Behemoth (Boss)", isBoss: true, maxHp: 214, attackBonus: 8, requiredRollToHit: 18, effect: { dice: "3d8+4", description: "Rooted Horror (difficult terrain). Corruption Pulse." }, ap: 3, weakness: "Fire, Radiant" },
 };
 
 
@@ -297,8 +359,11 @@ module.exports = {
     armorCards,
     worldEventCards,
     partyEventCards,
+    environmentalCards,
     monsterTiers,
     npcDialogue,
     magicalAffixes,
-    actionCosts
+    actionCosts,
+    statusEffectDefinitions,
+    allMonsters, // Exporting all monsters for easier lookup by name/id
 };

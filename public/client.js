@@ -176,7 +176,7 @@ function createCardElement(card, options = {}) {
         return emptyCardDiv;
     }
 
-    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false } = options;
+    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false, isInteractable = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
@@ -197,10 +197,9 @@ function createCardElement(card, options = {}) {
     const typeInfo = card.category && card.category !== 'General' ? `${card.type} / ${card.category}` : card.type;
     const monsterHpHTML = card.type === 'Monster' ? `<div class="monster-hp">HP: ${card.currentHp}/${card.maxHp}</div>` : '';
     const monsterStatsHTML = card.type === 'Monster' ? `
-        <div class="monster-stats-grid">
-            <div class="card-bonus" title="Attack Bonus"><span class="material-symbols-outlined icon-damage">colorize</span>+${card.attackBonus || 0}</div>
-            <div class="card-bonus" title="Armor Class"><span class="material-symbols-outlined icon-shield">security</span>${card.requiredRollToHit || 10}</div>
-        </div>` : '';
+        <div class="card-bonus" title="Attack Bonus"><span class="material-symbols-outlined icon-damage">colorize</span>+${card.attackBonus || 0}</div>
+        <div class="card-bonus" title="Armor Class"><span class="material-symbols-outlined icon-shield">security</span>${card.requiredRollToHit || 10}</div>
+    ` : '';
     const damageDiceHTML = card.effect?.dice ? `<div class="card-bonus" title="Damage Dice"><span class="material-symbols-outlined icon-damage">casino</span>${card.effect.dice}</div>` : '';
     const apCostHTML = card.apCost ? `<div class="card-bonus" title="AP Cost"><span class="material-symbols-outlined icon-ap">bolt</span>${card.apCost}</div>` : '';
     
@@ -273,6 +272,23 @@ function createCardElement(card, options = {}) {
         claimBtn.className = 'btn btn-xs btn-primary';
         claimBtn.onclick = (e) => { e.stopPropagation(); showClaimLootModal(card); };
         actionContainer.appendChild(claimBtn);
+    }
+
+    if (isInteractable && card.skillInteractions) {
+        card.skillInteractions.forEach(interaction => {
+            const interactBtn = document.createElement('button');
+            interactBtn.textContent = `${interaction.name} (${interaction.apCost} AP)`;
+            interactBtn.className = 'btn btn-xs btn-interaction';
+            interactBtn.onclick = (e) => {
+                e.stopPropagation();
+                socket.emit('playerAction', {
+                    action: 'resolveSkillInteraction',
+                    cardId: card.id,
+                    interactionName: interaction.name
+                });
+            };
+            actionContainer.appendChild(interactBtn);
+        });
     }
 
     if (isDiscardable) {
@@ -421,7 +437,9 @@ function renderUI() {
     const skillChallengeModal = get('skill-challenge-modal');
 
     if (skillChallengeIsActiveForMe && !clientState.hasSeenSkillChallengePrompt) {
-        showSkillChallengeModal(gameState.skillChallenge.details);
+        const details = gameState.skillChallenge.details;
+        const stage = details.stages ? details.stages[gameState.skillChallenge.currentStage] : details;
+        showSkillChallengeModal(stage, details.name);
         clientState.hasSeenSkillChallengePrompt = true; // Set flag so it doesn't reopen
     } else if (!skillChallengeIsActiveForMe && !skillChallengeModal.classList.contains('hidden')) {
         skillChallengeModal.classList.add('hidden');
@@ -519,6 +537,9 @@ function renderGameplayState(myPlayer, gameState) {
     const get = id => document.getElementById(id);
     const isMyTurn = gameState.turnOrder[gameState.currentPlayerIndex] === myPlayer.id && !myPlayer.isDowned;
 
+    // Party Hope Meter
+    renderPartyHope(gameState.partyHope);
+
     // Health bars
     const headerStats = get('header-player-stats');
     const mobileHeaderStats = get('mobile-header-player-stats');
@@ -553,21 +574,24 @@ function renderGameplayState(myPlayer, gameState) {
     get('action-skill-challenge-btn').classList.toggle('hidden', !gameState.skillChallenge.isActive);
     get('mobile-action-skill-challenge-btn').classList.toggle('hidden', !gameState.skillChallenge.isActive);
     
-    // Board
+    // Board (Monsters & Environment)
     const boardContainers = [get('board-cards'), get('mobile-board-cards')];
     boardContainers.forEach(c => c.innerHTML = '');
-    gameState.board.monsters.forEach(monster => {
+    [...gameState.board.monsters, ...gameState.board.environment].forEach(card => {
         boardContainers.forEach(container => {
-            const cardEl = createCardElement(monster, { isTargetable: isMyTurn });
-            cardEl.onclick = () => {
-                if (!isMyTurn || !clientState.selectedWeaponId) return;
-                 if (clientState.isFirstTurnTutorialActive) { // Tutorial logic
-                    clientState.isFirstTurnTutorialActive = false;
-                }
-                showNarrativeModal(clientState.selectedWeaponId, monster.id);
-                clientState.selectedWeaponId = null; 
-                renderUI();
-            };
+            const isInteractable = isMyTurn && (card.type === 'Monster' || card.type === 'Environmental');
+            const cardEl = createCardElement(card, { isTargetable: isMyTurn, isInteractable });
+            if (card.type === 'Monster') {
+                cardEl.onclick = () => {
+                    if (!isMyTurn || !clientState.selectedWeaponId) return;
+                     if (clientState.isFirstTurnTutorialActive) { // Tutorial logic
+                        clientState.isFirstTurnTutorialActive = false;
+                    }
+                    showNarrativeModal(clientState.selectedWeaponId, card.id);
+                    clientState.selectedWeaponId = null; 
+                    renderUI();
+                };
+            }
             container.appendChild(cardEl);
         });
     });
@@ -577,11 +601,12 @@ function renderGameplayState(myPlayer, gameState) {
     const mobileWorldEventBanner = get('mobile-active-world-event-display');
     const event = gameState.worldEvents.currentEvent;
     if (event) {
+        const eventDesc = event.stages ? event.stages[gameState.skillChallenge.currentStage]?.description : event.description;
         const bannerHTML = `
             <span class="material-symbols-outlined">public</span>
             <div class="world-event-text">
                 <strong>${event.name}</strong>
-                <span>${event.description}</span>
+                <span>${eventDesc || ''}</span>
             </div>
             <span class="world-event-duration">Rounds Left: ${gameState.worldEvents.duration}</span>
         `;
@@ -607,6 +632,30 @@ function renderGameplayState(myPlayer, gameState) {
     }
 
     renderHandAndEquipment(myPlayer, isMyTurn);
+}
+
+function renderPartyHope(hope) {
+    const hopePercent = (hope / 10) * 100;
+    let hopeLabel = 'Neutral';
+    let hopeClass = 'neutral';
+
+    if (hope <= 2) { hopeLabel = 'Despairing (-1 Hit)'; hopeClass = 'despairing'; }
+    else if (hope <= 4) { hopeLabel = 'Struggling'; hopeClass = 'struggling'; }
+    else if (hope >= 9) { hopeLabel = 'Inspired (+1 Hit)'; hopeClass = 'inspired'; }
+    else if (hope >= 7) { hopeLabel = 'Hopeful'; hopeClass = 'hopeful'; }
+
+    const desktopMeter = document.getElementById('party-hope-meter-desktop');
+    const mobileMeter = document.getElementById('party-hope-meter-mobile');
+    
+    desktopMeter.className = `party-hope-meter ${hopeClass}`;
+    mobileMeter.className = `party-hope-meter mobile ${hopeClass}`;
+
+    document.getElementById('party-hope-bar-desktop').style.width = `${hopePercent}%`;
+    document.getElementById('party-hope-text-desktop').textContent = `${hopeLabel} ${hope}/10`;
+    document.getElementById('party-hope-text-mobile').textContent = `${hope}/10`;
+    
+    desktopMeter.classList.remove('hidden');
+    mobileMeter.classList.remove('hidden');
 }
 
 function renderCharacterPanel(desktopContainer, mobileContainer, player, isMyTurn) {
@@ -638,7 +687,7 @@ function renderCharacterPanel(desktopContainer, mobileContainer, player, isMyTur
                  ${renderStatLine('Action Points', 'bolt', 'ap', baseStats.ap || 0, statBonuses.ap || 0)}
                  ${renderStatLine('Damage Bonus', 'swords', 'damage', baseStats.damageBonus || 0, statBonuses.damageBonus || 0, true)}
                  ${renderStatLine('Shield Bonus', 'security', 'shield', baseStats.shieldBonus || 0, statBonuses.shieldBonus || 0, true)}
-                 ${renderStatLine('Hit Bonus', 'colorize', 'int', baseStats.hitBonus || 0, statBonuses.hitBonus || 0, true)}
+                 ${renderStatLine('Hit Bonus', 'colorize', 'int', (baseStats.hitBonus || 0) + (player.statBonuses.hitBonus || 0) , stats.hitBonus - ((baseStats.hitBonus || 0) + (player.statBonuses.hitBonus || 0)), true)}
             </div>
             <div class="player-stats core-stats">
                  ${renderStatLine('Strength', 'fitness_center', 'str', baseStats.str || 0, statBonuses.str || 0)}
@@ -853,7 +902,10 @@ function initializeGameUIListeners() {
             else if (targetId.includes('full-rest-btn')) socket.emit('playerAction', { action: 'rest' });
             else if (targetId.includes('skill-challenge-btn')) {
                 const challenge = currentRoomState.gameState.skillChallenge.details;
-                if (challenge) showSkillChallengeModal(challenge);
+                if (challenge) {
+                    const stage = challenge.stages ? challenge.stages[currentRoomState.gameState.skillChallenge.currentStage] : challenge;
+                    showSkillChallengeModal(stage, challenge.name);
+                }
             }
         });
     });
@@ -1148,8 +1200,8 @@ function handleUseConsumable(card) {
     }
 }
 
-function showSkillChallengeModal(challenge) {
-    document.getElementById('skill-challenge-title').textContent = challenge.name;
+function showSkillChallengeModal(challenge, title) {
+    document.getElementById('skill-challenge-title').textContent = title || "A New Challenge!";
     document.getElementById('skill-challenge-description').textContent = challenge.description;
     document.getElementById('skill-challenge-modal').classList.remove('hidden');
 }
@@ -1177,7 +1229,7 @@ const helpPages = [
                 <li><b>AP (Action Points):</b> The resource you spend each turn to take actions.</li>
                 <li><b>Damage Bonus:</b> Added to your damage rolls when you hit with a weapon.</li>
                 <li><b>Shield Bonus:</b> Your defense. Monsters must roll higher than 10 + your Shield Bonus to hit you.</li>
-                <li><b>Hit Bonus:</b> Added to your d20 roll when you attack.</li>
+                <li><b>Hit Bonus:</b> Added to your d20 roll when you attack. This can be affected by Party Hope.</li>
                 <li><b>Core Stats (STR, DEX, etc.):</b> These influence class abilities and may be used for skill checks.</li>
             </ul>
         `
@@ -1201,14 +1253,42 @@ const helpPages = [
             <p>Combat is resolved with a two-step dice roll process.</p>
             <h3>How to Attack</h3>
             <ol>
-                <li><b>Select Weapon:</b> Click on one of your equipped weapons. It will gain a golden border to show it's selected.</li>
-                <li><b>Select Target:</b> Click on a monster on the game board. This will open a prompt to confirm your attack.</li>
+                <li><b>Select Weapon:</b> Click on one of your equipped weapons (including 'Unarmed Strike'). It will gain a golden border to show it's selected.</li>
+                <li><b>Select Target:</b> Click on a monster on the game board. This will open a prompt to describe your attack and confirm.</li>
             </ol>
             <h3>The Dice Roll</h3>
             <ol>
                 <li><b>Roll to Hit:</b> You roll a 20-sided die (d20). The result is <b>(Your d20 Roll + Your Hit Bonus)</b>. If this total meets or exceeds the monster's Armor Class (AC), you hit!</li>
                 <li><b>Roll for Damage:</b> On a successful hit, you roll your weapon's damage dice. The total damage is <b>(Your Damage Roll + Your Damage Bonus)</b>.</li>
             </ol>
+        `
+    },
+    {
+        title: "The Party Hope System",
+        content: `
+            <p>The meter at the top of the screen represents your party's collective morale and resolve. It is a shared resource that reflects your successes and failures.</p>
+            <h3>Changing Hope</h3>
+            <ul>
+                <li><b style="color:var(--color-success)">Hope Increases:</b> Landing a critical hit (rolling a natural 20) or defeating a powerful Boss monster will raise the party's hope.</li>
+                <li><b style="color:var(--color-danger)">Hope Decreases:</b> When a hero is downed (reaches 0 HP), the party's hope falters.</li>
+            </ul>
+            <h3>Effects of Hope</h3>
+            <ul>
+                <li><b>Inspired (9-10 Hope):</b> Your confidence is soaring! The entire party gains a <b>+1 bonus to attack rolls</b>.</li>
+                <li><b>Despairing (0-2 Hope):</b> The situation is dire. The party suffers a <b>-1 penalty to attack rolls</b>.</li>
+            </ul>
+        `
+    },
+    {
+        title: "Advanced Actions",
+        content: `
+            <p>The world of Quest & Chronicle is interactive. On your turn, you may see special action buttons appear on certain monster or environmental cards, allowing for creative strategies.</p>
+            <h3>Environmental Interactions</h3>
+            <p>Objects like a 'Crumbling Pillar' might appear on the board. You can spend AP to attempt a skill check (e.g., a Strength check to topple it), potentially dealing damage to all monsters or revealing a secret.</p>
+            <h3>Monster-Specific Checks</h3>
+            <p>Some creatures have unique weaknesses. You might see an option to 'Intimidate' a cowardly monster (a Charisma check) to frighten it, or 'Find Weakness' on a golem (an Intelligence check) to give your allies an advantage.</p>
+            <h3>Traps & Challenges</h3>
+            <p>Some challenges, like disarming a complex trap, may require multiple successful skill checks in a row. Be prepared!</p>
         `
     },
     {
@@ -1221,7 +1301,7 @@ const helpPages = [
                 <li><b>Individual Discovery:</b> Every 3 rounds, you'll get a personal chance to find a rare item and swap it with your currently equipped gear of the same type.</li>
             </ul>
         `
-    },
+    }
 ];
 
 function renderHelpPage() {
@@ -1320,390 +1400,259 @@ function showDiceRollModal(data, type) {
     confirmBtn.classList.remove('hidden');
     confirmBtn.disabled = false;
     document.getElementById('dice-roll-close-btn').classList.add('hidden');
-    
+
     modal.classList.remove('hidden');
+
+    // Set a timeout to prevent the modal from getting stuck if no response is received.
+    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    clientState.rollResponseTimeout = setTimeout(() => {
+        const modal = document.getElementById('dice-roll-modal');
+        if (!modal.classList.contains('hidden') && !document.getElementById('dice-roll-close-btn').classList.contains('hidden')) {
+             // Only auto-close if the result has been shown. If the button is still "Roll Dice", there might be a server lag.
+        } else if (!modal.classList.contains('hidden') && document.getElementById('dice-roll-confirm-btn').disabled) {
+            // If the button is disabled (i.e., we are waiting for server), don't auto-close.
+        } else {
+            // If it's still just showing 'Roll Dice', maybe show an error.
+            console.warn("Dice roll timed out waiting for server response.");
+        }
+    }, 8000); // 8 seconds
 }
 
 function handleDiceRoll() {
-    if (!clientState.currentRollData) return;
-    
-    document.getElementById('dice-roll-confirm-btn').disabled = true;
+    const confirmBtn = document.getElementById('dice-roll-confirm-btn');
+    if (confirmBtn.disabled) return; // Prevent double-clicks
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Rolling...';
+
     const container = document.getElementById('dice-display-container');
-    const dieSVG = container.querySelector('.die-svg');
-    const dieText = dieSVG.querySelector('.die-text');
-    const [num, sides] = clientState.currentRollData.dice.split('d').map(Number);
+    const svg = container.querySelector('.die-svg');
+    svg.classList.add('rolling');
 
     if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-    clientState.diceAnimationInterval = setInterval(() => {
-        dieText.textContent = Math.ceil(Math.random() * sides);
-    }, 50);
-
-    dieSVG.classList.add('rolling');
     
-    const actionMap = {
-        'attack': 'resolveAttackRoll',
-        'damage': 'resolveDamageRoll',
-        'skillcheck': 'resolveSkillCheckRoll',
-        'discovery': 'resolveDiscoveryRoll',
-    };
-    const action = actionMap[clientState.currentRollData.type];
-    if (action) {
-        socket.emit('playerAction', { action: action, ...clientState.currentRollData });
-    }
+    const [, sides] = clientState.currentRollData.dice.split('d').map(Number);
 
-    // Add a timeout for robustness.
-    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    clientState.rollResponseTimeout = setTimeout(() => {
-        // This will only fire if we don't get a response from the server.
+    clientState.diceAnimationInterval = setInterval(() => {
+        const randomValue = Math.floor(Math.random() * sides) + 1;
+        svg.querySelector('.die-text').textContent = randomValue;
+    }, 100);
+
+    // Stop animation after a bit, waiting for server result
+    setTimeout(() => {
         if (clientState.diceAnimationInterval) {
             clearInterval(clientState.diceAnimationInterval);
             clientState.diceAnimationInterval = null;
-
-            if (dieSVG) {
-                dieSVG.classList.remove('rolling');
-                dieSVG.querySelector('.die-text').textContent = 'ERR';
-            }
-            
-            showToast("No response from server. Roll cancelled.", 'error');
-            
-            // Update modal UI to show it's over
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-            document.getElementById('dice-roll-confirm-btn').disabled = false; // Reset for next time
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
         }
-    }, 5000); // 5-second timeout
-}
-
-function displayAttackRollResult(data) {
-    const { roll, bonus, total, outcome, rollerId } = data;
+        svg.classList.remove('rolling');
+    }, 1000);
     
-    // Non-rollers see a simple toast
-    if (rollerId !== myId) {
-        showToast(`${data.rollerName} attacks ${data.targetName}... ${total} is a ${outcome}!`, outcome.toLowerCase());
-        return;
-    }
-    
-    // Roller gets the full modal experience
-    // Clear the response timeout since we got a response.
-    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    clientState.rollResponseTimeout = null;
+    // Send appropriate socket event based on roll type
+    const payload = { ...clientState.currentRollData };
+    delete payload.type; // Remove internal type property
+    delete payload.title;
+    delete payload.description;
 
-    const MIN_ANIMATION_TIME = 750; // milliseconds
-    
-    setTimeout(() => {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-        clientState.diceAnimationInterval = null;
-
-        const container = document.getElementById('dice-display-container');
-        const dieSVG = container.querySelector('.die-svg');
-        if (dieSVG) {
-            dieSVG.classList.remove('rolling');
-            dieSVG.querySelector('.die-text').textContent = roll;
-            dieSVG.querySelector('.die-shape').style.fill = outcome === 'Hit' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
-            
-            dieSVG.classList.add('result-glow');
-            setTimeout(() => dieSVG.classList.remove('result-glow'), 1000);
-        }
-        
-        // Show result text after the die has landed
-        setTimeout(() => {
-            showToast(`${data.rollerName} attacks ${data.targetName}... ${total} is a ${outcome}!`, outcome.toLowerCase());
-
-            const resultContainer = document.getElementById('dice-roll-result-container');
-            const resultLine = document.getElementById('dice-roll-result-line');
-            const detailsLine = document.getElementById('dice-roll-details');
-            
-            resultLine.textContent = `${total} - ${outcome.toUpperCase()}!`;
-            resultLine.className = `result-line ${outcome.toLowerCase()}`;
-            detailsLine.textContent = `(Roll: ${roll} + Bonus: ${bonus})`;
-            
-            resultContainer.classList.remove('hidden');
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-
-            if (outcome === 'Miss') {
-                if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-                clientState.rollModalCloseTimeout = setTimeout(() => {
-                    document.getElementById('dice-roll-modal').classList.add('hidden');
-                }, 3000);
-                document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-            }
-            // If it's a hit, we wait for the server to send the damage roll prompt.
-        }, 300);
-
-    }, MIN_ANIMATION_TIME);
-}
-
-function displayDamageRollResult(data) {
-    const { rollerId, totalDamage, damageRoll, damageBonus, targetId } = data;
-    
-    // Animate monster shake and toast for everyone
-    showToast(`${data.rollerName} dealt ${totalDamage} damage to ${data.targetName}!`, 'hit');
-    const monsterCard = document.querySelector(`.card[data-monster-id="${targetId}"]`);
-    if (monsterCard) {
-        monsterCard.classList.add('shake');
-        setTimeout(() => monsterCard.classList.remove('shake'), 820);
-    }
-    
-    // Roller gets the modal update
-    if (rollerId !== myId) return;
-    
-    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    clientState.rollResponseTimeout = null;
-
-    const MIN_ANIMATION_TIME = 750; // milliseconds
-
-    setTimeout(() => {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-        clientState.diceAnimationInterval = null;
-        
-        const dieSVG = document.querySelector('#dice-display-container .die-svg');
-        if(dieSVG) {
-            dieSVG.classList.remove('rolling');
-            dieSVG.querySelector('.die-text').textContent = damageRoll;
-            dieSVG.querySelector('.die-shape').style.fill = 'var(--color-special-dark)';
-
-            dieSVG.classList.add('result-glow');
-            setTimeout(() => dieSVG.classList.remove('result-glow'), 1000);
-        }
-
-        setTimeout(() => {
-            const damageLine = document.getElementById('dice-roll-damage-line');
-            damageLine.textContent = `Dealt ${totalDamage} damage!`;
-            document.getElementById('dice-roll-details').textContent = `(Roll: ${damageRoll} + Bonus: ${damageBonus})`;
-            damageLine.classList.remove('hidden');
-
-            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => {
-                document.getElementById('dice-roll-modal').classList.add('hidden');
-            }, 4000);
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-        }, 300);
-    }, MIN_ANIMATION_TIME);
-}
-
-function displaySkillCheckRollResult(data) {
-    const { rollerId, roll, bonus, total, outcome } = data;
-
-    // Show a toast for everyone.
-    showToast(`${data.rollerName}'s skill check... ${total} is a ${outcome}!`, outcome.toLowerCase());
-
-    // Only the roller sees the modal update.
-    if (rollerId !== myId) return;
-
-    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    clientState.rollResponseTimeout = null;
-
-    const MIN_ANIMATION_TIME = 750;
-    setTimeout(() => {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-        clientState.diceAnimationInterval = null;
-
-        const dieSVG = document.querySelector('#dice-display-container .die-svg');
-        if (dieSVG) {
-            dieSVG.classList.remove('rolling');
-            dieSVG.querySelector('.die-text').textContent = roll;
-            dieSVG.querySelector('.die-shape').style.fill = outcome === 'Success' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
-            dieSVG.classList.add('result-glow');
-            setTimeout(() => dieSVG.classList.remove('result-glow'), 1000);
-        }
-
-        setTimeout(() => {
-            const resultContainer = document.getElementById('dice-roll-result-container');
-            const resultLine = document.getElementById('dice-roll-result-line');
-            const detailsLine = document.getElementById('dice-roll-details');
-
-            resultLine.textContent = `${total} - ${outcome.toUpperCase()}!`;
-            resultLine.className = `result-line ${outcome.toLowerCase()}`;
-            detailsLine.textContent = `(Roll: ${roll} + Bonus: ${bonus})`;
-
-            resultContainer.classList.remove('hidden');
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-
-            if (clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => {
-                document.getElementById('dice-roll-modal').classList.add('hidden');
-            }, 3000);
-        }, 300);
-    }, MIN_ANIMATION_TIME);
-}
-
-
-// --- 6. SOCKET.IO EVENT HANDLERS ---
-socket.on('gameStateUpdate', (newState) => {
-    const oldState = currentRoomState;
-    currentRoomState = newState;
-    myId = socket.id;
-
-    // Check for "Your Turn" popup trigger and tutorial
-    const myPlayer = newState.players[myId];
-    if(myPlayer) {
-        const isMyTurnNow = newState.gameState.turnOrder[newState.gameState.currentPlayerIndex] === myId;
-        const wasMyTurnBefore = oldState.gameState ? oldState.gameState.turnOrder[oldState.gameState.currentPlayerIndex] === myId : false;
-        if(isMyTurnNow && !wasMyTurnBefore && !myPlayer.isDowned) {
-            showYourTurnPopup();
-            clientState.hasSeenSkillChallengePrompt = false; // Reset challenge prompt on new turn start
-            // First turn tutorial logic
-            if (!myPlayer.hasTakenFirstTurn) {
-                clientState.isFirstTurnTutorialActive = true;
-                setTimeout(() => showToast("It's your turn! Click an equipped weapon to begin an attack.", "info", 6000), 500);
-            }
-        }
-    }
-
-    renderUI();
-});
-
-socket.on('playerIdentity', ({ playerId, roomId }) => {
-    sessionStorage.setItem('qc_playerId', playerId);
-    sessionStorage.setItem('qc_roomId', roomId);
-});
-
-socket.on('roomClosed', ({ message }) => {
-    showToast(message, 'error');
-    voiceChatManager.leave();
-    setTimeout(() => {
-        sessionStorage.removeItem('qc_roomId');
-        sessionStorage.removeItem('qc_playerId');
-        window.location.reload();
-    }, 3000);
-});
-
-
-socket.on('actionError', (message) => {
-    showToast(message, 'error');
-});
-
-socket.on('diceRollError', () => {
-    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    clientState.diceAnimationInterval = null;
-    clientState.rollResponseTimeout = null;
-    clientState.currentRollData = null;
-    document.getElementById('dice-roll-modal').classList.add('hidden');
-});
-
-socket.on('promptAttackRoll', (data) => {
-    showDiceRollModal(data, 'attack');
-});
-
-socket.on('promptDamageRoll', (data) => {
-    showDiceRollModal(data, 'damage');
-});
-
-socket.on('attackResolved', (data) => {
-    displayAttackRollResult(data);
-});
-
-socket.on('damageResolved', (data) => {
-    displayDamageRollResult(data);
-});
-
-socket.on('promptDiscoveryRoll', (data) => {
-    showDiceRollModal(data, 'discovery');
-});
-
-socket.on('discoveryRollResolved', (data) => {
-    if (data.rollerId !== myId) return;
-
-    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    clientState.rollResponseTimeout = null;
-    
-    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-    clientState.diceAnimationInterval = null;
-
-    const dieSVG = document.querySelector('#dice-display-container .die-svg');
-    if (dieSVG) {
-        dieSVG.classList.remove('rolling');
-        dieSVG.querySelector('.die-text').textContent = data.roll;
-        
-        let outcome = 'A decent find.';
-        let outcomeClass = 'info';
-        if (data.roll <= 10) { outcome = 'A common find.'; outcomeClass = 'miss'; }
-        else if (data.roll <= 15) { outcome = 'An uncommon find!'; outcomeClass = 'hit'; }
-        else if (data.roll <= 19) { outcome = 'A rare find!'; outcomeClass = 'hit'; }
-        else { outcome = 'A legendary find!'; outcomeClass = 'hit'; }
-
-        const resultLine = document.getElementById('dice-roll-result-line');
-        resultLine.textContent = `You rolled a ${data.roll}!`;
-        resultLine.className = `result-line ${outcomeClass}`;
-        document.getElementById('dice-roll-details').textContent = outcome;
-        document.getElementById('dice-roll-result-container').classList.remove('hidden');
-        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-    }
-});
-
-
-socket.on('promptSkillCheckRoll', (data) => {
-    showDiceRollModal(data, 'skillcheck');
-});
-
-socket.on('skillCheckResolved', (data) => {
-    displaySkillCheckRollResult(data);
-});
-
-
-socket.on('promptIndividualDiscovery', (data) => {
-    // If a dice roll modal was open for discovery, close it after a delay
-    if (clientState.currentRollData?.type === 'discovery') {
-        setTimeout(() => {
-            document.getElementById('dice-roll-modal').classList.add('hidden');
-            showDiscoveryModal(data);
-        }, 2000); // Wait 2 seconds to show the roll result before swapping modals
-    } else {
-        showDiscoveryModal(data);
-    }
-});
-
-socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
-    const modal = document.getElementById('choose-discard-modal');
-    const newCardContainer = document.getElementById('new-card-to-discard-container');
-    const handContainer = document.getElementById('hand-cards-to-discard-container');
-    const confirmBtn = document.getElementById('confirm-discard-btn');
-
-    clientState.activeItem = { newCard, selectedCardId: null };
-    confirmBtn.disabled = true;
-
-    newCardContainer.innerHTML = '';
-    handContainer.innerHTML = '';
-
-    const newCardEl = createCardElement(newCard);
-    newCardEl.onclick = () => {
-        document.querySelectorAll('.discard-choice-section .card').forEach(c => c.classList.remove('selected-for-discard'));
-        newCardEl.classList.add('selected-for-discard');
-        clientState.activeItem.selectedCardId = newCard.id;
-        confirmBtn.disabled = false;
+    const actionMap = {
+        attack: 'resolveAttackRoll',
+        damage: 'resolveDamageRoll',
+        discovery: 'resolveDiscoveryRoll',
+        skillcheck: 'resolveSkillCheckRoll'
     };
-    newCardContainer.appendChild(newCardEl);
+    const action = actionMap[clientState.currentRollData.type];
+    if (action) {
+        socket.emit('playerAction', { action, ...payload });
+    }
+}
 
-    currentHand.forEach(card => {
-        const cardEl = createCardElement(card);
-        cardEl.onclick = () => {
-            document.querySelectorAll('.discard-choice-section .card').forEach(c => c.classList.remove('selected-for-discard'));
-            cardEl.classList.add('selected-for-discard');
-            clientState.activeItem.selectedCardId = card.id;
-            confirmBtn.disabled = false;
-        };
-        handContainer.appendChild(cardEl);
+// --- 6. SOCKET EVENT HANDLERS ---
+function initializeSocketListeners() {
+    socket.on('gameStateUpdate', (newState) => {
+        currentRoomState = newState;
+        renderUI();
     });
 
-    modal.classList.remove('hidden');
-});
+    socket.on('actionError', (message) => showToast(message, 'error'));
+    socket.on('diceRollError', () => {
+         const modal = document.getElementById('dice-roll-modal');
+        if (!modal.classList.contains('hidden')) {
+            document.getElementById('dice-roll-confirm-btn').disabled = false;
+            document.getElementById('dice-roll-confirm-btn').textContent = 'Roll Dice';
+            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+        }
+    });
 
-// Voice Chat Signaling Handlers
-socket.on('existing-voice-chatters', (chatterIds) => {
-    chatterIds.forEach(id => voiceChatManager.addPeer(id, true));
-});
-socket.on('new-voice-chatter', (chatterId) => {
-    voiceChatManager.addPeer(chatterId, true);
-});
-socket.on('voice-chatter-left', (chatterId) => {
-    voiceChatManager.removePeer(chatterId);
-});
-socket.on('webrtc-signal', (data) => {
-    voiceChatManager.handleSignal(data);
-});
+    socket.on('playerIdentity', ({ playerId, roomId }) => {
+        myId = socket.id;
+        sessionStorage.setItem('qc_playerId', playerId);
+        sessionStorage.setItem('qc_roomId', roomId);
+    });
 
+    socket.on('roomClosed', ({ message }) => {
+        showToast(message, 'error', 5000);
+        sessionStorage.removeItem('qc_roomId');
+        sessionStorage.removeItem('qc_playerId');
+        setTimeout(() => window.location.reload(), 3000);
+    });
 
-// --- INITIALIZE ---
-initializeUI();
+    socket.on('turnStarted', ({ playerId }) => {
+        if (playerId === myId) {
+            clientState.isFirstTurnTutorialActive = !currentRoomState.players[myId]?.hasTakenFirstTurn;
+            showYourTurnPopup();
+            clientState.hasSeenSkillChallengePrompt = false; // Reset for my turn
+             if (clientState.isFirstTurnTutorialActive) {
+                setTimeout(() => {
+                    showToast("It's your first turn! Select a weapon from your equipped items below.", "info", 6000);
+                }, 2500);
+            }
+        }
+    });
+    
+    socket.on('promptAttackRoll', (data) => showDiceRollModal(data, 'attack'));
+    socket.on('promptDamageRoll', (data) => showDiceRollModal(data, 'damage'));
+    socket.on('promptDiscoveryRoll', (data) => showDiceRollModal(data, 'discovery'));
+    socket.on('promptSkillCheckRoll', (data) => showDiceRollModal(data, 'skillcheck'));
+    
+    socket.on('attackResolved', (result) => {
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        
+        const container = document.getElementById('dice-display-container');
+        container.innerHTML = createDieSVG(20, result.roll);
+
+        const resultLine = document.getElementById('dice-roll-result-line');
+        resultLine.textContent = result.outcome.toUpperCase() + '!';
+        resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
+        
+        document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+
+        if (result.outcome === 'Miss') {
+            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+        }
+    });
+
+    socket.on('damageResolved', (result) => {
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        
+        const sides = result.damageDice.split('d')[1];
+        document.getElementById('dice-display-container').innerHTML = createDieSVG(sides, result.damageRoll);
+        document.getElementById('dice-display-container').querySelector('.die-svg').classList.add('result-glow');
+
+        document.getElementById('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
+        document.getElementById('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
+        
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+        
+        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+        clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+
+        const targetCard = document.querySelector(`.card[data-monster-id="${result.targetId}"]`);
+        if (targetCard) {
+            targetCard.classList.add('shake');
+            setTimeout(() => targetCard.classList.remove('shake'), 820);
+        }
+    });
+    
+     socket.on('discoveryRollResolved', (result) => {
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        const container = document.getElementById('dice-display-container');
+        container.innerHTML = createDieSVG(20, result.roll);
+        container.querySelector('.die-svg').classList.add('result-glow');
+
+        let fortuneText = 'A decent find.';
+        if (result.roll <= 10) fortuneText = 'A common find.';
+        else if (result.roll <= 15) fortuneText = 'An uncommon find!';
+        else if (result.roll <= 19) fortuneText = 'A rare find!';
+        else fortuneText = 'A legendary find!';
+
+        document.getElementById('dice-roll-result-line').textContent = fortuneText;
+        document.getElementById('dice-roll-details').textContent = `You rolled a ${result.roll}.`;
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+
+        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+        // Wait longer before closing to show result, then the next modal will appear.
+        clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 2000);
+    });
+
+    socket.on('skillCheckResolved', (result) => {
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        const container = document.getElementById('dice-display-container');
+        container.innerHTML = createDieSVG(20, result.roll);
+        container.querySelector('.die-svg').classList.add('result-glow');
+
+        const resultLine = document.getElementById('dice-roll-result-line');
+        resultLine.textContent = result.outcome.toUpperCase() + '!';
+        resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
+        document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+
+        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+        clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+    });
+
+    socket.on('promptIndividualDiscovery', (data) => {
+        showDiscoveryModal(data);
+    });
+
+    socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
+        const modal = document.getElementById('choose-discard-modal');
+        const newCardContainer = document.getElementById('new-card-to-discard-container');
+        const handContainer = document.getElementById('hand-cards-to-discard-container');
+        const confirmBtn = document.getElementById('confirm-discard-btn');
+
+        clientState.activeItem = { newCard, currentHand, selectedCardId: null };
+        confirmBtn.disabled = true;
+
+        newCardContainer.innerHTML = '';
+        handContainer.innerHTML = '';
+        
+        const handleSelection = (cardEl, cardId) => {
+            modal.querySelectorAll('.card').forEach(c => c.classList.remove('selected-for-discard'));
+            cardEl.classList.add('selected-for-discard');
+            clientState.activeItem.selectedCardId = cardId;
+            confirmBtn.disabled = false;
+        };
+
+        const newCardEl = createCardElement(newCard);
+        newCardEl.onclick = () => handleSelection(newCardEl, newCard.id);
+        newCardContainer.appendChild(newCardEl);
+
+        currentHand.forEach(card => {
+            const cardEl = createCardElement(card);
+            cardEl.onclick = () => handleSelection(cardEl, card.id);
+            handContainer.appendChild(cardEl);
+        });
+
+        modal.classList.remove('hidden');
+    });
+
+    // Voice Chat Listeners
+    socket.on('existing-voice-chatters', (chatterIds) => {
+        chatterIds.forEach(id => voiceChatManager.addPeer(id, true));
+    });
+    socket.on('new-voice-chatter', (chatterId) => {
+        voiceChatManager.addPeer(chatterId, false);
+        showToast('A player joined voice chat.', 'info');
+    });
+    socket.on('voice-chatter-left', (chatterId) => {
+        voiceChatManager.removePeer(chatterId);
+    });
+    socket.on('webrtc-signal', (payload) => {
+        voiceChatManager.handleSignal(payload);
+    });
+}
+// --- 7. APP INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    initializeUI();
+    initializeSocketListeners();
+});

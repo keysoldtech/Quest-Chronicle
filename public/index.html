@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.0.2 - Discovery Roll Update</p>
+            <p class="build-number-font-menu">v9.0.5 - Client Stability Fix</p>
         </div>
     </div>
     
@@ -118,6 +118,15 @@
                 <header class="game-header">
                     <div class="header-info">
                          <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
+                         <div id="party-hope-meter-desktop" class="party-hope-meter hidden">
+                            <span class="material-symbols-outlined">stars</span>
+                            <div class="progress-bar-wrapper">
+                                <div class="progress-bar hope">
+                                    <div id="party-hope-bar-desktop" class="progress-bar-fill"></div>
+                                </div>
+                                <span id="party-hope-text-desktop" class="progress-bar-text"></span>
+                            </div>
+                        </div>
                          <div id="header-player-stats" class="hidden">
                              <div class="player-health-bar-container">
                                  <span class="material-symbols-outlined">favorite</span>
@@ -133,7 +142,7 @@
                          <p class="turn-counter">Round: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v9.0.2 - Discovery Roll Update</p>
+                        <p class="build-number-font">v9.0.5 - Client Stability Fix</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -217,6 +226,10 @@
                 <header class="mobile-header">
                     <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
                     <div class="mobile-resources">
+                        <div id="party-hope-meter-mobile" class="party-hope-meter mobile hidden">
+                            <span class="material-symbols-outlined">stars</span>
+                            <span id="party-hope-text-mobile"></span>
+                        </div>
                         <div id="mobile-header-player-stats">
                              <div class="player-health-bar-container mobile">
                                  <span class="material-symbols-outlined">favorite</span>
@@ -498,7 +511,7 @@
                 </div>
                 <div class="help-navigation">
                     <button id="help-prev-btn" class="btn btn-secondary">Previous</button>
-                    <span id="help-page-indicator">Page 1 / 5</span>
+                    <span id="help-page-indicator">Page 1 / 7</span>
                     <button id="help-next-btn" class="btn btn-secondary">Next</button>
                 </div>
             </div>

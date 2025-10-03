@@ -178,12 +178,13 @@ class GameManager {
                 discardPile: [],
                 turnOrder: [],
                 currentPlayerIndex: -1,
-                board: { monsters: [] },
+                board: { monsters: [], environment: [] },
                 lootPool: [],
                 turnCount: 0,
+                partyHope: 5, // Starts at neutral
                 worldEvents: { currentEvent: null, duration: 0 },
                 currentPartyEvent: null,
-                skillChallenge: { isActive: false, details: null },
+                skillChallenge: { isActive: false, details: null, currentStage: 0, targetId: null },
                 isPaused: false,
                 pauseReason: '',
             },
@@ -251,7 +252,7 @@ class GameManager {
         
         // Finalize stats and set initial health/AP for everyone
         Object.values(room.players).forEach(p => {
-            p.stats = this.calculatePlayerStats(p);
+            p.stats = this.calculatePlayerStats(p, room.gameState.partyHope);
             p.stats.currentHp = p.stats.maxHp;
             p.currentAp = p.stats.ap;
         });
@@ -273,7 +274,7 @@ class GameManager {
         const player = room?.players[socket.id];
         if (!room || !player || player.class || room.gameState.phase !== 'class_selection') return;
 
-        this.assignClassToPlayer(player, classId);
+        this.assignClassToPlayer(player, classId, room.gameState.partyHope);
         this.emitGameState(room.id);
     }
     
@@ -293,7 +294,7 @@ class GameManager {
             const npc = this.createPlayerObject(npcId, name, true);
             npc.role = 'Explorer';
             const randomClassId = availableClasses[Math.floor(Math.random() * availableClasses.length)];
-            this.assignClassToPlayer(npc, randomClassId);
+            this.assignClassToPlayer(npc, randomClassId, room.gameState.partyHope);
             room.players[npc.id] = npc;
         }
     }
@@ -308,6 +309,7 @@ class GameManager {
             weapon: shuffle(createDeck(gameData.weaponCards)),
             armor: shuffle(createDeck(gameData.armorCards)),
             worldEvent: shuffle(createDeck(gameData.worldEventCards)),
+            environmental: shuffle(createDeck(gameData.environmentalCards)),
             partyEvent: shuffle(createDeck(gameData.partyEventCards)),
             monster: {
                 tier1: shuffle(createDeck(gameData.monsterTiers.tier1)),
@@ -404,19 +406,19 @@ class GameManager {
     }
 
     // --- 3.4. Player Setup ---
-    assignClassToPlayer(player, classId) {
+    assignClassToPlayer(player, classId, partyHope) {
         const classData = gameData.classes[classId];
         if (!classData || !player) return;
         player.class = classId;
-        player.stats = this.calculatePlayerStats(player);
+        player.stats = this.calculatePlayerStats(player, partyHope);
     }
     
     /**
      * Recalculates all of a player's stats from scratch.
      * This is the single source of truth for player stats, called whenever equipment or status effects change.
-     * Order of operations: Class Base Stats -> Equipment Bonuses -> Status Effect Bonuses.
+     * Order of operations: Class Base Stats -> Equipment Bonuses -> Status Effect Bonuses -> Hope Bonuses.
      */
-    calculatePlayerStats(player) {
+    calculatePlayerStats(player, partyHope) {
         const initialStats = { maxHp: 0, currentHp: player.stats.currentHp || 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: player.stats.shieldHp || 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0, hitBonus: 0 };
         if (!player.class) {
             player.baseStats = {};
@@ -456,6 +458,10 @@ class GameManager {
         allStatKeys.forEach(key => {
             totalStats[key] = (baseStats[key] || 0) + (bonuses[key] || 0);
         });
+
+        // 4. Apply Party Hope bonus/penalty
+        if (partyHope >= 9) totalStats.hitBonus += 1; // Inspired
+        else if (partyHope <= 2) totalStats.hitBonus -= 1; // Despairing
     
         totalStats.maxAP = totalStats.ap;
         totalStats.currentHp = player.stats.currentHp > 0 ? Math.min(player.stats.currentHp, totalStats.maxHp) : totalStats.maxHp;
@@ -500,7 +506,7 @@ class GameManager {
         
         // Equip the new item.
         player.equipment[itemType] = cardToEquip;
-        player.stats = this.calculatePlayerStats(player); // Recalculate stats with new item
+        player.stats = this.calculatePlayerStats(player, room.gameState.partyHope); // Recalculate stats with new item
         this.emitGameState(room.id);
     }
     
@@ -513,7 +519,7 @@ class GameManager {
         if (!player) return;
     
         // Refresh stats and AP at the start of the turn.
-        player.stats = this.calculatePlayerStats(player);
+        player.stats = this.calculatePlayerStats(player, room.gameState.partyHope);
         player.currentAp = player.stats.maxAP;
         player.usedAbilityThisTurn = false;
 
@@ -530,10 +536,12 @@ class GameManager {
         }
     
         // If there's an active world event, activate the skill challenge phase for the player
-        if (room.gameState.worldEvents.currentEvent?.eventType === 'skill_challenge') {
+        if (room.gameState.worldEvents.currentEvent?.eventType.includes('skill_challenge')) {
             room.gameState.skillChallenge = {
                 isActive: true,
-                details: room.gameState.worldEvents.currentEvent
+                details: room.gameState.worldEvents.currentEvent,
+                currentStage: 0,
+                targetId: null
             };
         }
 
@@ -541,15 +549,23 @@ class GameManager {
     
         // If the current player is an NPC, trigger their AI logic.
         if (player.isNpc) {
-            await new Promise(res => setTimeout(res, 1500)); // Pause for dramatic effect
-            if (player.role === 'DM') {
-                await this.handleDmTurn(room);
-            } else {
-                await this.handleNpcExplorerTurn(room, player);
-            }
-            // End the NPC's turn automatically after they've acted.
-            if(room.gameState.phase === 'started') {
-                this.endCurrentTurn(roomId);
+            try {
+                await new Promise(res => setTimeout(res, 1500)); // Pause for dramatic effect
+                if (player.role === 'DM') {
+                    await this.handleDmTurn(room);
+                } else {
+                    await this.handleNpcExplorerTurn(room, player);
+                }
+                // End the NPC's turn automatically after they've acted.
+                if(room.gameState.phase === 'started') {
+                    this.endCurrentTurn(roomId);
+                }
+            } catch (error) {
+                console.error(`[CRITICAL] Error during AI turn for ${player.name} (${player.id}):`, error);
+                // Even if AI fails, end its turn to not block the game.
+                if(room.gameState.phase === 'started') {
+                    this.endCurrentTurn(roomId);
+                }
             }
         }
     }
@@ -643,27 +659,50 @@ class GameManager {
                 room.gameState.worldEvents.currentEvent = eventCard;
                 room.gameState.worldEvents.duration = eventCard.duration || 2;
                 room.chatLog.push({ type: 'dm', text: `A strange event unfolds: ${eventCard.name}!`, timestamp: Date.now() });
-                room.chatLog.push({ type: 'system', text: eventCard.description, timestamp: Date.now() });
+                room.chatLog.push({ type: 'system', text: eventCard.description || eventCard.stages[0].description, timestamp: Date.now() });
                 this.emitGameState(room.id);
                 await new Promise(res => setTimeout(res, 1500));
             }
         }
         
-        // 3. Monster Spawning: Keep at least 2 monsters on the board.
+        // 3. Spawn Environmental Object Check: 25% chance to spawn if none exist.
+        if (room.gameState.board.environment.length === 0 && Math.random() < 0.25) {
+            const envCardData = this.drawCardFromDeck(room.id, 'environmental');
+            if (envCardData) {
+                const envCardInstance = { ...envCardData, id: this.generateUniqueCardId() };
+                room.gameState.board.environment.push(envCardInstance);
+                room.chatLog.push({ type: 'dm', text: `The party notices a ${envCardInstance.name} in the room.`, timestamp: Date.now() });
+                this.emitGameState(room.id);
+                await new Promise(res => setTimeout(res, 1000));
+            }
+        }
+
+        // 4. Monster Spawning: Keep at least 2 monsters on the board.
         if (room.gameState.board.monsters.length < 2) {
-            const monsterCard = this.drawCardFromDeck(room.id, 'monster.tier1');
-            if (monsterCard) {
-                monsterCard.currentHp = monsterCard.maxHp;
-                monsterCard.statusEffects = [];
-                room.gameState.board.monsters.push(monsterCard);
+            const monsterData = this.drawCardFromDeck(room.id, 'monster.tier1');
+            if (monsterData) {
+                const monsterInstance = { 
+                    ...monsterData, 
+                    id: this.generateUniqueCardId(), // Assign a unique instance ID
+                    currentHp: monsterData.maxHp, 
+                    statusEffects: [] 
+                };
+                room.gameState.board.monsters.push(monsterInstance);
                 room.chatLog.push({ type: 'dm', text: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)], timestamp: Date.now() });
                 this.emitGameState(room.id);
                 await new Promise(res => setTimeout(res, 1000));
             }
         }
 
-        // 4. Monster Attacks: Each monster attacks a random, living explorer.
+        // 5. Monster Attacks: Each monster attacks a random, living explorer.
         for (const monster of room.gameState.board.monsters) {
+            if (monster.statusEffects.some(e => ['Stunned', 'Frightened'].includes(e.name))) {
+                room.chatLog.push({ type: 'combat', text: `${monster.name} is ${monster.statusEffects[0].name} and cannot act!`, timestamp: Date.now() });
+                this.emitGameState(room.id);
+                await new Promise(res => setTimeout(res, 1500));
+                continue;
+            }
+
             const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isDowned && !p.disconnected);
             if (livingExplorers.length > 0) {
                 const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
@@ -678,7 +717,7 @@ class GameManager {
                 if (outcome === 'Hit') {
                     const damageRoll = this.rollDice(monster.effect.dice);
                     const totalDamage = damageRoll + (monster.damageBonus || 0);
-                    this.applyDamage(target, totalDamage);
+                    this.applyDamage(room, target, totalDamage);
                     room.chatLog.push({ type: 'combat-hit', text: `${monster.name} dealt ${totalDamage} damage to ${target.name}.`, timestamp: Date.now() });
                 }
 
@@ -701,6 +740,11 @@ class GameManager {
                 const totalRoll = hitRoll + npc.stats.hitBonus;
                 const targetAC = targetMonster.requiredRollToHit;
                 
+                if (hitRoll === 20) { // NPC Crits
+                    room.gameState.partyHope = Math.min(10, room.gameState.partyHope + 1);
+                    room.chatLog.push({ type: 'system-good', text: `CRITICAL HIT! Party Hope increases!`, timestamp: Date.now() });
+                }
+
                 const outcome = totalRoll >= targetAC ? 'Hit' : 'Miss';
                 room.chatLog.push({ type: 'combat', text: `${npc.name} attacks ${targetMonster.name} with ${weapon.name}... Rolled a ${totalRoll}. It's a ${outcome}!`, timestamp: Date.now() });
 
@@ -725,6 +769,12 @@ class GameManager {
             const defeatedMonster = room.gameState.board.monsters.splice(monsterIndex, 1)[0];
             room.chatLog.push({ type: 'dm', text: `${defeatedMonster.name} has been defeated!`, timestamp: Date.now() });
             
+            // If it was a boss, increase Party Hope
+            if (defeatedMonster.isBoss) {
+                room.gameState.partyHope = Math.min(10, room.gameState.partyHope + 2);
+                room.chatLog.push({ type: 'system-good', text: `The party defeated a powerful foe! Party Hope surges!`, timestamp: Date.now() });
+            }
+
             // Check for loot drop based on room settings.
             const lootDropChance = room.settings.lootDropRate || 80;
             if (Math.random() * 100 < lootDropChance) {
@@ -778,6 +828,7 @@ class GameManager {
             'useAbility': this.resolveUseAbility,
             'resolveSkillCheck': this.resolveSkillCheck,
             'resolveSkillCheckRoll': this.resolveSkillCheckRoll,
+            'resolveSkillInteraction': this.resolveSkillInteraction,
         };
     
         const actionHandler = actions[payload.action];
@@ -835,6 +886,12 @@ class GameManager {
             const hitBonus = player.stats.hitBonus || 0;
             const hitRoll = this.rollDice('1d20');
             const totalRoll = hitRoll + hitBonus;
+            
+            if (hitRoll === 20) { // Critical Hit!
+                room.gameState.partyHope = Math.min(10, room.gameState.partyHope + 1);
+                room.chatLog.push({ type: 'system-good', text: `${player.name} landed a CRITICAL HIT! Party Hope increases!`, timestamp: Date.now() });
+            }
+
             const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
             
             const resultPayload = {
@@ -913,7 +970,7 @@ class GameManager {
 
 
     // Applies damage, accounting for shield HP first.
-    applyDamage(target, damageAmount) {
+    applyDamage(room, target, damageAmount) {
         if (!target || target.isDowned) return;
 
         const shieldDamage = Math.min(damageAmount, target.stats.shieldHp);
@@ -925,6 +982,11 @@ class GameManager {
         if (target.stats.currentHp <= 0) {
             target.stats.currentHp = 0;
             target.isDowned = true;
+            // If a player is downed, reduce Party Hope
+            if (target.role === 'Explorer') {
+                room.gameState.partyHope = Math.max(0, room.gameState.partyHope - 1);
+                room.chatLog.push({ type: 'system-bad', text: `${target.name} has been downed! Party Hope falters.`, timestamp: Date.now() });
+            }
         }
     }
     
@@ -1210,34 +1272,72 @@ class GameManager {
         // Reset state and recalculate stats
         player.isResolvingDiscovery = false;
         player.discoveryItem = null;
-        player.stats = this.calculatePlayerStats(player);
+        player.stats = this.calculatePlayerStats(player, room.gameState.partyHope);
+        this.emitGameState(room.id);
+    }
+
+    resolveSkillInteraction(room, player, { cardId, interactionName }, socket) {
+        const allBoardCards = [...room.gameState.board.monsters, ...room.gameState.board.environment];
+        const sourceCard = allBoardCards.find(c => c.id === cardId);
+        if (!sourceCard || !sourceCard.skillInteractions) return;
+
+        const interaction = sourceCard.skillInteractions.find(i => i.name === interactionName);
+        if (!interaction) return;
+
+        if (player.currentAp < interaction.apCost) return socket.emit('actionError', "Not enough AP.");
+        player.currentAp -= interaction.apCost;
+
+        // If it's a multi-stage challenge embedded in an interaction (like a trapped chest)
+        if (interaction.eventType === 'multi_stage_skill_challenge') {
+            room.gameState.skillChallenge = {
+                isActive: true,
+                details: interaction,
+                currentStage: 0,
+                targetId: cardId // Link the challenge to the source card
+            };
+            this.resolveSkillCheck(room, player, { apCost: 0 }, socket); // Start the challenge, no extra AP cost
+            return;
+        }
+
+        const bonus = player.stats[interaction.skill] || 0;
+        socket.emit('promptSkillCheckRoll', {
+            title: interactionName,
+            description: `Attempting to ${interactionName} the ${sourceCard.name}.`,
+            dice: '1d20',
+            bonus,
+            targetAC: interaction.dc,
+            skill: interaction.skill,
+            interactionData: { cardId, interactionName } // Pass context for resolution
+        });
         this.emitGameState(room.id);
     }
     
-    resolveSkillCheck(room, player, _, socket) {
+    resolveSkillCheck(room, player, { apCost = 1 }, socket) {
         if (!room.gameState.skillChallenge.isActive) return;
         const challenge = room.gameState.skillChallenge.details;
         
-        if (player.currentAp < 1) return socket.emit('actionError', "Not enough AP to attempt the challenge.");
-        player.currentAp -= 1;
+        if (player.currentAp < apCost) return socket.emit('actionError', "Not enough AP to attempt the challenge.");
+        if (apCost > 0) player.currentAp -= apCost;
         
-        let hasAdvantage = false;
-        const relevantItem = player.hand.find(card => card.relevantSkill && card.relevantSkill === challenge.skill);
-        if (relevantItem) {
-            hasAdvantage = true;
-        }
+        const currentStage = room.gameState.skillChallenge.currentStage;
+        const stageDetails = challenge.eventType === 'multi_stage_skill_challenge' ? challenge.stages[currentStage] : challenge;
 
-        const bonus = player.stats[challenge.skill] || 0;
+        let hasAdvantage = false;
+        const relevantItem = player.hand.find(card => card.relevantSkill && card.relevantSkill === stageDetails.skill);
+        if (relevantItem) hasAdvantage = true;
+
+        const bonus = player.stats[stageDetails.skill] || 0;
         
         socket.emit('promptSkillCheckRoll', {
             title: `Skill Challenge: ${challenge.name}`,
-            description: challenge.description,
+            description: stageDetails.description,
             dice: '1d20',
             bonus,
-            targetAC: challenge.dc,
+            targetAC: stageDetails.dc,
             hasAdvantage,
-            skill: challenge.skill,
-            relevantItemName: relevantItem ? relevantItem.name : null
+            skill: stageDetails.skill,
+            relevantItemName: relevantItem ? relevantItem.name : null,
+            interactionData: room.gameState.skillChallenge.targetId ? { cardId: room.gameState.skillChallenge.targetId } : null
         });
 
         this.emitGameState(room.id);
@@ -1245,51 +1345,99 @@ class GameManager {
 
     resolveSkillCheckRoll(room, player, payload, socket) {
         const challenge = room.gameState.skillChallenge.details;
-        if (!challenge || !room.gameState.skillChallenge.isActive) return;
+        if (!challenge) return;
 
-        let roll;
-        let advantageText = '';
+        let roll, advantageText = '';
         if (payload.hasAdvantage) {
-            const roll1 = this.rollDice('1d20');
-            const roll2 = this.rollDice('1d20');
+            const [roll1, roll2] = [this.rollDice('1d20'), this.rollDice('1d20')];
             roll = Math.max(roll1, roll2);
-            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage on the check! (Rolled ${roll1}, ${roll2})`, timestamp: Date.now() });
+            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage! (Rolled ${roll1}, ${roll2})`, timestamp: Date.now() });
             advantageText = ' w/ Adv';
         } else {
             roll = this.rollDice('1d20');
         }
+
+        const isInteraction = payload.interactionData;
+        const sourceCardId = isInteraction ? payload.interactionData.cardId : room.gameState.skillChallenge.targetId;
+        const currentStageIndex = room.gameState.skillChallenge.currentStage;
+
+        const stageDetails = isInteraction 
+            ? gameData.allMonsters[sourceCardId]?.skillInteractions.find(i => i.name === payload.interactionData.interactionName) || 
+              gameData.environmentalCards.find(c => c.id === sourceCardId)?.skillInteractions.find(i => i.name === payload.interactionData.interactionName)
+            : challenge.eventType === 'multi_stage_skill_challenge' 
+            ? challenge.stages[currentStageIndex] 
+            : challenge;
         
-        const statBonus = player.stats[challenge.skill] || 0;
+        if (!stageDetails) { console.error("Could not find stage details for skill check."); return; }
+
+        const statBonus = player.stats[stageDetails.skill] || 0;
         const total = roll + statBonus;
-        const outcome = total >= challenge.dc ? 'Success' : 'Failure';
+        const outcome = total >= stageDetails.dc ? 'Success' : 'Failure';
+        
+        const effect = outcome === 'Success' ? stageDetails.success : stageDetails.failure;
 
-        if (outcome === 'Success') {
-            room.chatLog.push({ type: 'system-good', text: `${player.name} succeeds the skill check! (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc})`, timestamp: Date.now() });
-            const lootCard = this.generateLoot(room.id, player.class);
-            if (lootCard) {
-                room.gameState.lootPool.push(lootCard);
-                room.chatLog.push({ type: 'system-good', text: `Their insight reveals a hidden treasure: a ${lootCard.name}!`, timestamp: Date.now() });
-            }
+        room.chatLog.push({ type: 'system', text: `${player.name} attempts ${challenge.name}... (Roll: ${roll}${advantageText} + ${statBonus} ${stageDetails.skill.toUpperCase()} = ${total} vs DC ${stageDetails.dc}) - ${outcome}!`, timestamp: Date.now() });
+        if (effect.text) room.chatLog.push({ type: outcome === 'Success' ? 'system-good' : 'system-bad', text: effect.text, timestamp: Date.now() });
+
+        // Apply effect
+        this.applySkillCheckEffect(room, player, effect, sourceCardId);
+
+        // Handle multi-stage progression
+        const isMultiStage = challenge.eventType === 'multi_stage_skill_challenge';
+        if (isMultiStage && outcome === 'Success' && currentStageIndex < challenge.stages.length - 1) {
+            room.gameState.skillChallenge.currentStage++;
+            const nextStage = challenge.stages[room.gameState.skillChallenge.currentStage];
+            room.chatLog.push({ type: 'system', text: `Next stage: ${nextStage.description}`, timestamp: Date.now() });
+            // Re-trigger the check for the next stage automatically
+            this.resolveSkillCheck(room, player, { apCost: 0 }, socket);
         } else {
-            const damage = this.rollDice('1d6');
-            this.applyDamage(player, damage);
-            room.chatLog.push({ type: 'system-bad', text: `${player.name} fails the skill check (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc}) and takes ${damage} damage!`, timestamp: Date.now() });
+            // End the challenge
+            room.gameState.skillChallenge.isActive = false;
+            room.gameState.skillChallenge.details = null;
+            if (challenge.type === 'World Event') room.gameState.worldEvents.currentEvent = null;
         }
-        
-        io.to(room.id).emit('skillCheckResolved', {
-             rollerId: player.id,
-             rollerName: player.name,
-             roll,
-             bonus: statBonus,
-             total,
-             targetAC: challenge.dc,
-             outcome,
-        });
 
-        room.gameState.skillChallenge.isActive = false;
-        room.gameState.worldEvents.currentEvent = null; // Event is resolved
-        
+        io.to(room.id).emit('skillCheckResolved', { rollerId: player.id, rollerName: player.name, roll, bonus: statBonus, total, targetAC: stageDetails.dc, outcome });
         this.emitGameState(room.id);
+    }
+    
+    applySkillCheckEffect(room, player, effect, sourceCardId) {
+        if (!effect) return;
+        switch (effect.type) {
+            case 'damage':
+            case 'self_damage':
+                this.applyDamage(room, player, this.rollDice(effect.value));
+                break;
+            case 'aoe_damage':
+                room.gameState.board.monsters.forEach(monster => {
+                    monster.currentHp -= this.rollDice(effect.value);
+                    if (monster.currentHp <= 0) this.handleMonsterDefeated(room, monster.id, player.id);
+                });
+                break;
+            case 'loot':
+                const lootCard = this.generateLoot(room.id, player.class);
+                if (lootCard) {
+                    room.gameState.lootPool.push(lootCard);
+                    room.chatLog.push({ type: 'system-good', text: `The party found a ${lootCard.name}!`, timestamp: Date.now() });
+                }
+                break;
+            case 'status_effect':
+                const target = room.gameState.board.monsters.find(m => m.id === sourceCardId);
+                if (target) {
+                    target.statusEffects.push({ name: effect.effect, duration: effect.duration });
+                }
+                break;
+            case 'apply_vulnerability':
+                // This is a special, temporary effect. We'll add it directly to the monster.
+                const monsterTarget = room.gameState.board.monsters.find(m => m.id === sourceCardId);
+                if(monsterTarget) {
+                    monsterTarget.statusEffects.push({ name: 'Vulnerable', duration: 2, description: 'Next attack has advantage.' });
+                }
+                break;
+            case 'none':
+            default:
+                break;
+        }
     }
 
 
