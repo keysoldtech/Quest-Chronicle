@@ -1487,17 +1487,13 @@ function handleDiceRoll() {
     
     const [, sides] = clientState.currentRollData.dice.split('d').map(Number);
 
-    // Start a slower, more deliberate animation that will run until the server responds.
     clientState.diceAnimationInterval = setInterval(() => {
         const randomValue = Math.floor(Math.random() * sides) + 1;
         svg.querySelector('.die-text').textContent = randomValue;
     }, 150);
     
-    // Send appropriate socket event based on roll type
-    const payload = { ...clientState.currentRollData };
-    delete payload.type; // Remove internal type property
-    delete payload.title;
-    delete payload.description;
+    // Use destructuring to create a clean payload for the server, excluding client-only data.
+    const { type, title, description, ...actionPayload } = clientState.currentRollData;
 
     const actionMap = {
         attack: 'resolveAttackRoll',
@@ -1505,9 +1501,10 @@ function handleDiceRoll() {
         discovery: 'resolveDiscoveryRoll',
         skillcheck: 'resolveSkillCheckRoll'
     };
-    const action = actionMap[clientState.currentRollData.type];
+    
+    const action = actionMap[type];
     if (action) {
-        socket.emit('playerAction', { action, ...payload });
+        socket.emit('playerAction', { action, ...actionPayload });
     }
 }
 

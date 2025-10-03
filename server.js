@@ -537,6 +537,8 @@ class GameManager {
         player.currentAp = player.stats.maxAP;
         player.usedAbilityThisTurn = false;
 
+        io.to(player.id).emit('turnStarted', { playerId: player.id });
+
         // Mark first turn as taken for tutorial purposes
         if (!player.hasTakenFirstTurn) {
             player.hasTakenFirstTurn = true;
@@ -624,16 +626,14 @@ class GameManager {
     
         // --- Find Next Player ---
         let nextIndex, attempts = 0;
-        // Skip over any players who are downed or disconnected.
+        let nextPlayer;
         do {
             nextIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             const nextPlayerId = room.gameState.turnOrder[nextIndex];
-            const nextPlayer = room.players[nextPlayerId];
-            if (nextPlayer && !nextPlayer.isDowned && !nextPlayer.disconnected) {
-                break; // Found a valid player
-            }
+            nextPlayer = room.players[nextPlayerId];
+            room.gameState.currentPlayerIndex = nextIndex; // Move index forward
             attempts++;
-        } while (attempts <= room.gameState.turnOrder.length)
+        } while ((!nextPlayer || nextPlayer.isDowned || nextPlayer.disconnected) && attempts <= room.gameState.turnOrder.length)
 
         // If all explorers are downed, the game is over.
         const allExplorersDown = Object.values(room.players)
@@ -646,8 +646,7 @@ class GameManager {
             this.emitGameState(roomId);
             return;
         }
-
-        room.gameState.currentPlayerIndex = nextIndex;
+        
         if (nextIndex === 0) room.gameState.turnCount++; // Increment turn count when DM's turn starts.
     
         this.startTurn(roomId);
@@ -813,19 +812,17 @@ class GameManager {
     handlePlayerAction(socket, payload) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-        if (!room || !player || player.isDowned || room.gameState.isPaused) return;
-
-        // Block most actions if the player is in the middle of a discovery.
-        if (player.isResolvingDiscovery && !['resolveDiscovery', 'resolveDiscoveryRoll'].includes(payload.action)) {
-            return socket.emit('actionError', 'You must resolve your discovery first.');
+    
+        // --- 1. Initial Validation ---
+        if (!room || !player) {
+            console.error(`[CRITICAL] Action from socket ${socket.id} with no room/player data.`);
+            return;
         }
-        
-        const isMyTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === player.id;
-        // Allow certain actions (claiming loot, discarding for new cards) even when it's not your turn.
-        if (!isMyTurn && !['chooseNewCardDiscard', 'claimLoot', 'resolveDiscovery', 'resolveDiscoveryRoll'].includes(payload.action)) {
-            return socket.emit('actionError', "It's not your turn.");
+        if (player.isDowned || room.gameState.isPaused) {
+            return; // Silently ignore actions if player is downed or game is paused.
         }
     
+        // --- 2. Action Mapping & Validation ---
         const actions = {
             'attack': this.resolveAttack,
             'resolveAttackRoll': this.resolveAttackRoll,
@@ -844,10 +841,39 @@ class GameManager {
             'resolveSkillCheckRoll': this.resolveSkillCheckRoll,
             'resolveSkillInteraction': this.resolveSkillInteraction,
         };
-    
         const actionHandler = actions[payload.action];
-        if (actionHandler) {
+    
+        if (!actionHandler) {
+            console.warn(`[WARN] Received unhandled action: '${payload.action}' from ${player.name}`);
+            return;
+        }
+    
+        // --- 3. Turn & State-Based Validation ---
+        const isMyTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === player.id;
+        const isOffTurnActionAllowed = [
+            'chooseNewCardDiscard', 
+            'claimLoot', 
+            'resolveDiscovery', 
+            'resolveDiscoveryRoll'
+        ].includes(payload.action);
+    
+        if (!isMyTurn && !isOffTurnActionAllowed) {
+            return socket.emit('actionError', "It's not your turn.");
+        }
+    
+        if (player.isResolvingDiscovery && !['resolveDiscovery', 'resolveDiscoveryRoll'].includes(payload.action)) {
+            return socket.emit('actionError', 'You must resolve your discovery first.');
+        }
+    
+        // --- 4. Execution with Error Handling ---
+        try {
             actionHandler.call(this, room, player, payload, socket);
+        } catch (error) {
+            console.error(`[CRITICAL] Error executing action '${payload.action}' for player ${player.name}:`, error);
+            // Inform the client that a server error occurred so they are not stuck.
+            socket.emit('actionError', 'A server error occurred. Please try again.');
+            // If the error happened during a roll, tell the client to reset their dice modal.
+            socket.emit('diceRollError');
         }
     }
     
@@ -883,105 +909,93 @@ class GameManager {
     }
     
     resolveAttackRoll(room, player, payload, socket) {
-        try {
-            const { weaponId, targetId } = payload;
-            const target = room.gameState.board.monsters.find(m => m.id === targetId);
-            const weapon = weaponId === 'unarmed' 
-                ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-                : Object.values(player.equipment).find(e => e && e.id === weaponId);
+        const { weaponId, targetId } = payload;
+        const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        const weapon = weaponId === 'unarmed' 
+            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
+            : Object.values(player.equipment).find(e => e && e.id === weaponId);
 
-            if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
-                console.error(`Error resolving attack roll: Invalid target or weapon data.`, { weaponId, targetId });
-                socket.emit('actionError', 'A server error occurred with weapon/target data.');
-                socket.emit('diceRollError');
-                return;
-            }
-
-            const hitBonus = player.stats.hitBonus || 0;
-            const hitRoll = this.rollDice('1d20');
-            const totalRoll = hitRoll + hitBonus;
-            
-            if (hitRoll === 20) { // Critical Hit!
-                room.gameState.partyHope = Math.min(10, room.gameState.partyHope + 1);
-                room.chatLog.push({ type: 'system-good', text: `${player.name} landed a CRITICAL HIT! Party Hope increases!`, timestamp: Date.now() });
-            }
-
-            const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
-            room.chatLog.push({ type: 'combat', text: `${player.name} attacks ${target.name} with ${weapon.name}... Rolled a ${totalRoll}. It's a ${outcome}!`, timestamp: Date.now() });
-            
-            const resultPayload = {
-                rollerId: player.id, rollerName: player.name, targetName: target.name,
-                weaponName: weapon.name,
-                roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
-                outcome,
-            };
-            
-            io.to(room.id).emit('attackResolved', resultPayload);
-
-            if (outcome === 'Hit') {
-                socket.emit('promptDamageRoll', {
-                    title: `Damage Roll vs ${target.name}`,
-                    dice: weapon.effect.dice,
-                    bonus: player.stats.damageBonus || 0,
-                    weaponId,
-                    targetId
-                });
-            }
-
-            this.emitGameState(room.id);
-        } catch (e) {
-            console.error("Critical error in resolveAttackRoll:", e);
-            socket.emit('actionError', 'A server error occurred during attack resolution.');
+        if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
+            console.error(`Error resolving attack roll: Invalid target or weapon data.`, { weaponId, targetId });
+            socket.emit('actionError', 'A server error occurred with weapon/target data.');
             socket.emit('diceRollError');
+            return;
         }
+
+        const hitBonus = player.stats.hitBonus || 0;
+        const hitRoll = this.rollDice('1d20');
+        const totalRoll = hitRoll + hitBonus;
+        
+        if (hitRoll === 20) { // Critical Hit!
+            room.gameState.partyHope = Math.min(10, room.gameState.partyHope + 1);
+            room.chatLog.push({ type: 'system-good', text: `${player.name} landed a CRITICAL HIT! Party Hope increases!`, timestamp: Date.now() });
+        }
+
+        const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
+        room.chatLog.push({ type: 'combat', text: `${player.name} attacks ${target.name} with ${weapon.name}... Rolled a ${totalRoll}. It's a ${outcome}!`, timestamp: Date.now() });
+        
+        const resultPayload = {
+            rollerId: player.id, rollerName: player.name, targetName: target.name,
+            weaponName: weapon.name,
+            roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
+            outcome,
+        };
+        
+        io.to(room.id).emit('attackResolved', resultPayload);
+
+        if (outcome === 'Hit') {
+            socket.emit('promptDamageRoll', {
+                title: `Damage Roll vs ${target.name}`,
+                dice: weapon.effect.dice,
+                bonus: player.stats.damageBonus || 0,
+                weaponId,
+                targetId
+            });
+        }
+
+        this.emitGameState(room.id);
     }
     
     resolveDamageRoll(room, player, payload, socket) {
-        try {
-            const { weaponId, targetId } = payload;
-            const weapon = weaponId === 'unarmed' 
-                ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-                : Object.values(player.equipment).find(e => e && e.id === weaponId);
-            const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        const { weaponId, targetId } = payload;
+        const weapon = weaponId === 'unarmed' 
+            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
+            : Object.values(player.equipment).find(e => e && e.id === weaponId);
+        const target = room.gameState.board.monsters.find(m => m.id === targetId);
 
-            if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
-                console.error(`Error resolving damage roll: Invalid target or weapon data.`, { weaponId, targetId });
-                socket.emit('actionError', 'A server error occurred with weapon/target data.');
-                socket.emit('diceRollError');
-                return;
-            }
-
-            const damageRoll = this.rollDice(weapon.effect.dice);
-            const damageBonus = player.stats.damageBonus || 0;
-            const totalDamage = Math.max(1, damageRoll + damageBonus);
-            target.currentHp -= totalDamage;
-            room.chatLog.push({ type: 'combat-hit', text: `${player.name} dealt ${totalDamage} damage to ${target.name}.`, timestamp: Date.now() });
-            
-            let wasDefeated = false;
-            if (target.currentHp <= 0) {
-                wasDefeated = true;
-                this.handleMonsterDefeated(room, target.id, player.id);
-            }
-            
-            const damagePayload = {
-                rollerId: player.id,
-                rollerName: player.name,
-                targetId: target.id,
-                targetName: target.name,
-                damageDice: weapon.effect.dice,
-                damageRoll,
-                damageBonus,
-                totalDamage,
-                wasDefeated,
-            };
-
-            io.to(room.id).emit('damageResolved', damagePayload);
-            this.emitGameState(room.id);
-        } catch (e) {
-            console.error("Critical error in resolveDamageRoll:", e);
-            socket.emit('actionError', 'A server error occurred during damage resolution.');
+        if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
+            console.error(`Error resolving damage roll: Invalid target or weapon data.`, { weaponId, targetId });
+            socket.emit('actionError', 'A server error occurred with weapon/target data.');
             socket.emit('diceRollError');
+            return;
         }
+
+        const damageRoll = this.rollDice(weapon.effect.dice);
+        const damageBonus = player.stats.damageBonus || 0;
+        const totalDamage = Math.max(1, damageRoll + damageBonus);
+        target.currentHp -= totalDamage;
+        room.chatLog.push({ type: 'combat-hit', text: `${player.name} dealt ${totalDamage} damage to ${target.name}.`, timestamp: Date.now() });
+        
+        let wasDefeated = false;
+        if (target.currentHp <= 0) {
+            wasDefeated = true;
+            this.handleMonsterDefeated(room, target.id, player.id);
+        }
+        
+        const damagePayload = {
+            rollerId: player.id,
+            rollerName: player.name,
+            targetId: target.id,
+            targetName: target.name,
+            damageDice: weapon.effect.dice,
+            damageRoll,
+            damageBonus,
+            totalDamage,
+            wasDefeated,
+        };
+
+        io.to(room.id).emit('damageResolved', damagePayload);
+        this.emitGameState(room.id);
     }
 
 
@@ -1625,7 +1639,7 @@ class GameManager {
             
             room.players[socket.id] = playerObject;
             socket.join(roomId);
-            this.socketToRoom[socket.id] = roomId;
+            this.socketToRoom[socket.id] = socket.id;
             
             // Update turn order with new socket id
             const turnIndex = room.gameState.turnOrder.indexOf(oldSocketId);
@@ -1652,7 +1666,7 @@ class GameManager {
 
                 room.players[socket.id] = newPlayer;
                 socket.join(roomId);
-                this.socketToRoom[socket.id] = roomId;
+                this.socketToRoom[socket.id] = socket.id;
 
                 const turnIndex = room.gameState.turnOrder.indexOf(npcToReplace.id);
                 if(turnIndex > -1) room.gameState.turnOrder[turnIndex] = socket.id;
