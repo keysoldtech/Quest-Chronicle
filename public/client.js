@@ -189,7 +189,7 @@ function renderUI() {
     get('room-code').textContent = currentRoomState.id;
     get('mobile-room-code').textContent = currentRoomState.id;
     get('turn-counter').textContent = gameState.turnCount;
-    get('mobile-turn-counter').textContent = gameState.turnCount;
+    // Mobile turn counter removed for space, but logic is here if needed
     renderGameLog(chatLog);
 
     const playerList = get('player-list');
@@ -822,11 +822,41 @@ function showSkillChallengeModal(challenge) {
 // --- 5. DICE ROLLING LOGIC ---
 function createDieSVG(sides, value) {
     const text = value || '?';
+    let dieShapePath = '';
+    // Adjust y-position of text for better centering on different shapes
+    let textY = 55; 
+    let sidesTextY = 85;
+
+    switch (Number(sides)) {
+        case 4:
+        case 20: // d20 face is a triangle
+            dieShapePath = 'M 50,10 L 95,85 L 5,85 Z';
+            textY = 65;
+            sidesTextY = 88;
+            break;
+        case 8:
+            dieShapePath = 'M 50,5 L 95,50 L 50,95 L 5,50 Z';
+            sidesTextY = 90;
+            break;
+        case 10:
+            dieShapePath = 'M 50,5 L 95,40 L 80,95 L 20,95 L 5,40 Z';
+            sidesTextY = 88;
+            break;
+        case 12:
+            dieShapePath = 'M 50,10 L 95,45 L 75,95 L 25,95 L 5,45 Z';
+            sidesTextY = 88;
+            break;
+        case 6:
+        default: // Default to d6 shape
+            dieShapePath = 'M 10,10 H 90 V 90 H 10 Z';
+            break;
+    }
+
     return `
         <svg class="die-svg" viewBox="0 0 100 100">
-            <rect class="die-face" x="5" y="5" width="90" height="90" rx="10"/>
-            <text class="die-text" x="50" y="55" dominant-baseline="middle" text-anchor="middle">${text}</text>
-            <text class="die-sides-text" x="50" y="85" dominant-baseline="middle" text-anchor="middle">d${sides}</text>
+            <path class="die-shape" d="${dieShapePath}" />
+            <text class="die-text" x="50" y="${textY}" dominant-baseline="middle" text-anchor="middle">${text}</text>
+            <text class="die-sides-text" x="50" y="${sidesTextY}" dominant-baseline="middle" text-anchor="middle">d${sides}</text>
         </svg>
     `;
 }
@@ -894,7 +924,7 @@ function displayAttackResolution(data) {
         if (dieSVG) {
             dieSVG.classList.remove('rolling');
             dieSVG.querySelector('.die-text').textContent = roll;
-            dieSVG.querySelector('.die-face').style.fill = outcome === 'Hit' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
+            dieSVG.querySelector('.die-shape').style.fill = outcome === 'Hit' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
         }
         
         const resultContainer = document.getElementById('dice-roll-result-container');
