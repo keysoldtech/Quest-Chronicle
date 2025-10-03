@@ -19,6 +19,7 @@ const clientState = {
     rollModalCloseTimeout: null,
     rollResponseTimeout: null,
     helpModalPage: 0,
+    isFirstTurnTutorialActive: false,
 };
 
 // --- VOICE CHAT MANAGER ---
@@ -167,6 +168,13 @@ function isDesktop() {
  * @returns {HTMLElement} The fully constructed card element.
  */
 function createCardElement(card, options = {}) {
+    if (!card) { // Gracefully handle null/undefined card data
+        const emptyCardDiv = document.createElement('div');
+        emptyCardDiv.className = 'card empty';
+        emptyCardDiv.innerHTML = `<div class="card-content"><p class="empty-slot-text">Nothing Equipped</p></div>`;
+        return emptyCardDiv;
+    }
+
     const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
@@ -548,6 +556,9 @@ function renderGameplayState(myPlayer, gameState) {
             const cardEl = createCardElement(monster, { isTargetable: isMyTurn });
             cardEl.onclick = () => {
                 if (!isMyTurn || !clientState.selectedWeaponId) return;
+                 if (clientState.isFirstTurnTutorialActive) { // Tutorial logic
+                    clientState.isFirstTurnTutorialActive = false;
+                }
                 showNarrativeModal(clientState.selectedWeaponId, monster.id);
                 clientState.selectedWeaponId = null; 
                 renderUI();
@@ -672,6 +683,9 @@ function renderHandAndEquipment(player, isMyTurn) {
                 if (isAttackable) {
                     cardEl.onclick = () => {
                         clientState.selectedWeaponId = clientState.selectedWeaponId === item.id ? null : item.id;
+                        if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
+                            showToast("Great! Now click a monster on the board to attack it.", "info");
+                        }
                         renderUI();
                     };
                 }
@@ -686,6 +700,9 @@ function renderHandAndEquipment(player, isMyTurn) {
             const cardEl = createCardElement(unarmed, { isAttackable: true });
             cardEl.onclick = () => {
                 clientState.selectedWeaponId = clientState.selectedWeaponId === unarmed.id ? null : unarmed.id;
+                 if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
+                    showToast("Great! Now click a monster on the board to attack it.", "info");
+                }
                 renderUI();
             };
             container.appendChild(cardEl);
@@ -936,14 +953,16 @@ function initializeGameUIListeners() {
      
      // Discovery Modal Listeners
      document.getElementById('discovery-confirm-btn').addEventListener('click', () => {
-        if (!clientState.activeItem || !clientState.activeItem.selectedCardId) return;
-        socket.emit('playerAction', { action: 'resolveDiscovery', cardToReplaceId: clientState.activeItem.selectedCardId });
+        if (!clientState.activeItem || !clientState.activeItem.keptItemId) return;
+        socket.emit('playerAction', { action: 'resolveDiscovery', keptItemId: clientState.activeItem.keptItemId });
         document.getElementById('discovery-modal').classList.add('hidden');
         clientState.activeItem = null;
      });
      document.getElementById('discovery-decline-btn').addEventListener('click', () => {
-        if (!clientState.activeItem || !clientState.activeItem.newCard) return;
-        socket.emit('playerAction', { action: 'resolveDiscovery', cardToReplaceId: clientState.activeItem.newCard.id });
+        if (!clientState.activeItem || !clientState.activeItem.equippedCard) return;
+        // "Decline" means keeping the currently equipped item.
+        const keptId = clientState.activeItem.equippedCard ? clientState.activeItem.equippedCard.id : 'decline';
+        socket.emit('playerAction', { action: 'resolveDiscovery', keptItemId: keptId });
         document.getElementById('discovery-modal').classList.add('hidden');
         clientState.activeItem = null;
      });
@@ -973,7 +992,7 @@ function switchMobileScreen(screenName) {
     document.querySelector(`.mobile-bottom-nav .nav-btn[data-screen="${screenName}"]`).classList.add('active');
 }
 
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duration = 3000) {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
@@ -989,7 +1008,7 @@ function showToast(message, type = 'info') {
     setTimeout(() => {
         toast.classList.remove('visible');
         toast.addEventListener('transitionend', () => toast.remove());
-    }, 3000);
+    }, duration);
 }
 
 function showChatPreview(sender, message) {
@@ -1065,46 +1084,38 @@ function showDiscoveryModal({ newCard }) {
 
     const newItemContainer = document.getElementById('discovery-new-item-container');
     const equippedContainer = document.getElementById('discovery-equipped-container');
-    const handContainer = document.getElementById('discovery-hand-container');
     const confirmBtn = document.getElementById('discovery-confirm-btn');
+    const declineBtn = document.getElementById('discovery-decline-btn');
 
-    clientState.activeItem = { newCard, selectedCardId: null };
+    const itemType = newCard.type.toLowerCase(); // 'weapon' or 'armor'
+    const equippedCard = myPlayer.equipment[itemType];
+
+    clientState.activeItem = { newCard, equippedCard, keptItemId: null };
     confirmBtn.disabled = true;
-    
+
     newItemContainer.innerHTML = '';
     equippedContainer.innerHTML = '';
-    handContainer.innerHTML = '';
-
-    const allSelectableCards = [];
 
     const handleCardSelection = (cardEl, cardId) => {
-        allSelectableCards.forEach(c => c.classList.remove('selected-for-discard'));
+        // Remove selection from all cards in this modal
+        modal.querySelectorAll('.card').forEach(c => c.classList.remove('selected-for-discard'));
         cardEl.classList.add('selected-for-discard');
-        clientState.activeItem.selectedCardId = cardId;
+        clientState.activeItem.keptItemId = cardId;
         confirmBtn.disabled = false;
     };
 
-    // Render new card
     const newCardEl = createCardElement(newCard);
+    newCardEl.onclick = () => handleCardSelection(newCardEl, newCard.id);
     newItemContainer.appendChild(newCardEl);
 
-    // Render equipped items
-    Object.values(myPlayer.equipment).forEach(item => {
-        if (item) {
-            const cardEl = createCardElement(item);
-            cardEl.onclick = () => handleCardSelection(cardEl, item.id);
-            equippedContainer.appendChild(cardEl);
-            allSelectableCards.push(cardEl);
-        }
-    });
-
-    // Render hand
-    myPlayer.hand.forEach(card => {
-        const cardEl = createCardElement(card);
-        cardEl.onclick = () => handleCardSelection(cardEl, card.id);
-        handContainer.appendChild(cardEl);
-        allSelectableCards.push(cardEl);
-    });
+    const equippedCardEl = createCardElement(equippedCard); // createCardElement handles null
+    if(equippedCard) {
+        equippedCardEl.onclick = () => handleCardSelection(equippedCardEl, equippedCard.id);
+    }
+    equippedContainer.appendChild(equippedCardEl);
+    
+    // The "Decline" button now explicitly means "Keep my currently equipped item"
+    declineBtn.textContent = equippedCard ? `Keep ${equippedCard.name}` : `Leave It`;
 
     modal.classList.remove('hidden');
 }
@@ -1182,7 +1193,7 @@ const helpPages = [
                 <li><b>Guard (1 AP):</b> Gain temporary Shield HP equal to your Shield Bonus. This lasts until the start of your next turn.</li>
                 <li><b>Respite (1 AP):</b> A quick breather. Heals you for a small amount (1d4).</li>
                 <li><b>Rest (2 AP):</b> A longer rest. Heals you based on your class's Health Dice.</li>
-                <li><b>Equip (1 AP):</b> Drag an equippable item from your hand to the equipment slots.</li>
+                <li><b>Equip (1 AP):</b> From your hand, click the "Equip" button on a Weapon or Armor card.</li>
             </ul>
             <p>Attacking and using card abilities also cost AP, as listed on the card.</p>
         `
@@ -1191,8 +1202,14 @@ const helpPages = [
         title: "Combat Explained",
         content: `
             <p>Combat is resolved with a two-step dice roll process.</p>
+            <h3>How to Attack</h3>
             <ol>
-                <li><b>Roll to Hit:</b> When you attack, you roll a 20-sided die (d20). The result is <b>(Your d20 Roll + Your Hit Bonus)</b>. If this total meets or exceeds the monster's Armor Class (AC), you hit!</li>
+                <li><b>Select Weapon:</b> Click on one of your equipped weapons. It will gain a golden border to show it's selected.</li>
+                <li><b>Select Target:</b> Click on a monster on the game board. This will open a prompt to confirm your attack.</li>
+            </ol>
+            <h3>The Dice Roll</h3>
+            <ol>
+                <li><b>Roll to Hit:</b> You roll a 20-sided die (d20). The result is <b>(Your d20 Roll + Your Hit Bonus)</b>. If this total meets or exceeds the monster's Armor Class (AC), you hit!</li>
                 <li><b>Roll for Damage:</b> On a successful hit, you roll your weapon's damage dice. The total damage is <b>(Your Damage Roll + Your Damage Bonus)</b>.</li>
             </ol>
         `
@@ -1204,7 +1221,7 @@ const helpPages = [
             <ul>
                 <li><b>Rarity:</b> Items can be Common, Uncommon (Green), Rare (Blue), or Legendary (Purple). Higher rarities provide better bonuses.</li>
                 <li><b>Claiming Loot:</b> When an item is discovered, it appears in the "Party Discoveries" tab. Any player can click "Claim" to assign it to a party member.</li>
-                <li><b>Individual Discovery:</b> Every 3 rounds, you'll get a personal chance to find a rare item and swap it with one you currently hold.</li>
+                <li><b>Individual Discovery:</b> Every 3 rounds, you'll get a personal chance to find a rare item and swap it with your currently equipped gear of the same type.</li>
             </ul>
         `
     },
@@ -1281,16 +1298,16 @@ function createDieSVG(sides, value) {
 
 
 function showDiceRollModal(data, type) {
-    clientState.currentRollData = { ...data, type }; // type is 'attack' or 'damage'
-    const { title, dice, bonus, targetAC } = data;
+    clientState.currentRollData = { ...data, type }; // type is 'attack', 'damage', 'skillcheck', or 'discovery'
+    const { title, dice, bonus, targetAC, description } = data;
     const modal = document.getElementById('dice-roll-modal');
     document.getElementById('dice-roll-title').textContent = title;
     
-    let description = `Roll ${dice}`;
-    if (bonus > 0) description += ` + ${bonus}`;
-    if (bonus < 0) description += ` - ${Math.abs(bonus)}`;
-    if (targetAC) description += ` vs Target AC of ${targetAC}`;
-    document.getElementById('dice-roll-description').textContent = description;
+    let desc = description || `Roll ${dice}`;
+    if (bonus > 0) desc += ` + ${bonus}`;
+    if (bonus < 0) desc += ` - ${Math.abs(bonus)}`;
+    if (targetAC) desc += ` vs Target AC of ${targetAC}`;
+    document.getElementById('dice-roll-description').textContent = desc;
 
     const container = document.getElementById('dice-display-container');
     const [num, sides] = dice.split('d').map(Number);
@@ -1302,7 +1319,7 @@ function showDiceRollModal(data, type) {
     document.getElementById('dice-roll-details').textContent = '';
     
     const confirmBtn = document.getElementById('dice-roll-confirm-btn');
-    confirmBtn.textContent = type === 'attack' ? 'Roll to Hit' : 'Roll Damage';
+    confirmBtn.textContent = 'Roll Dice';
     confirmBtn.classList.remove('hidden');
     confirmBtn.disabled = false;
     document.getElementById('dice-roll-close-btn').classList.add('hidden');
@@ -1326,8 +1343,16 @@ function handleDiceRoll() {
 
     dieSVG.classList.add('rolling');
     
-    const action = clientState.currentRollData.type === 'attack' ? 'resolveAttackRoll' : 'resolveDamageRoll';
-    socket.emit('playerAction', { action: action, ...clientState.currentRollData });
+    const actionMap = {
+        'attack': 'resolveAttackRoll',
+        'damage': 'resolveDamageRoll',
+        'skillcheck': 'resolveSkillCheckRoll',
+        'discovery': 'resolveDiscoveryRoll',
+    };
+    const action = actionMap[clientState.currentRollData.type];
+    if (action) {
+        socket.emit('playerAction', { action: action, ...clientState.currentRollData });
+    }
 
     // Add a timeout for robustness.
     if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
@@ -1466,13 +1491,18 @@ socket.on('gameStateUpdate', (newState) => {
     currentRoomState = newState;
     myId = socket.id;
 
-    // Check for "Your Turn" popup trigger
+    // Check for "Your Turn" popup trigger and tutorial
     const myPlayer = newState.players[myId];
     if(myPlayer) {
         const isMyTurnNow = newState.gameState.turnOrder[newState.gameState.currentPlayerIndex] === myId;
         const wasMyTurnBefore = oldState.gameState ? oldState.gameState.turnOrder[oldState.gameState.currentPlayerIndex] === myId : false;
         if(isMyTurnNow && !wasMyTurnBefore && !myPlayer.isDowned) {
             showYourTurnPopup();
+            // First turn tutorial logic
+            if (!myPlayer.hasTakenFirstTurn) {
+                clientState.isFirstTurnTutorialActive = true;
+                setTimeout(() => showToast("It's your turn! Click an equipped weapon to begin an attack.", "info", 6000), 500);
+            }
         }
     }
 
@@ -1524,7 +1554,32 @@ socket.on('damageResolved', (data) => {
     displayDamageRollResult(data);
 });
 
+socket.on('promptDiscoveryRoll', (data) => {
+    showDiceRollModal(data, 'discovery');
+    // Hide the modal after a short delay automatically
+    if(clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    clientState.rollResponseTimeout = setTimeout(() => {
+        document.getElementById('dice-roll-modal').classList.add('hidden');
+    }, 4000);
+});
+
+socket.on('promptSkillCheckRoll', (data) => {
+    showDiceRollModal(data, 'skillcheck');
+});
+
+socket.on('skillCheckResolved', (data) => {
+    const { rollerName, total, outcome } = data;
+    showToast(`${rollerName}'s skill check... ${total} is a ${outcome}!`, outcome.toLowerCase());
+});
+
+
 socket.on('promptIndividualDiscovery', (data) => {
+    // If a dice roll modal was open for discovery, close it.
+    if (clientState.currentRollData?.type === 'discovery') {
+        document.getElementById('dice-roll-modal').classList.add('hidden');
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    }
     showDiscoveryModal(data);
 });
 
