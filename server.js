@@ -536,18 +536,11 @@ class GameManager {
                 // Decrement duration of all status effects.
                 oldPlayer.statusEffects = oldPlayer.statusEffects.map(e => ({...e, duration: e.duration - 1})).filter(e => e.duration > 0);
     
-                // DM turn cleanup applies to monsters and world events.
+                // DM turn cleanup applies to monsters.
                 if (oldPlayer.role === 'DM') {
                     room.gameState.board.monsters.forEach(m => {
                         m.statusEffects = m.statusEffects.map(e => ({...e, duration: e.duration - 1})).filter(e => e.duration > 0);
                     });
-                    if(room.gameState.worldEvents.currentEvent) {
-                         room.gameState.worldEvents.duration -= 1;
-                         if(room.gameState.worldEvents.duration <= 0) {
-                            room.chatLog.push({ type: 'system', text: `The event '${room.gameState.worldEvents.currentEvent.name}' has ended.` });
-                            room.gameState.worldEvents.currentEvent = null;
-                         }
-                    }
                 }
             }
         }
@@ -578,7 +571,18 @@ class GameManager {
     
     // --- 3.6. AI Logic & Event Triggers ---
     async handleDmTurn(room) {
-        // 1. World Event Check: 60% chance each DM turn if no event is active.
+        // 1. World Event Management: Decrement duration of existing event at the START of the DM turn.
+        if (room.gameState.worldEvents.currentEvent) {
+            room.gameState.worldEvents.duration -= 1;
+            if (room.gameState.worldEvents.duration <= 0) {
+                room.chatLog.push({ type: 'system', text: `The event '${room.gameState.worldEvents.currentEvent.name}' has ended.` });
+                room.gameState.worldEvents.currentEvent = null;
+                this.emitGameState(room.id); // Update clients that the event ended
+                await new Promise(res => setTimeout(res, 1000));
+            }
+        }
+
+        // 2. New World Event Check: 60% chance each DM turn if no event is currently active.
         if (!room.gameState.worldEvents.currentEvent && Math.random() < 0.60) {
             const eventCard = this.drawCardFromDeck(room.id, 'worldEvent');
             if(eventCard) {
@@ -591,7 +595,7 @@ class GameManager {
             }
         }
         
-        // 2. Monster Spawning: Keep at least 2 monsters on the board.
+        // 3. Monster Spawning: Keep at least 2 monsters on the board.
         if (room.gameState.board.monsters.length < 2) {
             const monsterCard = this.drawCardFromDeck(room.id, 'monster.tier1');
             if (monsterCard) {
@@ -604,7 +608,7 @@ class GameManager {
             }
         }
 
-        // 3. Monster Attacks: Each monster attacks a random, living explorer.
+        // 4. Monster Attacks: Each monster attacks a random, living explorer.
         for (const monster of room.gameState.board.monsters) {
             const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isDowned);
             if (livingExplorers.length > 0) {
