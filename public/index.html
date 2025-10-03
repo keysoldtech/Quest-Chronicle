@@ -143,7 +143,7 @@
                                 <button id="chat-toggle-btn" class="menu-item"><span class="material-symbols-outlined">chat</span>Chat & Log</button>
                                 <button id="join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Join Voice</button>
                                 <button id="mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
-                                <button id="disconnect-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave Voice</button>
+                                <button id="leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave Voice</button>
                                 <button id="leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
                             </div>
                         </div>
@@ -155,6 +155,9 @@
                         <h2 class="panel-header">Players</h2>
                         <div id="game-lobby-settings-display" class="lobby-settings-display hidden"></div>
                         <ul id="player-list" class="player-list"></ul>
+                        <div id="lobby-controls" class="lobby-controls hidden">
+                           <button id="start-game-btn" class="btn btn-primary" disabled>Start Game</button>
+                        </div>
                     </div>
                     <div id="character-sheet-block">
                         <!-- Content for class selection or player stats will be rendered here -->
@@ -194,6 +197,7 @@
                     </div>
                 </aside>
     
+                <div id="chat-preview-container"></div>
                 <div id="fixed-action-bar" class="fixed-action-bar hidden">
                     <button id="action-skill-challenge-btn" class="btn btn-special hidden">Challenge (1 AP)</button>
                     <button id="action-guard-btn" class="btn btn-secondary">Guard (1AP)</button>
@@ -232,7 +236,7 @@
                                  <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Help</button>
                                  <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Voice</button>
                                  <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
-                                 <button id="mobile-disconnect-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
+                                 <button id="mobile-leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
                                  <button id="mobile-leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
                              </div>
                          </div>
@@ -270,6 +274,9 @@
                             <h2 class="panel-header">Players</h2>
                             <div id="mobile-game-lobby-settings-display" class="lobby-settings-display hidden"></div>
                             <ul id="mobile-player-list" class="player-list"></ul>
+                             <div id="mobile-lobby-controls" class="lobby-controls hidden">
+                               <button id="mobile-start-game-btn" class="btn btn-primary" disabled>Start Game</button>
+                            </div>
                         </div>
                     </div>
                     
@@ -486,10 +493,19 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Game Paused Modal -->
+        <div id="game-paused-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h2 class="panel-header">Game Paused</h2>
+                <p id="game-paused-reason" style="text-align: center; font-size: 1.2rem; margin-top: 1rem;"></p>
+            </div>
+        </div>
     
     </div>
     <div id="toast-container"></div>
     <div id="animation-overlay"></div>
+    <div id="voice-chat-audio-container"></div>
     
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>

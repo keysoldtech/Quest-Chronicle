@@ -21,6 +21,135 @@ const clientState = {
     helpModalPage: 0,
 };
 
+// --- VOICE CHAT MANAGER ---
+const voiceChatManager = {
+    localStream: null,
+    peers: {}, // { socketId: RTCPeerConnection }
+    audioContainer: null,
+
+    async join() {
+        if (this.localStream) return;
+        try {
+            this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            document.getElementById('join-voice-btn').classList.add('hidden');
+            document.getElementById('mobile-join-voice-btn').classList.add('hidden');
+            document.getElementById('mute-voice-btn').classList.remove('hidden');
+            document.getElementById('leave-voice-btn').classList.remove('hidden');
+            document.getElementById('mobile-mute-voice-btn').classList.remove('hidden');
+            document.getElementById('mobile-leave-voice-btn').classList.remove('hidden');
+
+            this.audioContainer = document.getElementById('voice-chat-audio-container');
+            socket.emit('join-voice-chat');
+        } catch (err) {
+            showToast('Microphone access denied.', 'error');
+            console.error('Error accessing microphone:', err);
+        }
+    },
+
+    leave() {
+        if (!this.localStream) return;
+        socket.emit('leave-voice-chat');
+
+        this.localStream.getTracks().forEach(track => track.stop());
+        this.localStream = null;
+
+        for (const peerId in this.peers) {
+            this.peers[peerId].close();
+        }
+        this.peers = {};
+        if (this.audioContainer) this.audioContainer.innerHTML = '';
+
+        document.getElementById('join-voice-btn').classList.remove('hidden');
+        document.getElementById('mobile-join-voice-btn').classList.remove('hidden');
+        document.getElementById('mute-voice-btn').classList.add('hidden');
+        document.getElementById('leave-voice-btn').classList.add('hidden');
+        document.getElementById('mobile-mute-voice-btn').classList.add('hidden');
+        document.getElementById('mobile-leave-voice-btn').classList.add('hidden');
+    },
+
+    toggleMute() {
+        if (!this.localStream) return;
+        const enabled = !this.localStream.getAudioTracks()[0].enabled;
+        this.localStream.getAudioTracks()[0].enabled = enabled;
+        const muteBtn = document.getElementById('mute-voice-btn');
+        const mobileMuteBtn = document.getElementById('mobile-mute-voice-btn');
+        muteBtn.innerHTML = enabled ? `<span class="material-symbols-outlined">mic_off</span>Mute` : `<span class="material-symbols-outlined">mic</span>Unmute`;
+        mobileMuteBtn.innerHTML = enabled ? `<span class="material-symbols-outlined">mic_off</span>Mute` : `<span class="material-symbols-outlined">mic</span>Unmute`;
+    },
+
+    addPeer(peerId, isInitiator) {
+        if (this.peers[peerId]) return;
+        const peer = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        this.peers[peerId] = peer;
+
+        this.localStream.getTracks().forEach(track => {
+            peer.addTrack(track, this.localStream);
+        });
+
+        peer.onicecandidate = (event) => {
+            if (event.candidate) {
+                socket.emit('webrtc-signal', { to: peerId, signal: { candidate: event.candidate } });
+            }
+        };
+
+        peer.ontrack = (event) => {
+            let audioEl = document.getElementById(`audio-${peerId}`);
+            if (!audioEl) {
+                audioEl = document.createElement('audio');
+                audioEl.id = `audio-${peerId}`;
+                audioEl.autoplay = true;
+                this.audioContainer.appendChild(audioEl);
+            }
+            audioEl.srcObject = event.streams[0];
+        };
+
+        if (isInitiator) {
+            peer.onnegotiationneeded = async () => {
+                try {
+                    const offer = await peer.createOffer();
+                    await peer.setLocalDescription(offer);
+                    socket.emit('webrtc-signal', { to: peerId, signal: { sdp: peer.localDescription } });
+                } catch (err) { console.error('Error creating offer:', err); }
+            };
+        }
+    },
+
+    removePeer(peerId) {
+        if (this.peers[peerId]) {
+            this.peers[peerId].close();
+            delete this.peers[peerId];
+        }
+        const audioEl = document.getElementById(`audio-${peerId}`);
+        if (audioEl) audioEl.remove();
+    },
+
+    async handleSignal({ from, signal }) {
+        let peer = this.peers[from];
+        if (!peer) {
+            this.addPeer(from, false);
+            peer = this.peers[from];
+        }
+        
+        try {
+            if (signal.sdp) {
+                await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                if (signal.sdp.type === 'offer') {
+                    const answer = await peer.createAnswer();
+                    await peer.setLocalDescription(answer);
+                    socket.emit('webrtc-signal', { to: from, signal: { sdp: peer.localDescription } });
+                }
+            } else if (signal.candidate) {
+                await peer.addIceCandidate(new RTCIceCandidate(signal.candidate));
+            }
+        } catch (err) {
+            console.error('Error handling signal:', err);
+        }
+    }
+};
+
+
 // --- 2. CORE RENDERING ENGINE ---
 
 /**
@@ -170,9 +299,18 @@ function renderUI() {
         return;
     }
 
-    const { players, gameState, chatLog } = currentRoomState;
-    const { phase } = gameState;
+    const { players, gameState, chatLog, hostId } = currentRoomState;
+    const { phase, isPaused, pauseReason } = gameState;
     const get = id => document.getElementById(id);
+
+    // Game Paused Overlay
+    const pauseModal = get('game-paused-modal');
+    if (isPaused) {
+        get('game-paused-reason').textContent = pauseReason;
+        pauseModal.classList.remove('hidden');
+    } else {
+        pauseModal.classList.add('hidden');
+    }
 
     // --- Phase 1: Show/Hide Major Screens ---
     if (phase === 'class_selection' || phase === 'started' || phase === 'game_over') {
@@ -196,22 +334,33 @@ function renderUI() {
     get('room-code').textContent = currentRoomState.id;
     get('mobile-room-code').textContent = currentRoomState.id;
     get('turn-counter').textContent = gameState.turnCount;
-    // Mobile turn counter removed for space, but logic is here if needed
-    renderGameLog(chatLog);
+    renderGameLog(chatLog, phase === 'started');
 
     const playerList = get('player-list');
     const mobilePlayerList = get('mobile-player-list');
     playerList.innerHTML = '';
     mobilePlayerList.innerHTML = '';
     const currentPlayerId = gameState.turnOrder[gameState.currentPlayerIndex];
-    Object.values(players).forEach(p => {
+    
+    const playerArray = Object.values(players).sort((a,b) => {
+        if (a.role === 'DM') return -1;
+        if (b.role === 'DM') return 1;
+        return a.name.localeCompare(b.name);
+    });
+
+    playerArray.forEach(p => {
         if (!p.role) return;
         const isCurrentTurn = p.id === currentPlayerId;
         const li = document.createElement('li');
         li.className = `player-list-item ${isCurrentTurn ? 'active' : ''} ${p.isDowned ? 'downed' : ''} ${p.role.toLowerCase()}`;
         const npcTag = p.isNpc ? '<span class="npc-tag">[NPC]</span> ' : '';
         const roleText = p.role === 'DM' ? `<span class="player-role dm">DM</span>` : '';
-        const classText = p.class ? `<span class="player-class"> - ${p.class}</span>` : '';
+        let classText;
+        if (phase === 'class_selection') {
+            classText = p.class ? `<span class="player-class-ready"> - Ready!</span>` : `<span class="player-class-waiting"> - Choosing...</span>`;
+        } else {
+            classText = p.class ? `<span class="player-class"> - ${p.class}</span>` : '';
+        }
         const hpDisplay = phase === 'started' && p.role === 'Explorer' ? `HP: ${p.stats.currentHp} / ${p.stats.maxHp}` : '';
         const downedText = p.isDowned ? '<span class="downed-text">[DOWNED]</span> ' : '';
         const disconnectedText = p.disconnected ? '<span class="disconnected-text">[OFFLINE]</span> ' : '';
@@ -230,8 +379,19 @@ function renderUI() {
     const mobileCharacterPanel = get('mobile-screen-character');
     
     if (phase === 'class_selection') {
+        get('lobby-controls').classList.remove('hidden');
+        get('mobile-lobby-controls').classList.remove('hidden');
+        const allReady = Object.values(players).filter(p => !p.isNpc).every(p => p.class);
+        get('start-game-btn').disabled = !allReady;
+        get('mobile-start-game-btn').disabled = !allReady;
+        
+        if (myId !== hostId) {
+            get('lobby-controls').classList.add('hidden');
+            get('mobile-lobby-controls').classList.add('hidden');
+        }
+
         if (myPlayer.class) {
-            const waitingHTML = `<h2 class="panel-header">Class Chosen!</h2><p class="panel-content">Waiting for game to start...</p>`;
+            const waitingHTML = `<h2 class="panel-header">Class Chosen!</h2><p class="panel-content">Waiting for the host to start the game...</p>`;
             desktopCharacterPanel.innerHTML = waitingHTML;
             mobileCharacterPanel.innerHTML = `<div class="panel mobile-panel">${waitingHTML}</div>`;
             get('class-selection-modal').classList.add('hidden');
@@ -239,6 +399,8 @@ function renderUI() {
             renderClassSelection(desktopCharacterPanel, mobileCharacterPanel);
         }
     } else if (phase === 'started') {
+        get('lobby-controls').classList.add('hidden');
+        get('mobile-lobby-controls').classList.add('hidden');
         get('class-selection-modal').classList.add('hidden');
         renderGameplayState(myPlayer, gameState);
     }
@@ -530,7 +692,7 @@ function renderHandAndEquipment(player, isMyTurn) {
 }
 
 
-function renderGameLog(log) {
+function renderGameLog(log, gameStarted) {
     const logContainers = [document.getElementById('game-log-content'), document.getElementById('mobile-chat-log')];
     logContainers.forEach(container => {
         if(!container) return;
@@ -538,11 +700,16 @@ function renderGameLog(log) {
         const shouldScroll = Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) < 5;
         container.innerHTML = log.map(entry => {
             let content = '';
+            const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const timeSpan = gameStarted ? `<span class="chat-timestamp">${time}</span>` : '';
             switch (entry.type) {
                 case 'chat':
                     const senderClass = entry.playerId === myId ? 'self' : '';
                     const channelClass = entry.channel.toLowerCase();
-                    content = `<span class="channel ${channelClass}">[${entry.channel}]</span> <span class="sender ${senderClass}">${entry.playerName}:</span> ${entry.text}`;
+                    content = `${timeSpan} <span class="channel ${channelClass}">[${entry.channel}]</span> <span class="sender ${senderClass}">${entry.playerName}:</span> ${entry.text}`;
+                    if (entry.channel === 'party' && entry.playerId !== myId) {
+                        showChatPreview(entry.playerName, entry.text);
+                    }
                     break;
                 case 'narrative':
                      content = `<span class="narrative-text">"${entry.text}"</span> - <span class="narrative-sender">${entry.playerName}</span>`;
@@ -627,6 +794,12 @@ function initializeGameUIListeners() {
         }
     });
 
+    ['start-game-btn', 'mobile-start-game-btn'].forEach(id => {
+        document.getElementById(id).addEventListener('click', () => {
+            socket.emit('startGame');
+        });
+    });
+
     ['chat-form', 'mobile-chat-form'].forEach(id => {
         const form = document.getElementById(id);
         form.addEventListener('submit', (e) => {
@@ -670,9 +843,16 @@ function initializeGameUIListeners() {
         sessionStorage.removeItem('qc_playerId');
         window.location.reload();
     };
-    document.getElementById('leave-game-btn').addEventListener('click', leaveGameAction);
-    document.getElementById('mobile-leave-game-btn').addEventListener('click', leaveGameAction);
+    ['leave-game-btn', 'mobile-leave-game-btn'].forEach(id => {
+        document.getElementById(id).addEventListener('click', leaveGameAction);
+    });
     
+    // Voice Chat Buttons
+    ['join-voice-btn', 'mobile-join-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.join()));
+    ['leave-voice-btn', 'mobile-leave-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.leave()));
+    ['mute-voice-btn', 'mobile-mute-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.toggleMute()));
+
+
     document.addEventListener('click', () => {
         document.getElementById('menu-dropdown').classList.add('hidden');
         document.getElementById('mobile-menu-dropdown').classList.add('hidden');
@@ -780,6 +960,23 @@ function showToast(message, type = 'info') {
         toast.classList.remove('visible');
         toast.addEventListener('transitionend', () => toast.remove());
     }, 3000);
+}
+
+function showChatPreview(sender, message) {
+    const container = document.getElementById('chat-preview-container');
+    const preview = document.createElement('div');
+    preview.className = 'chat-preview-item';
+    preview.innerHTML = `<span class="chat-preview-sender">${sender}:</span> ${message}`;
+    container.appendChild(preview);
+
+    setTimeout(() => {
+        preview.classList.add('visible');
+    }, 10);
+    
+    setTimeout(() => {
+        preview.classList.remove('visible');
+        preview.addEventListener('transitionend', () => preview.remove());
+    }, 5000);
 }
 
 function showYourTurnPopup() {
@@ -1259,6 +1456,7 @@ socket.on('playerIdentity', ({ playerId, roomId }) => {
 
 socket.on('roomClosed', ({ message }) => {
     showToast(message, 'error');
+    voiceChatManager.leave();
     setTimeout(() => {
         sessionStorage.removeItem('qc_roomId');
         sessionStorage.removeItem('qc_playerId');
@@ -1325,6 +1523,21 @@ socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
 
     modal.classList.remove('hidden');
 });
+
+// Voice Chat Signaling Handlers
+socket.on('existing-voice-chatters', (chatterIds) => {
+    chatterIds.forEach(id => voiceChatManager.addPeer(id, true));
+});
+socket.on('new-voice-chatter', (chatterId) => {
+    voiceChatManager.addPeer(chatterId, true);
+});
+socket.on('voice-chatter-left', (chatterId) => {
+    voiceChatManager.removePeer(chatterId);
+});
+socket.on('webrtc-signal', (data) => {
+    voiceChatManager.handleSignal(data);
+});
+
 
 // --- INITIALIZE ---
 initializeUI();

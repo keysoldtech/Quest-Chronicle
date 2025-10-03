@@ -113,16 +113,17 @@ class GameManager {
     }
 
     // --- 3.2. Room & Player Management ---
-    createPlayerObject(id, name) {
+    createPlayerObject(id, name, isNpc = false) {
         const playerId = `player_${Math.random().toString(36).substr(2, 9)}`;
         return {
             id, // Socket ID
             playerId, // Persistent ID for reconnection
             name,
-            isNpc: false,
+            isNpc,
             isDowned: false,
             disconnected: false,
-            cleanupTimer: null,
+            pauseTimer: null,
+            replacementTimer: null,
             role: null,
             class: null,
             stats: { maxHp: 0, currentHp: 0, damageBonus: 0, shieldBonus: 0, ap: 0, maxAP: 0, shieldHp: 0, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
@@ -166,14 +167,20 @@ class GameManager {
                 worldEvents: { currentEvent: null, duration: 0 },
                 currentPartyEvent: null,
                 skillChallenge: { isActive: false, details: null },
+                isPaused: false,
+                pauseReason: '',
             },
-            chatLog: []
+            chatLog: [],
+            savedPlayers: {}, // For storing data of disconnected players
+            voiceChatters: [], // List of socket IDs in voice chat
         };
     
         newPlayer.role = 'Explorer';
         this.rooms[newRoomId] = newRoom;
         socket.join(newRoomId);
         this.socketToRoom[socket.id] = newRoomId;
+
+        this.createNpcs(newRoom, 3); // Fill the remaining 3 slots with NPCs initially
     
         socket.emit('playerIdentity', { playerId: newPlayer.playerId, roomId: newRoomId });
         this.emitGameState(newRoomId);
@@ -183,14 +190,21 @@ class GameManager {
         const room = this.rooms[roomId];
         if (!room) return socket.emit('actionError', 'Room not found.');
     
-        const isGameInProgress = room.gameState.phase !== 'class_selection';
-        const humanPlayersCount = Object.values(room.players).filter(p => !p.isNpc).length;
+        if (room.gameState.phase !== 'class_selection') {
+            return socket.emit('actionError', 'Game is already in progress.');
+        }
     
-        if (isGameInProgress) return socket.emit('actionError', 'Game is already in progress.');
+        // Find an NPC explorer to replace
+        const npcToReplace = Object.values(room.players).find(p => p.isNpc && p.role === 'Explorer');
     
-        const MAX_PLAYERS = 4;
-        if (humanPlayersCount >= MAX_PLAYERS) return socket.emit('actionError', 'This game lobby is full.');
+        if (!npcToReplace) {
+            return socket.emit('actionError', 'This game lobby is full of human players.');
+        }
     
+        // Remove the NPC
+        delete room.players[npcToReplace.id];
+
+        // Add the new human player
         const newPlayer = this.createPlayerObject(socket.id, playerName);
         newPlayer.role = 'Explorer';
         room.players[socket.id] = newPlayer;
@@ -202,13 +216,15 @@ class GameManager {
     }
 
     // --- 3.3. Game Lifecycle ---
-    chooseClass(socket, { classId }) {
+    startGame(socket) {
         const room = this.findRoomBySocket(socket);
-        const player = room?.players[socket.id];
-        if (!room || !player || player.class) return;
+        if (!room || socket.id !== room.hostId) return;
 
-        this.assignClassToPlayer(player, classId);
-        this.createNpcs(room); // Adds DM and other explorers
+        const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
+        if (!humanPlayers.every(p => p.class)) {
+            return socket.emit('actionError', 'All players must select a class before starting.');
+        }
+
         this.initializeDecks(room);
 
         // Deal starting cards to all explorers (human and NPC)
@@ -224,10 +240,9 @@ class GameManager {
         });
 
         const dmId = 'npc-dm';
-        const humanPlayerId = socket.id;
-        const npcExplorerIds = Object.keys(room.players).filter(id => room.players[id].isNpc && room.players[id].role === 'Explorer');
+        const explorerIds = Object.keys(room.players).filter(id => room.players[id].role === 'Explorer');
         
-        room.gameState.turnOrder = [dmId, humanPlayerId, ...shuffle(npcExplorerIds)];
+        room.gameState.turnOrder = [dmId, ...shuffle(explorerIds)];
         room.gameState.currentPlayerIndex = -1;
         room.gameState.phase = 'started';
         room.gameState.turnCount = 0;
@@ -235,19 +250,30 @@ class GameManager {
         // Start the first turn sequence
         this.endCurrentTurn(room.id);
     }
+
+    chooseClass(socket, { classId }) {
+        const room = this.findRoomBySocket(socket);
+        const player = room?.players[socket.id];
+        if (!room || !player || player.class || room.gameState.phase !== 'class_selection') return;
+
+        this.assignClassToPlayer(player, classId);
+        this.emitGameState(room.id);
+    }
     
-    createNpcs(room) {
-        const dmNpc = this.createPlayerObject('npc-dm', 'DM');
-        dmNpc.role = 'DM';
-        dmNpc.isNpc = true;
-        room.players[dmNpc.id] = dmNpc;
+    createNpcs(room, count) {
+        // Always create the DM
+        if (!room.players['npc-dm']) {
+            const dmNpc = this.createPlayerObject('npc-dm', 'DM', true);
+            dmNpc.role = 'DM';
+            room.players[dmNpc.id] = dmNpc;
+        }
 
         const npcNames = ["Grok", "Lyra", "Finn"];
         const availableClasses = Object.keys(gameData.classes);
-        for (const name of npcNames) {
-            const npcId = `npc-${name.toLowerCase()}`;
-            const npc = this.createPlayerObject(npcId, name);
-            npc.isNpc = true;
+        for (let i = 0; i < count; i++) {
+            const name = npcNames[i % npcNames.length];
+            const npcId = `npc-${name.toLowerCase()}-${i}`;
+            const npc = this.createPlayerObject(npcId, name, true);
             npc.role = 'Explorer';
             const randomClassId = availableClasses[Math.floor(Math.random() * availableClasses.length)];
             this.assignClassToPlayer(npc, randomClassId);
@@ -286,7 +312,7 @@ class GameManager {
                 const discardedCard = player.hand.shift();
                 room.gameState.discardPile.push(discardedCard);
                 player.hand.push(card);
-                 room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full. Discarded ${discardedCard.name} for ${card.name}.` });
+                 room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full. Discarded ${discardedCard.name} for ${card.name}.`, timestamp: Date.now() });
 
             } else {
                 const playerSocket = io.sockets.sockets.get(player.id);
@@ -296,7 +322,7 @@ class GameManager {
                 } else {
                     // Fallback for disconnected humans: Discard the new card to prevent game stall.
                     room.gameState.discardPile.push(card);
-                    room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full and they are disconnected. '${card.name}' was discarded.` });
+                    room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full and they are disconnected. '${card.name}' was discarded.`, timestamp: Date.now() });
                 }
             }
         } else {
@@ -454,7 +480,7 @@ class GameManager {
             if (room.gameState.decks[deckName]) {
                 room.gameState.decks[deckName].push(oldItem);
                 shuffle(room.gameState.decks[deckName]);
-                room.chatLog.push({ type: 'system', text: `${player.name} returned their ${oldItem.name} to the deck.` });
+                room.chatLog.push({ type: 'system', text: `${player.name} returned their ${oldItem.name} to the deck.`, timestamp: Date.now() });
             }
         }
         
@@ -549,14 +575,23 @@ class GameManager {
     
         // --- Find Next Player ---
         let nextIndex, attempts = 0;
-        // Skip over any players who are downed.
+        // Skip over any players who are downed or disconnected.
         do {
             nextIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             attempts++;
-        } while (room.players[room.gameState.turnOrder[nextIndex]]?.isDowned && attempts <= room.gameState.turnOrder.length)
+            const nextPlayerId = room.gameState.turnOrder[nextIndex];
+            const nextPlayer = room.players[nextPlayerId];
+            if (nextPlayer && !nextPlayer.isDowned && !nextPlayer.disconnected) {
+                break; // Found a valid player
+            }
+        } while (attempts <= room.gameState.turnOrder.length)
 
         // If all explorers are downed, the game is over.
-        if (attempts > room.gameState.turnOrder.length) {
+        const allExplorersDown = Object.values(room.players)
+            .filter(p => p.role === 'Explorer' && !p.isNpc)
+            .every(p => p.isDowned || p.disconnected);
+
+        if (allExplorersDown) {
             room.gameState.phase = 'game_over';
             room.gameState.winner = 'Monsters';
             this.emitGameState(roomId);
@@ -575,7 +610,7 @@ class GameManager {
         if (room.gameState.worldEvents.currentEvent) {
             room.gameState.worldEvents.duration -= 1;
             if (room.gameState.worldEvents.duration <= 0) {
-                room.chatLog.push({ type: 'system', text: `The event '${room.gameState.worldEvents.currentEvent.name}' has ended.` });
+                room.chatLog.push({ type: 'system', text: `The event '${room.gameState.worldEvents.currentEvent.name}' has ended.`, timestamp: Date.now() });
                 room.gameState.worldEvents.currentEvent = null;
                 this.emitGameState(room.id); // Update clients that the event ended
                 await new Promise(res => setTimeout(res, 1000));
@@ -588,8 +623,8 @@ class GameManager {
             if(eventCard) {
                 room.gameState.worldEvents.currentEvent = eventCard;
                 room.gameState.worldEvents.duration = eventCard.duration || 2;
-                room.chatLog.push({ type: 'dm', text: `A strange event unfolds: ${eventCard.name}!` });
-                room.chatLog.push({ type: 'system', text: eventCard.description });
+                room.chatLog.push({ type: 'dm', text: `A strange event unfolds: ${eventCard.name}!`, timestamp: Date.now() });
+                room.chatLog.push({ type: 'system', text: eventCard.description, timestamp: Date.now() });
                 this.emitGameState(room.id);
                 await new Promise(res => setTimeout(res, 1500));
             }
@@ -602,7 +637,7 @@ class GameManager {
                 monsterCard.currentHp = monsterCard.maxHp;
                 monsterCard.statusEffects = [];
                 room.gameState.board.monsters.push(monsterCard);
-                room.chatLog.push({ type: 'dm', text: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)] });
+                room.chatLog.push({ type: 'dm', text: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)], timestamp: Date.now() });
                 this.emitGameState(room.id);
                 await new Promise(res => setTimeout(res, 1000));
             }
@@ -610,7 +645,7 @@ class GameManager {
 
         // 4. Monster Attacks: Each monster attacks a random, living explorer.
         for (const monster of room.gameState.board.monsters) {
-            const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isDowned);
+            const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isDowned && !p.disconnected);
             if (livingExplorers.length > 0) {
                 const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
                 
@@ -619,13 +654,13 @@ class GameManager {
                 const targetAC = 10 + target.stats.shieldBonus; // Basic AC calculation
                 
                 const outcome = totalRoll >= targetAC ? 'Hit' : 'Miss';
-                room.chatLog.push({ type: 'combat', text: `${monster.name} attacks ${target.name}... It rolled a ${totalRoll} and it's a ${outcome}!` });
+                room.chatLog.push({ type: 'combat', text: `${monster.name} attacks ${target.name}... It rolled a ${totalRoll} and it's a ${outcome}!`, timestamp: Date.now() });
                 
                 if (outcome === 'Hit') {
                     const damageRoll = this.rollDice(monster.effect.dice);
                     const totalDamage = damageRoll + (monster.damageBonus || 0);
                     this.applyDamage(target, totalDamage);
-                    room.chatLog.push({ type: 'combat-hit', text: `${monster.name} dealt ${totalDamage} damage to ${target.name}.` });
+                    room.chatLog.push({ type: 'combat-hit', text: `${monster.name} dealt ${totalDamage} damage to ${target.name}.`, timestamp: Date.now() });
                 }
 
                 this.emitGameState(room.id);
@@ -648,13 +683,13 @@ class GameManager {
                 const targetAC = targetMonster.requiredRollToHit;
                 
                 const outcome = totalRoll >= targetAC ? 'Hit' : 'Miss';
-                room.chatLog.push({ type: 'combat', text: `${npc.name} attacks ${targetMonster.name} with ${weapon.name}... Rolled a ${totalRoll}. It's a ${outcome}!` });
+                room.chatLog.push({ type: 'combat', text: `${npc.name} attacks ${targetMonster.name} with ${weapon.name}... Rolled a ${totalRoll}. It's a ${outcome}!`, timestamp: Date.now() });
 
                 if (outcome === 'Hit') {
                     const damageRoll = this.rollDice(weapon.effect.dice);
                     const totalDamage = damageRoll + npc.stats.damageBonus;
                     targetMonster.currentHp -= totalDamage;
-                    room.chatLog.push({ type: 'combat-hit', text: `${npc.name} dealt ${totalDamage} damage to ${targetMonster.name}.` });
+                    room.chatLog.push({ type: 'combat-hit', text: `${npc.name} dealt ${totalDamage} damage to ${targetMonster.name}.`, timestamp: Date.now() });
 
                     if (targetMonster.currentHp <= 0) {
                         this.handleMonsterDefeated(room, targetMonster.id, npc.id);
@@ -669,7 +704,7 @@ class GameManager {
         const monsterIndex = room.gameState.board.monsters.findIndex(m => m.id === monsterId);
         if (monsterIndex !== -1) {
             const defeatedMonster = room.gameState.board.monsters.splice(monsterIndex, 1)[0];
-            room.chatLog.push({ type: 'dm', text: `${defeatedMonster.name} has been defeated!` });
+            room.chatLog.push({ type: 'dm', text: `${defeatedMonster.name} has been defeated!`, timestamp: Date.now() });
             
             // Check for loot drop based on room settings.
             const lootDropChance = room.settings.lootDropRate || 80;
@@ -679,7 +714,7 @@ class GameManager {
                 const lootCard = this.generateLoot(room.id, killerClass);
                 if (lootCard) {
                     room.gameState.lootPool.push(lootCard);
-                    room.chatLog.push({ type: 'system-good', text: `The party discovered a ${lootCard.name}!` });
+                    room.chatLog.push({ type: 'system-good', text: `The party discovered a ${lootCard.name}!`, timestamp: Date.now() });
                 }
             }
             
@@ -695,7 +730,7 @@ class GameManager {
     handlePlayerAction(socket, payload) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-        if (!room || !player || player.isDowned) return;
+        if (!room || !player || player.isDowned || room.gameState.isPaused) return;
 
         // Block most actions if the player is in the middle of a discovery.
         if (player.isResolvingDiscovery && payload.action !== 'resolveDiscovery') {
@@ -731,7 +766,7 @@ class GameManager {
     }
     
     resolveAttack(room, player, { cardId, targetId, narrative }, socket) {
-        if (narrative) room.chatLog.push({ type: 'narrative', playerName: player.name, text: narrative });
+        if (narrative) room.chatLog.push({ type: 'narrative', playerName: player.name, text: narrative, timestamp: Date.now() });
 
         const weapon = cardId === 'unarmed' 
             ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' }, apCost: 1 }
@@ -866,11 +901,11 @@ class GameManager {
         if (card.effect.type === 'heal' && targetPlayer) {
             const healing = this.rollDice(card.effect.dice);
             targetPlayer.stats.currentHp = Math.min(targetPlayer.stats.maxHp, targetPlayer.stats.currentHp + healing);
-            room.chatLog.push({ type: 'system-good', text: `${player.name} uses ${card.name} on ${targetPlayer.name}, healing for ${healing} HP.` });
+            room.chatLog.push({ type: 'system-good', text: `${player.name} uses ${card.name} on ${targetPlayer.name}, healing for ${healing} HP.`, timestamp: Date.now() });
         } else if (card.effect.type === 'damage' && targetMonster) {
             const damage = this.rollDice(card.effect.dice);
             targetMonster.currentHp -= damage;
-            room.chatLog.push({ type: 'combat-hit', text: `${player.name} uses ${card.name} on ${targetMonster.name}, dealing ${damage} damage.` });
+            room.chatLog.push({ type: 'combat-hit', text: `${player.name} uses ${card.name} on ${targetMonster.name}, dealing ${damage} damage.`, timestamp: Date.now() });
             if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, targetMonster.id, player.id);
         }
         
@@ -886,21 +921,21 @@ class GameManager {
         
         const [item] = room.gameState.lootPool.splice(lootIndex, 1);
         this._giveCardToPlayer(room, targetPlayer, item);
-        room.chatLog.push({ type: 'system-good', text: `${targetPlayer.name} claimed the ${item.name}.` });
+        room.chatLog.push({ type: 'system-good', text: `${targetPlayer.name} claimed the ${item.name}.`, timestamp: Date.now() });
         this.emitGameState(room.id);
     }
     
     resolveNewCardDiscard(room, player, { cardToDiscardId, newCard }) {
         if (cardToDiscardId === newCard.id) {
             room.gameState.discardPile.push(newCard);
-            room.chatLog.push({ type: 'system', text: `${player.name} discarded the new card, ${newCard.name}.` });
+            room.chatLog.push({ type: 'system', text: `${player.name} discarded the new card, ${newCard.name}.`, timestamp: Date.now() });
         } else {
             const cardIndex = player.hand.findIndex(c => c.id === cardToDiscardId);
             if (cardIndex > -1) {
                 const [discardedCard] = player.hand.splice(cardIndex, 1);
                 room.gameState.discardPile.push(discardedCard);
                 player.hand.push(newCard);
-                room.chatLog.push({ type: 'system', text: `${player.name} discarded ${discardedCard.name} for ${newCard.name}.` });
+                room.chatLog.push({ type: 'system', text: `${player.name} discarded ${discardedCard.name} for ${newCard.name}.`, timestamp: Date.now() });
             }
         }
         this.emitGameState(room.id);
@@ -910,7 +945,7 @@ class GameManager {
         if (player.currentAp < gameData.actionCosts.guard) return socket.emit('actionError', "Not enough AP.");
         player.currentAp -= gameData.actionCosts.guard;
         player.stats.shieldHp += player.stats.shieldBonus;
-        room.chatLog.push({ type: 'action', text: `${player.name} takes a defensive stance, gaining ${player.stats.shieldBonus} Shield HP.` });
+        room.chatLog.push({ type: 'action', text: `${player.name} takes a defensive stance, gaining ${player.stats.shieldBonus} Shield HP.`, timestamp: Date.now() });
         this.emitGameState(room.id);
     }
 
@@ -919,7 +954,7 @@ class GameManager {
         player.currentAp -= gameData.actionCosts.briefRespite;
         const healing = this.rollDice('1d4');
         player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healing);
-        room.chatLog.push({ type: 'action-good', text: `${player.name} takes a brief respite, healing for ${healing} HP.` });
+        room.chatLog.push({ type: 'action-good', text: `${player.name} takes a brief respite, healing for ${healing} HP.`, timestamp: Date.now() });
         this.emitGameState(room.id);
     }
 
@@ -929,7 +964,7 @@ class GameManager {
         const classData = gameData.classes[player.class];
         const healing = this.rollDice(`${classData.healthDice}d4`);
         player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healing);
-        room.chatLog.push({ type: 'action-good', text: `${player.name} takes a full rest, healing for ${healing} HP.` });
+        room.chatLog.push({ type: 'action-good', text: `${player.name} takes a full rest, healing for ${healing} HP.`, timestamp: Date.now() });
         this.emitGameState(room.id);
     }
     
@@ -938,7 +973,7 @@ class GameManager {
         if (cardIndex > -1) {
             const [discardedCard] = player.hand.splice(cardIndex, 1);
             room.gameState.discardPile.push(discardedCard);
-            room.chatLog.push({ type: 'system', text: `${player.name} discarded ${discardedCard.name}.` });
+            room.chatLog.push({ type: 'system', text: `${player.name} discarded ${discardedCard.name}.`, timestamp: Date.now() });
             this.emitGameState(room.id);
         }
     }
@@ -982,7 +1017,7 @@ class GameManager {
     
         if (success) {
             player.currentAp -= classData.ability.apCost;
-            room.chatLog.push({ type: 'action-good', text: `${player.name} uses ${abilityName}!` });
+            room.chatLog.push({ type: 'action-good', text: `${player.name} uses ${abilityName}!`, timestamp: Date.now() });
             this.emitGameState(room.id);
         }
     }
@@ -1039,7 +1074,7 @@ class GameManager {
         if (discoveredItem) {
             player.isResolvingDiscovery = true;
             player.discoveryItem = discoveredItem;
-            room.chatLog.push({ type: 'system-good', text: `${player.name} has made a personal discovery!` });
+            room.chatLog.push({ type: 'system-good', text: `${player.name} has made a personal discovery!`, timestamp: Date.now() });
             socket.emit('promptIndividualDiscovery', { newCard: discoveredItem });
         }
     }
@@ -1059,7 +1094,7 @@ class GameManager {
             } else { // Fallback for other types
                 room.gameState.discardPile.push(newCard);
             }
-            room.chatLog.push({ type: 'system', text: `${player.name} decided to leave the ${newCard.name} behind.` });
+            room.chatLog.push({ type: 'system', text: `${player.name} decided to leave the ${newCard.name} behind.`, timestamp: Date.now() });
         } else {
             // Case 2: Player swaps with an item.
             let replacedCard = null;
@@ -1096,7 +1131,7 @@ class GameManager {
                 else if (replacedIn === 'equipment.armor') player.equipment.armor = newCard;
                 else if (replacedIn === 'hand') player.hand.push(newCard);
                 
-                room.chatLog.push({ type: 'system-good', text: `${player.name} swapped their ${replacedCard.name} for a newfound ${newCard.name}!` });
+                room.chatLog.push({ type: 'system-good', text: `${player.name} swapped their ${replacedCard.name} for a newfound ${newCard.name}!`, timestamp: Date.now() });
 
             }
         }
@@ -1119,7 +1154,7 @@ class GameManager {
         const relevantItem = player.hand.find(card => card.relevantSkill && card.relevantSkill === challenge.skill);
         if (relevantItem) {
             hasAdvantage = true;
-            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${relevantItem.name} to gain advantage on the check!` });
+            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${relevantItem.name} to gain advantage on the check!`, timestamp: Date.now() });
         }
 
         let roll;
@@ -1136,16 +1171,16 @@ class GameManager {
         const advantageText = hasAdvantage ? ' w/ Adv' : '';
 
         if (total >= challenge.dc) {
-            room.chatLog.push({ type: 'system-good', text: `${player.name} succeeds the skill check! (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc})` });
+            room.chatLog.push({ type: 'system-good', text: `${player.name} succeeds the skill check! (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc})`, timestamp: Date.now() });
             const lootCard = this.generateLoot(room.id, player.class);
             if (lootCard) {
                 room.gameState.lootPool.push(lootCard);
-                room.chatLog.push({ type: 'system-good', text: `Their insight reveals a hidden treasure: a ${lootCard.name}!` });
+                room.chatLog.push({ type: 'system-good', text: `Their insight reveals a hidden treasure: a ${lootCard.name}!`, timestamp: Date.now() });
             }
         } else {
             const damage = this.rollDice('1d6');
             this.applyDamage(player, damage);
-            room.chatLog.push({ type: 'system-bad', text: `${player.name} fails the skill check (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc}) and takes ${damage} damage!` });
+            room.chatLog.push({ type: 'system-bad', text: `${player.name} fails the skill check (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc}) and takes ${damage} damage!`, timestamp: Date.now() });
         }
         
         room.gameState.skillChallenge.isActive = false;
@@ -1160,7 +1195,7 @@ class GameManager {
         const player = room?.players[socket.id];
         if (!room || !player) return;
 
-        room.chatLog.push({ type: 'chat', playerId: player.id, playerName: player.name, channel, text: message });
+        room.chatLog.push({ type: 'chat', playerId: player.id, playerName: player.name, channel, text: message, timestamp: Date.now() });
         this.emitGameState(room.id);
     }
     
@@ -1173,8 +1208,15 @@ class GameManager {
         if (!player) return;
 
         player.disconnected = true;
-        room.chatLog.push({ type: 'system', text: `${player.name} has disconnected.` });
+        room.chatLog.push({ type: 'system', text: `${player.name} has disconnected.`, timestamp: Date.now() });
         
+        // Handle voice chat disconnect
+        const vcIndex = room.voiceChatters.indexOf(socket.id);
+        if (vcIndex > -1) {
+            room.voiceChatters.splice(vcIndex, 1);
+            io.to(roomId).emit('voice-chatter-left', socket.id);
+        }
+
         // If the game hasn't started, just remove them.
         if (room.gameState.phase === 'class_selection') {
             // If the host disconnects during setup, close the room for everyone.
@@ -1192,38 +1234,89 @@ class GameManager {
                 return;
             }
             delete room.players[socket.id];
-        } else {
-            // If the game is running, give them 60 seconds to reconnect before removal.
-            player.cleanupTimer = setTimeout(() => {
-                if (room.players[socket.id]?.disconnected) {
-                    delete room.players[socket.id];
-                    // Also remove from turn order to prevent errors
-                    const turnIndex = room.gameState.turnOrder.indexOf(socket.id);
-                    if(turnIndex > -1) room.gameState.turnOrder.splice(turnIndex, 1);
+            // Add an NPC back to keep the player count at 4
+            this.createNpcs(room, 1);
+        } else { // Game is in progress
+            // Start a 30-second timer. If they don't reconnect, pause the game.
+            player.pauseTimer = setTimeout(() => {
+                if (!room.gameState.isPaused) {
+                    room.gameState.isPaused = true;
+                    room.gameState.pauseReason = `${player.name} has disconnected. Waiting for them to reconnect...`;
                     this.emitGameState(roomId);
                 }
-            }, 60000);
+
+                // Start a 90-second timer to replace them with an NPC
+                player.replacementTimer = setTimeout(() => {
+                    const stillDisconnectedPlayer = room.players[socket.id];
+                    if (stillDisconnectedPlayer && stillDisconnectedPlayer.disconnected) {
+                        this.replacePlayerWithNpc(room, socket.id);
+                        if (room.gameState.isPaused) {
+                            room.gameState.isPaused = false;
+                            room.gameState.pauseReason = '';
+                        }
+                        this.emitGameState(roomId);
+                    }
+                }, 90000); // 90 seconds
+            }, 30000); // 30 seconds
         }
         
         delete this.socketToRoom[socket.id];
         this.emitGameState(roomId);
+    }
+
+    replacePlayerWithNpc(room, oldSocketId) {
+        const player = room.players[oldSocketId];
+        if (!player) return;
+    
+        room.chatLog.push({ type: 'system', text: `${player.name} was replaced by an NPC due to inactivity.`, timestamp: Date.now() });
+
+        // Save the player's data for potential reconnection
+        room.savedPlayers[player.playerId] = {
+            class: player.class,
+            equipment: player.equipment,
+            hand: player.hand,
+            stats: player.stats
+        };
+    
+        // Create a new NPC to take their place
+        const npcId = `npc-replacement-${Math.random().toString(36).substr(2, 5)}`;
+        const npc = this.createPlayerObject(npcId, `${player.name} (AI)`, true);
+        npc.role = 'Explorer';
+        npc.class = player.class;
+        npc.equipment = player.equipment;
+        npc.hand = player.hand;
+        npc.stats = player.stats;
+        npc.isDowned = player.isDowned;
+        
+        // Replace in players object
+        delete room.players[oldSocketId];
+        room.players[npcId] = npc;
+    
+        // Replace in turn order
+        const turnIndex = room.gameState.turnOrder.indexOf(oldSocketId);
+        if (turnIndex > -1) {
+            room.gameState.turnOrder[turnIndex] = npcId;
+        }
     }
     
     rejoinRoom(socket, { roomId, playerId }) {
         const room = this.rooms[roomId];
         if (!room) return;
 
-        // Find the player data using their persistent playerId, not the old socket.id
+        // Find the player data using their persistent playerId
         const originalPlayerEntry = Object.entries(room.players).find(([id, p]) => p.playerId === playerId);
+        
         if (originalPlayerEntry) {
             const [oldSocketId, playerObject] = originalPlayerEntry;
             
+            // Clear any pending timers for this player
+            if (playerObject.pauseTimer) clearTimeout(playerObject.pauseTimer);
+            if (playerObject.replacementTimer) clearTimeout(playerObject.replacementTimer);
+
             // Re-assign the player object to the new socket.id
             delete room.players[oldSocketId];
             playerObject.id = socket.id;
             playerObject.disconnected = false;
-            if (playerObject.cleanupTimer) clearTimeout(playerObject.cleanupTimer);
-            playerObject.cleanupTimer = null;
             
             room.players[socket.id] = playerObject;
             socket.join(roomId);
@@ -1231,14 +1324,47 @@ class GameManager {
             
             // Update turn order with new socket id
             const turnIndex = room.gameState.turnOrder.indexOf(oldSocketId);
-            if (turnIndex > -1) {
-                room.gameState.turnOrder[turnIndex] = socket.id;
+            if (turnIndex > -1) room.gameState.turnOrder[turnIndex] = socket.id;
+
+            room.chatLog.push({ type: 'system-good', text: `${playerObject.name} has reconnected.`, timestamp: Date.now() });
+            
+            // If the game was paused for this player, unpause it.
+            if (room.gameState.isPaused && room.gameState.pauseReason.includes(playerObject.name)) {
+                room.gameState.isPaused = false;
+                room.gameState.pauseReason = '';
             }
 
-            socket.emit('playerIdentity', { playerId: playerObject.playerId, roomId });
-            room.chatLog.push({ type: 'system', text: `${playerObject.name} has reconnected.` });
-            this.emitGameState(roomId);
+        } else if (room.savedPlayers[playerId]) {
+            // Player was replaced by an NPC. Try to find an open NPC slot to rejoin into.
+            const npcToReplace = Object.values(room.players).find(p => p.isNpc && p.role === 'Explorer');
+            if (npcToReplace) {
+                delete room.players[npcToReplace.id];
+                const savedData = room.savedPlayers[playerId];
+                
+                const newPlayer = this.createPlayerObject(socket.id, savedData.name);
+                Object.assign(newPlayer, savedData); // Restore saved data
+                newPlayer.disconnected = false;
+
+                room.players[socket.id] = newPlayer;
+                socket.join(roomId);
+                this.socketToRoom[socket.id] = roomId;
+
+                const turnIndex = room.gameState.turnOrder.indexOf(npcToReplace.id);
+                if(turnIndex > -1) room.gameState.turnOrder[turnIndex] = socket.id;
+                
+                delete room.savedPlayers[playerId];
+                room.chatLog.push({ type: 'system-good', text: `${newPlayer.name} has rejoined the game!`, timestamp: Date.now() });
+            } else {
+                 socket.emit('actionError', 'Could not rejoin, the game is now full.');
+                 return;
+            }
+        } else {
+            socket.emit('actionError', 'Could not find your player in this game.');
+            return;
         }
+
+        socket.emit('playerIdentity', { playerId: playerId, roomId });
+        this.emitGameState(roomId);
     }
 }
 
@@ -1251,10 +1377,37 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', (data) => gameManager.joinRoom(socket, data));
     socket.on('rejoinRoom', (data) => gameManager.rejoinRoom(socket, data));
     socket.on('chooseClass', (data) => gameManager.chooseClass(socket, data));
+    socket.on('startGame', () => gameManager.startGame(socket));
     socket.on('equipItem', (data) => gameManager.equipItem(socket, data));
     socket.on('endTurn', () => gameManager.endTurn(socket));
     socket.on('playerAction', (data) => gameManager.handlePlayerAction(socket, data));
     socket.on('chatMessage', (data) => gameManager.handleChatMessage(socket, data));
+    
+    // WebRTC Signaling
+    socket.on('join-voice-chat', () => {
+        const room = gameManager.findRoomBySocket(socket);
+        if (room) {
+            socket.emit('existing-voice-chatters', room.voiceChatters);
+            room.voiceChatters.push(socket.id);
+            socket.to(room.id).emit('new-voice-chatter', socket.id);
+        }
+    });
+
+    socket.on('leave-voice-chat', () => {
+        const room = gameManager.findRoomBySocket(socket);
+        if (room) {
+            room.voiceChatters = room.voiceChatters.filter(id => id !== socket.id);
+            socket.to(room.id).emit('voice-chatter-left', socket.id);
+        }
+    });
+
+    socket.on('webrtc-signal', (payload) => {
+        io.to(payload.to).emit('webrtc-signal', {
+            from: socket.id,
+            signal: payload.signal
+        });
+    });
+
     socket.on('disconnect', () => gameManager.handleDisconnect(socket));
 });
 
