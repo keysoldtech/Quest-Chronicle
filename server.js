@@ -260,12 +260,13 @@ class GameManager {
         // --- Correct Turn Order Logic ---
         const dmId = 'npc-dm';
         const hostId = room.hostId;
-        // Get all explorer IDs except for the host
+        
+        // Filter out the host from the list of explorers to be shuffled.
         const otherExplorerIds = Object.keys(room.players).filter(id => 
             room.players[id].role === 'Explorer' && id !== hostId
         );
         
-        // The final turn order is DM -> Host -> Randomized Other Explorers
+        // The final turn order is DM -> Host -> Randomized Other Explorers.
         room.gameState.turnOrder = [dmId, hostId, ...shuffle(otherExplorerIds)];
         
         room.gameState.currentPlayerIndex = -1;

@@ -160,7 +160,8 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .player-resources-container.mobile { gap: 0.5rem; flex-direction: row; align-items: center; }
 .player-health-bar-container { display: flex; align-items: center; gap: 0.5rem; width: 180px; }
 .player-health-bar-container .material-symbols-outlined { color: var(--stat-color-hp); font-size: 1.25rem; }
-.ap-counter { font-weight: bold; font-size: 1rem; color: var(--stat-color-ap); display: flex; align-items: center; justify-content: center; gap: 0.25rem; background-color: var(--color-surface); padding: 0.2rem 0.5rem; border-radius: 20px; border: 1px solid var(--color-border); width: 180px; }
+.ap-counter { font-weight: bold; font-size: 1rem; color: var(--color-text-primary); display: flex; align-items: center; justify-content: center; gap: 0.25rem; background-color: var(--color-surface); padding: 0.2rem 0.5rem; border-radius: 20px; border: 1px solid var(--color-border); width: 180px; }
+.ap-counter .material-symbols-outlined { color: var(--stat-color-ap); }
 .progress-bar-wrapper { position: relative; flex-grow: 1; display: flex; align-items: center; }
 .progress-bar { width: 100%; height: 16px; background-color: var(--color-surface-light); border-radius: 8px; border: 1px solid var(--color-border); overflow: hidden; }
 .progress-bar.health .progress-bar-fill { background-color: var(--stat-color-hp); height: 100%; transition: width 0.3s ease-in-out; }
@@ -282,6 +283,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .modal-content { background-color: var(--color-surface); border: 2px solid var(--color-border); border-radius: 4px; box-shadow: var(--shadow-lg); padding: 1.5rem; width: 100%; max-width: 500px; max-height: 90vh; display: flex; flex-direction: column; background-image: var(--panel-texture); }
 .modal-content.large { max-width: 90vw; width: 1000px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1rem; }
+#skill-challenge-modal .modal-actions { justify-content: space-between; }
 #toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 3000; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
 .toast {
     font-family: var(--font-title);
@@ -325,8 +327,8 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 
 /* --- 13.5. DISCOVERY & DISCARD MODALS (SCROLL FIX) --- */
 .modal-header-fixed { flex-shrink: 0; }
-.modal-footer-fixed, .modal-actions { flex-shrink: 0; }
-.discovery-scroll-container { flex-grow: 1; overflow-y: auto; padding: 0 1rem; }
+.modal-footer-fixed { flex-shrink: 0; }
+.discovery-scroll-container { flex-grow: 1; overflow-y: auto; padding: 0 1rem; min-height: 0; }
 
 .discovery-choice-container, .discard-choice-container { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1rem; }
 .discovery-choice-section, .discard-choice-section { background: rgba(0,0,0,0.2); border: 1px solid var(--color-border); border-radius: 4px; }
@@ -382,7 +384,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     .mobile-header .progress-bar { height: 12px; }
     .mobile-header .progress-bar-text { font-size: 0.65rem; }
     .mobile-header .ap-counter { font-size: 0.9rem; padding: 0.1rem 0.5rem; width: auto; }
-    .mobile-header .player-resources-container { gap: 0.25rem; }
+    .mobile-header .player-resources-container.mobile { flex-direction: column; gap: 0.1rem; align-items: stretch; }
     .mobile-header .party-hope-meter-container { display: flex; align-items: center; gap: 0.5rem; }
     .mobile-header .party-hope-label { display: none; }
     .mobile-header .party-hope-meter.mobile { gap: 0.25rem; }

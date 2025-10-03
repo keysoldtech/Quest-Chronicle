@@ -216,7 +216,7 @@ function createCardElement(card, options = {}) {
             dex: { icon: 'sprint', color: 'dex' }, 
             con: { icon: 'shield_person', color: 'con' },
             int: { icon: 'school', color: 'int' },
-            wis: { icon: 'self_improvement', color: 'wis' },
+            wis: { icon: 'self_improvement', color: 'wis' }, 
             cha: { icon: 'star', color: 'cha' }
         };
         bonusesHTML = Object.entries(bonuses).map(([key, value]) => {
@@ -540,34 +540,33 @@ function renderGameplayState(myPlayer, gameState) {
     // Party Hope Meter
     renderPartyHope(gameState.partyHope);
 
-    // Health bars
-    const headerStats = get('header-player-stats');
-    const mobileHeaderStats = get('mobile-header-player-stats');
+    // Health and AP bars
+    const desktopResources = get('desktop-resources-container');
+    const mobileResources = get('mobile-resources-container');
+
     if (myPlayer.stats.maxHp > 0) {
         const healthPercent = (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100;
+        
         get('player-health-bar').style.width = `${healthPercent}%`;
         get('player-health-text').textContent = `${myPlayer.stats.currentHp} / ${myPlayer.stats.maxHp}`;
-        headerStats.classList.remove('hidden');
+        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
+        desktopResources.classList.remove('hidden');
+
         get('mobile-player-health-bar').style.width = `${healthPercent}%`;
         get('mobile-player-health-text').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
-        mobileHeaderStats.classList.remove('hidden');
+        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
+        mobileResources.classList.remove('hidden');
     } else {
-        headerStats.classList.add('hidden');
-        mobileHeaderStats.classList.add('hidden');
+        desktopResources.classList.add('hidden');
+        mobileResources.classList.add('hidden');
     }
 
-    // Turn Indicator & AP
+    // Turn Indicator
     const turnPlayer = currentRoomState.players[gameState.turnOrder[gameState.currentPlayerIndex]];
     const turnText = turnPlayer ? `${turnPlayer.name}'s Turn` : "Loading...";
     get('turn-indicator').textContent = turnText;
     get('mobile-turn-indicator').textContent = turnText;
-    get('ap-counter-desktop').classList.toggle('hidden', !isMyTurn);
-    get('ap-counter-mobile').classList.toggle('hidden', !isMyTurn);
-    if(isMyTurn) {
-        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
-        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
-    }
-
+    
     // Action Bars
     get('fixed-action-bar').classList.toggle('hidden', !isMyTurn);
     get('mobile-action-bar').classList.toggle('hidden', !isMyTurn);
@@ -644,18 +643,18 @@ function renderPartyHope(hope) {
     else if (hope >= 9) { hopeLabel = 'Inspired (+1 Hit)'; hopeClass = 'inspired'; }
     else if (hope >= 7) { hopeLabel = 'Hopeful'; hopeClass = 'hopeful'; }
 
-    const desktopMeter = document.getElementById('party-hope-meter-desktop');
-    const mobileMeter = document.getElementById('party-hope-meter-mobile');
+    const desktopMeterContainer = document.getElementById('party-hope-meter-desktop');
+    const mobileMeterContainer = document.getElementById('party-hope-meter-mobile');
     
-    desktopMeter.className = `party-hope-meter ${hopeClass}`;
-    mobileMeter.className = `party-hope-meter mobile ${hopeClass}`;
+    desktopMeterContainer.className = `party-hope-meter-container ${hopeClass}`;
+    mobileMeterContainer.className = `party-hope-meter-container mobile ${hopeClass}`;
 
     document.getElementById('party-hope-bar-desktop').style.width = `${hopePercent}%`;
     document.getElementById('party-hope-text-desktop').textContent = `${hopeLabel} ${hope}/10`;
     document.getElementById('party-hope-text-mobile').textContent = `${hope}/10`;
     
-    desktopMeter.classList.remove('hidden');
-    mobileMeter.classList.remove('hidden');
+    desktopMeterContainer.classList.remove('hidden');
+    mobileMeterContainer.classList.remove('hidden');
 }
 
 function renderCharacterPanel(desktopContainer, mobileContainer, player, isMyTurn) {
