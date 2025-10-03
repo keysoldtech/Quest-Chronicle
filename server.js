@@ -142,7 +142,7 @@ class GameManager {
     
         const defaultSettings = {
             startWithWeapon: true, startWithArmor: true, startingItems: 2, 
-            startingSpells: 2, lootDropRate: 50, maxHandSize: 7
+            startingSpells: 2, lootDropRate: 80, maxHandSize: 7
         };
     
         const newRoom = {
@@ -560,8 +560,8 @@ class GameManager {
     
     // --- 3.6. AI Logic & Event Triggers ---
     async handleDmTurn(room) {
-        // 1. World Event Check: 33% chance each DM turn if no event is active.
-        if (!room.gameState.worldEvents.currentEvent && Math.random() < 0.33) {
+        // 1. World Event Check: 60% chance each DM turn if no event is active.
+        if (!room.gameState.worldEvents.currentEvent && Math.random() < 0.60) {
             const eventCard = this.drawCardFromDeck(room.id, 'worldEvent');
             if(eventCard) {
                 room.gameState.worldEvents.currentEvent = eventCard;
@@ -650,7 +650,7 @@ class GameManager {
             room.chatLog.push({ type: 'dm', text: `${defeatedMonster.name} has been defeated!` });
             
             // Check for loot drop based on room settings.
-            const lootDropChance = room.settings.lootDropRate || 50;
+            const lootDropChance = room.settings.lootDropRate || 80;
             if (Math.random() * 100 < lootDropChance) {
                 const killer = room.players[killerId];
                 const killerClass = killer ? killer.class : null;
@@ -1008,7 +1008,22 @@ class GameManager {
         if (player.currentAp < 1) return socket.emit('actionError', "Not enough AP to attempt the challenge.");
         player.currentAp -= 1;
         
-        const roll = this.rollDice('1d20');
+        let hasAdvantage = false;
+        const relevantItem = player.hand.find(card => card.relevantSkill && card.relevantSkill === challenge.skill);
+        if (relevantItem) {
+            hasAdvantage = true;
+            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${relevantItem.name} to gain advantage on the check!` });
+        }
+
+        let roll;
+        if (hasAdvantage) {
+            const roll1 = this.rollDice('1d20');
+            const roll2 = this.rollDice('1d20');
+            roll = Math.max(roll1, roll2);
+        } else {
+            roll = this.rollDice('1d20');
+        }
+        
         // TODO: Add stat modifiers based on challenge.skill
         const total = roll; 
 

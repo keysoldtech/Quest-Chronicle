@@ -930,6 +930,9 @@ function displayAttackRollResult(data) {
         dieSVG.classList.remove('rolling');
         dieSVG.querySelector('.die-text').textContent = roll;
         dieSVG.querySelector('.die-shape').style.fill = outcome === 'Hit' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
+        
+        dieSVG.classList.add('result-glow');
+        setTimeout(() => dieSVG.classList.remove('result-glow'), 1000);
     }
     
     const resultContainer = document.getElementById('dice-roll-result-container');
@@ -973,6 +976,9 @@ function displayDamageRollResult(data) {
         dieSVG.classList.remove('rolling');
         dieSVG.querySelector('.die-text').textContent = damageRoll;
         dieSVG.querySelector('.die-shape').style.fill = 'var(--color-special)';
+
+        dieSVG.classList.add('result-glow');
+        setTimeout(() => dieSVG.classList.remove('result-glow'), 1000);
     }
 
     const damageLine = document.getElementById('dice-roll-damage-line');

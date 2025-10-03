@@ -196,14 +196,14 @@ const itemCards = [
     { name: "Scroll of Illusory Doubles", type: "Scroll", category: "Consumable", apCost: 1, effect: { type: "spell", spellName: "Illusory Doubles", description: "Allows the user to cast the Illusory Doubles spell as if they were a spellcaster." } },
     { name: "Scroll of Inferno Sphere", type: "Scroll", category: "Consumable", apCost: 1, effect: { type: "spell", spellName: "Inferno Sphere", description: "Allows the user to cast the Inferno Sphere spell as if they were a spellcaster." } },
     { name: "Scroll of Shockwave", type: "Scroll", category: "Consumable", apCost: 1, effect: { type: "spell", spellName: "Shockwave", description: "Allows the user to cast the Shockwave spell as if they were a spellcaster." } },
-    { name: "Climber's Spikes", type: "Utility", category: "General", effect: { description: "Provides advantage on difficult Strength (Athletics) or Dexterity (Acrobatics) checks for climbing." } },
-    { name: "Climbing Hook", type: "Utility", category: "General", effect: { description: "Can be used with a rope for ascending or descending. Provides advantage on Strength (Athletics) checks." } },
+    { name: "Climber's Spikes", type: "Utility", category: "General", relevantSkill: "str", effect: { description: "Provides advantage on difficult Strength (Athletics) or Dexterity (Acrobatics) checks for climbing." } },
+    { name: "Climbing Hook", type: "Utility", category: "General", relevantSkill: "str", effect: { description: "Can be used with a rope for ascending or descending. Provides advantage on Strength (Athletics) checks." } },
     { name: "Consecrated Emblem", type: "Utility", category: "General", class: ["Cleric"], effect: { description: "Can be used as a focus for casting certain spells. May have other minor effects when interacting with undead or evil entities." } },
-    { name: "Iron Pry", type: "Utility", category: "General", effect: { description: "Provides advantage on Strength checks made to force open doors, chests, or containers." } },
-    { name: "Lockpicks & Shims", type: "Utility", category: "General", class: ["Rogue"], effect: { description: "Provides advantage on Skill Challenges related to picking locks or disarming simple traps." } },
+    { name: "Iron Pry", type: "Utility", category: "General", relevantSkill: "str", effect: { description: "Provides advantage on Strength checks made to force open doors, chests, or containers." } },
+    { name: "Lockpicks & Shims", type: "Utility", category: "General", class: ["Rogue"], relevantSkill: "dex", effect: { description: "Provides advantage on Skill Challenges related to picking locks or disarming simple traps." } },
     { name: "Spark & Steel", type: "Utility", category: "General", effect: { description: "Allows the user to light fires or other flammable objects quickly." } },
     { name: "Sturdy Cord (50 ft)", type: "Utility", category: "General", effect: { description: "Can be used for climbing, tying, or other tasks requiring rope." } },
-    { name: "Trail Digger", type: "Utility", category: "General", effect: { description: "Useful for digging. Provides advantage on Skill Challenges related to excavation or creating simple earthworks." } }
+    { name: "Trail Digger", type: "Utility", category: "General", relevantSkill: "str", effect: { description: "Useful for digging. Provides advantage on Skill Challenges related to excavation or creating simple earthworks." } }
 ];
 
 // --- 6.5. Event Cards ---

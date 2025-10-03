@@ -232,6 +232,12 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .result-line.hit { color: var(--color-success); } .result-line.miss { color: var(--color-danger); }
 .result-line.damage { color: var(--color-special); font-size: 1.5rem; margin-top: 0.5rem; }
 .roll-details { text-align: center; color: var(--color-text-secondary); }
+.die-svg.result-glow .die-shape { animation: result-glow-anim 1s ease-out; }
+@keyframes result-glow-anim {
+  0% { filter: drop-shadow(0 0 0 var(--color-glow)); }
+  50% { filter: drop-shadow(0 0 15px var(--color-glow)); }
+  100% { filter: drop-shadow(0 0 0 var(--color-glow)); }
+}
 
 /* --- CLASS SELECTION STYLES (NEW) --- */
 .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); z-index: 1500; display: flex; align-items: center; justify-content: center; }
