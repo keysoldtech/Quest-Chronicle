@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.0.5 - Client Stability Fix</p>
+            <p class="build-number-font-menu">v9.0.6 - UI & Turn Order Fixes</p>
         </div>
     </div>
     
@@ -118,17 +118,20 @@
                 <header class="game-header">
                     <div class="header-info">
                          <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
-                         <div id="party-hope-meter-desktop" class="party-hope-meter hidden">
-                            <span class="material-symbols-outlined">stars</span>
-                            <div class="progress-bar-wrapper">
-                                <div class="progress-bar hope">
-                                    <div id="party-hope-bar-desktop" class="progress-bar-fill"></div>
+                         <div id="party-hope-meter-desktop" class="party-hope-meter-container hidden">
+                            <span class="party-hope-label">Party Hope</span>
+                            <div class="party-hope-meter">
+                                <span class="material-symbols-outlined">stars</span>
+                                <div class="progress-bar-wrapper">
+                                    <div class="progress-bar hope">
+                                        <div id="party-hope-bar-desktop" class="progress-bar-fill"></div>
+                                    </div>
+                                    <span id="party-hope-text-desktop" class="progress-bar-text"></span>
                                 </div>
-                                <span id="party-hope-text-desktop" class="progress-bar-text"></span>
                             </div>
                         </div>
-                         <div id="header-player-stats" class="hidden">
-                             <div class="player-health-bar-container">
+                        <div class="player-resources-container hidden">
+                             <div id="header-player-stats" class="player-health-bar-container">
                                  <span class="material-symbols-outlined">favorite</span>
                                  <div class="progress-bar-wrapper">
                                      <div class="progress-bar health">
@@ -137,12 +140,12 @@
                                      <span id="player-health-text" class="progress-bar-text"></span>
                                  </div>
                              </div>
-                         </div>
-                         <p id="ap-counter-desktop" class="ap-counter hidden"></p>
+                             <p id="ap-counter-desktop" class="ap-counter"></p>
+                        </div>
                          <p class="turn-counter">Round: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v9.0.5 - Client Stability Fix</p>
+                        <p class="build-number-font">v9.0.6 - UI & Turn Order Fixes</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -226,12 +229,15 @@
                 <header class="mobile-header">
                     <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
                     <div class="mobile-resources">
-                        <div id="party-hope-meter-mobile" class="party-hope-meter mobile hidden">
-                            <span class="material-symbols-outlined">stars</span>
-                            <span id="party-hope-text-mobile"></span>
+                        <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden">
+                             <span class="party-hope-label">Hope</span>
+                            <div class="party-hope-meter mobile">
+                                <span class="material-symbols-outlined">stars</span>
+                                <span id="party-hope-text-mobile"></span>
+                            </div>
                         </div>
-                        <div id="mobile-header-player-stats">
-                             <div class="player-health-bar-container mobile">
+                         <div class="player-resources-container mobile hidden">
+                             <div id="mobile-header-player-stats" class="player-health-bar-container mobile">
                                  <span class="material-symbols-outlined">favorite</span>
                                  <div class="progress-bar-wrapper">
                                      <div class="progress-bar health">
@@ -240,8 +246,8 @@
                                      <span id="mobile-player-health-text" class="progress-bar-text"></span>
                                  </div>
                              </div>
+                             <p id="ap-counter-mobile" class="ap-counter"></p>
                         </div>
-                        <p id="ap-counter-mobile" class="ap-counter hidden"></p>
                     </div>
                     <div class="mobile-header-controls">
                         <div class="room-code-display mobile">
@@ -452,7 +458,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-actions">
+                <div class="modal-actions modal-footer-fixed">
                     <button id="discovery-confirm-btn" class="btn btn-primary" disabled>Confirm Choice</button>
                 </div>
             </div>

@@ -257,10 +257,17 @@ class GameManager {
             p.currentAp = p.stats.ap;
         });
 
+        // --- Correct Turn Order Logic ---
         const dmId = 'npc-dm';
-        const explorerIds = Object.keys(room.players).filter(id => room.players[id].role === 'Explorer');
+        const hostId = room.hostId;
+        // Get all explorer IDs except for the host
+        const otherExplorerIds = Object.keys(room.players).filter(id => 
+            room.players[id].role === 'Explorer' && id !== hostId
+        );
         
-        room.gameState.turnOrder = [dmId, ...shuffle(explorerIds)];
+        // The final turn order is DM -> Host -> Randomized Other Explorers
+        room.gameState.turnOrder = [dmId, hostId, ...shuffle(otherExplorerIds)];
+        
         room.gameState.currentPlayerIndex = -1;
         room.gameState.phase = 'started';
         room.gameState.turnCount = 0;
