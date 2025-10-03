@@ -21,12 +21,12 @@
 
 // --- 1. CLASSES ---
 const classes = {
-    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAP: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Frenzied Attack', apCost: 0, description: 'Once per turn, after failing to draw a spell card, perform an attack that deals +6 damage, but lose 2 Shield Points.' } },
-    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAP: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Favor', apCost: 0, description: 'Once per turn, add 1d4 to an attack roll or saving throw.' } },
-    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAP: 2, healthDice: 2, stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, ability: { name: 'Arcane Recovery', apCost: 0, description: 'Once per turn, you can choose to draw an additional spell card.' } },
-    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAP: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, ability: { name: 'Precise Shot', apCost: 0, description: "Once per turn, if the DM's range roll is exact for a spell, your next ranged weapon attack deals double damage." } },
-    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAP: 3, healthDice: 2, stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, ability: { name: 'Quick Strike', apCost: 0, description: 'Once per turn, if a failed spell draw was for a Close range enemy, deal +2 damage on your next attack against it.' } },
-    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAP: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, ability: { name: 'Power Attack', apCost: 0, description: 'Once per turn, after failing to draw a spell card, add +4 damage to your next attack.' } },
+    Barbarian: { baseHp: 24, baseDamageBonus: 4, baseShieldBonus: 0, baseAP: 3, healthDice: 4, stats: { str: 4, dex: 1, con: 3, int: 0, wis: 0, cha: 1 }, ability: { name: 'Rage', apCost: 1, description: 'Enter a rage. Gain +4 damage on all attacks this turn.' } },
+    Cleric:    { baseHp: 20, baseDamageBonus: 1, baseShieldBonus: 3, baseAP: 2, healthDice: 3, stats: { str: 1, dex: 0, con: 2, int: 1, wis: 4, cha: 2 }, ability: { name: 'Divine Heal', apCost: 1, description: 'Heal yourself for 1d8 + WIS HP.' } },
+    Mage:      { baseHp: 18, baseDamageBonus: 1, baseShieldBonus: 2, baseAP: 2, healthDice: 2, stats: { str: 0, dex: 1, con: 1, int: 4, wis: 2, cha: 1 }, ability: { name: 'Arcane Recovery', apCost: 0, description: 'Regain 1 AP. Usable once per turn.' } },
+    Ranger:    { baseHp: 20, baseDamageBonus: 2, baseShieldBonus: 2, baseAP: 2, healthDice: 3, stats: { str: 1, dex: 4, con: 2, int: 1, wis: 3, cha: 0 }, ability: { name: 'Hunter\'s Mark', apCost: 1, description: 'Mark a target. Your next attack against it has +5 to hit.' } },
+    Rogue:     { baseHp: 18, baseDamageBonus: 3, baseShieldBonus: 1, baseAP: 3, healthDice: 2, stats: { str: 1, dex: 4, con: 1, int: 2, wis: 0, cha: 3 }, ability: { name: 'Sneak Attack', apCost: 1, description: 'Your next attack this turn deals an extra 1d6 damage.' } },
+    Warrior:   { baseHp: 22, baseDamageBonus: 2, baseShieldBonus: 4, baseAP: 3, healthDice: 4, stats: { str: 3, dex: 2, con: 4, int: 0, wis: 1, cha: 1 }, ability: { name: 'Power Surge', apCost: 1, description: 'Your next attack has +2 to hit and +2 damage.' } },
 };
 
 // --- 2. STATUS EFFECT DEFINITIONS ---

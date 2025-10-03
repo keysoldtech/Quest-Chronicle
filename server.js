@@ -132,6 +132,7 @@ class GameManager {
             hand: [],
             equipment: { weapon: null, armor: null },
             statusEffects: [],
+            usedAbilityThisTurn: false,
         };
     }
 
@@ -465,6 +466,7 @@ class GameManager {
         // Refresh stats and AP at the start of the turn.
         player.stats = this.calculatePlayerStats(player);
         player.currentAp = player.stats.maxAP;
+        player.usedAbilityThisTurn = false;
     
         // If there's an active world event, activate the skill challenge phase for the player
         if (room.gameState.worldEvents.currentEvent?.eventType === 'skill_challenge') {
@@ -683,8 +685,7 @@ class GameManager {
     
         const actions = {
             'attack': this.resolveAttack,
-            'resolve_hit': this.resolveHit,
-            'resolve_damage': this.resolveDamage,
+            'resolveAttackRoll': this.resolveAttackRoll,
             'useConsumable': this.resolveUseConsumable,
             'claimLoot': this.resolveClaimLoot,
             'chooseNewCardDiscard': this.resolveNewCardDiscard,
@@ -718,7 +719,6 @@ class GameManager {
         
         const bonus = player.stats.hitBonus || 0;
         
-        // Prompt the client to show the dice roll modal.
         socket.emit('promptAttackRoll', {
             title: `Attacking ${target.name}`,
             dice: '1d20',
@@ -731,7 +731,7 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
-    resolveHit(room, player, { weaponId, targetId }) {
+    resolveAttackRoll(room, player, { weaponId, targetId }) {
         const weapon = weaponId === 'unarmed' 
             ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
             : Object.values(player.equipment).find(e => e && e.id === weaponId);
@@ -739,44 +739,36 @@ class GameManager {
 
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
         if (!target) return;
-        
-        const bonus = player.stats.hitBonus || 0;
-        const roll = this.rollDice('1d20');
-        const total = roll + bonus;
-        const outcome = total >= target.requiredRollToHit ? 'Hit' : 'Miss';
-        
-        // Broadcast the result to all players in the room.
-        io.to(room.id).emit('attackResult', {
+
+        const hitBonus = player.stats.hitBonus || 0;
+        const hitRoll = this.rollDice('1d20');
+        const totalRoll = hitRoll + hitBonus;
+        const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
+
+        const resultPayload = {
             rollerId: player.id, rollerName: player.name, targetName: target.name,
-            action: 'attack', roll, bonus, total, outcome,
-            needsDamageRoll: outcome === 'Hit', weaponId, targetId,
-            damageDice: weapon.effect.dice
-        });
-    }
+            weaponName: weapon.name,
+            roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
+            outcome,
+        };
 
-    resolveDamage(room, player, { weaponId, targetId }) {
-        const weapon = weaponId === 'unarmed' 
-            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-            : Object.values(player.equipment).find(e => e && e.id === weaponId);
-        if (!weapon) return;
-        const target = room.gameState.board.monsters.find(m => m.id === targetId);
-        if (!target) return;
+        if (outcome === 'Hit') {
+            const damageRoll = this.rollDice(weapon.effect.dice);
+            const damageBonus = player.stats.damageBonus || 0;
+            const totalDamage = Math.max(1, damageRoll + damageBonus);
+            target.currentHp -= totalDamage;
 
-        const damageRoll = this.rollDice(weapon.effect.dice);
-        const damageBonus = player.stats.damageBonus || 0;
-        const totalDamage = Math.max(1, damageRoll + damageBonus);
+            resultPayload.damageDice = weapon.effect.dice;
+            resultPayload.damageRoll = damageRoll;
+            resultPayload.damageBonus = damageBonus;
+            resultPayload.totalDamage = totalDamage;
 
-        target.currentHp -= totalDamage;
-
-        io.to(room.id).emit('damageResult', {
-            rollerId: player.id, rollerName: player.name, targetName: target.name,
-            damageRoll, damageBonus, damage: totalDamage
-        });
-
-        if (target.currentHp <= 0) {
-            this.handleMonsterDefeated(room, target.id, player.id);
+            if (target.currentHp <= 0) {
+                this.handleMonsterDefeated(room, target.id, player.id);
+            }
         }
 
+        io.to(room.id).emit('attackResolved', resultPayload);
         this.emitGameState(room.id);
     }
 
@@ -893,14 +885,45 @@ class GameManager {
     resolveUseAbility(room, player, { abilityName }, socket) {
         const classData = gameData.classes[player.class];
         if (!classData || classData.ability.name !== abilityName) return;
-        
         if (player.currentAp < classData.ability.apCost) return socket.emit('actionError', "Not enough AP.");
-        player.currentAp -= classData.ability.apCost;
-        
-        player.statusEffects.push({ name: 'Unchecked Assault', duration: 2, bonuses: { damageBonus: 6 } });
-        room.chatLog.push({ type: 'action-good', text: `${player.name} uses ${abilityName}!` });
-        
-        this.emitGameState(room.id);
+    
+        let success = true; // Assume success unless a condition fails
+        switch (player.class) {
+            case 'Barbarian':
+                player.statusEffects.push({ name: 'Rage', duration: 2, bonuses: { damageBonus: 4 } });
+                break;
+            case 'Cleric':
+                // For simplicity, we'll make this self-heal. Targeting would require client-side changes.
+                const healing = this.rollDice('1d8') + player.stats.wis;
+                player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healing);
+                break;
+            case 'Mage':
+                if (player.usedAbilityThisTurn) {
+                    socket.emit('actionError', "You can only use Arcane Recovery once per turn.");
+                    success = false;
+                } else {
+                    player.currentAp = Math.min(player.stats.maxAP, player.currentAp + 1);
+                    player.usedAbilityThisTurn = true;
+                }
+                break;
+            case 'Ranger':
+                player.statusEffects.push({ name: 'Hunters Mark', duration: 2, bonuses: { hitBonus: 5 } });
+                break;
+            case 'Rogue':
+                player.statusEffects.push({ name: 'Sneak Attack', duration: 2, bonuses: { damageBonus: this.rollDice('1d6') } });
+                break;
+            case 'Warrior':
+                player.statusEffects.push({ name: 'Power Surge', duration: 2, bonuses: { damageBonus: 2, hitBonus: 2 } });
+                break;
+            default:
+                success = false;
+        }
+    
+        if (success) {
+            player.currentAp -= classData.ability.apCost;
+            room.chatLog.push({ type: 'action-good', text: `${player.name} uses ${abilityName}!` });
+            this.emitGameState(room.id);
+        }
     }
 
     // --- 3.8. Loot & Item Generation ---
@@ -953,14 +976,20 @@ class GameManager {
         player.currentAp -= 1;
         
         const roll = this.rollDice('1d20');
-        const total = roll; // TODO: Add stat modifiers based on challenge.skill
+        // TODO: Add stat modifiers based on challenge.skill
+        const total = roll; 
 
         if (total >= challenge.dc) {
             room.chatLog.push({ type: 'system-good', text: `${player.name} succeeds the skill check! (Rolled ${total})` });
-            // TODO: Implement success rewards.
+            const lootCard = this.generateLoot(room.id, player.class);
+            if (lootCard) {
+                room.gameState.lootPool.push(lootCard);
+                room.chatLog.push({ type: 'system-good', text: `Their insight reveals a hidden treasure: a ${lootCard.name}!` });
+            }
         } else {
-            room.chatLog.push({ type: 'system-bad', text: `${player.name} fails the skill check. (Rolled ${total})` });
-            // TODO: Implement failure consequences.
+            const damage = this.rollDice('1d6');
+            this.applyDamage(player, damage);
+            room.chatLog.push({ type: 'system-bad', text: `${player.name} fails the skill check (Rolled ${total}) and takes ${damage} damage from the hazardous event!` });
         }
         
         room.gameState.skillChallenge.isActive = false;

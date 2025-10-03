@@ -820,6 +820,18 @@ function showSkillChallengeModal(challenge) {
 
 
 // --- 5. DICE ROLLING LOGIC ---
+function createDieSVG(sides, value) {
+    const text = value || '?';
+    return `
+        <svg class="die-svg" viewBox="0 0 100 100">
+            <rect class="die-face" x="5" y="5" width="90" height="90" rx="10"/>
+            <text class="die-text" x="50" y="55" dominant-baseline="middle" text-anchor="middle">${text}</text>
+            <text class="die-sides-text" x="50" y="85" dominant-baseline="middle" text-anchor="middle">d${sides}</text>
+        </svg>
+    `;
+}
+
+
 function showDiceRollModal(data) {
     clientState.currentRollData = data;
     const { title, dice, bonus, targetAC } = data;
@@ -832,16 +844,18 @@ function showDiceRollModal(data) {
     if (targetAC) description += ` vs Target AC of ${targetAC}`;
     document.getElementById('dice-roll-description').textContent = description;
 
-    const container = document.getElementById('dice-animation-container');
-    container.innerHTML = `<svg viewBox="0 0 100 100"><rect class="dice-face" x="5" y="5" width="90" height="90" rx="10"/><text id="dice-text" class="dice-text" x="50" y="55">?</text></svg>`;
-    container.querySelector('svg').classList.remove('stopped');
+    const container = document.getElementById('dice-display-container');
+    const [num, sides] = dice.split('d').map(Number);
+    container.innerHTML = createDieSVG(sides, '?');
 
     document.getElementById('dice-roll-result-container').classList.add('hidden');
+    document.getElementById('dice-roll-result-line').textContent = '';
+    document.getElementById('dice-roll-damage-line').textContent = '';
+    document.getElementById('dice-roll-details').textContent = '';
+
     document.getElementById('dice-roll-confirm-btn').classList.remove('hidden');
     document.getElementById('dice-roll-confirm-btn').disabled = false;
     document.getElementById('dice-roll-close-btn').classList.add('hidden');
-    const oldDmgBtn = document.getElementById('dice-roll-damage-btn');
-    if (oldDmgBtn) oldDmgBtn.remove();
     
     modal.classList.remove('hidden');
 }
@@ -850,87 +864,70 @@ function handleDiceRoll() {
     if (!clientState.currentRollData) return;
     
     document.getElementById('dice-roll-confirm-btn').disabled = true;
-    const diceText = document.getElementById('dice-text');
-    
+    const container = document.getElementById('dice-display-container');
+    const dieSVG = container.querySelector('.die-svg');
+    const dieText = dieSVG.querySelector('.die-text');
+    const [num, sides] = clientState.currentRollData.dice.split('d').map(Number);
+
     if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
     clientState.diceAnimationInterval = setInterval(() => {
-        diceText.textContent = Math.ceil(Math.random() * 20);
+        dieText.textContent = Math.ceil(Math.random() * sides);
     }, 50);
+
+    dieSVG.classList.add('rolling');
 
     setTimeout(() => {
         if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-        if(clientState.currentRollData.action === 'attack'){
-             socket.emit('playerAction', { action: 'resolve_hit', ...clientState.currentRollData });
-        }
+        socket.emit('playerAction', { action: 'resolveAttackRoll', ...clientState.currentRollData });
     }, 1000);
 }
 
-function displayAttackResult(data) {
-    const { roll, bonus, total, outcome, needsDamageRoll, rollerName, targetName, weaponId, targetId, damageDice } = data;
-
-    const isMyRoll = data.rollerId === myId;
-    const modal = document.getElementById('dice-roll-modal');
-
+function displayAttackResolution(data) {
+    const { roll, bonus, total, outcome, rollerId, totalDamage, damageRoll } = data;
+    const isMyRoll = rollerId === myId;
+    
     if (isMyRoll) {
         if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-        const svg = document.querySelector('#dice-animation-container svg');
-        if (svg) {
-            document.getElementById('dice-text').textContent = roll;
-            svg.classList.add('stopped');
-            svg.querySelector('.dice-face').style.fill = outcome === 'Hit' ? 'var(--color-success)' : 'var(--color-danger)';
+
+        const container = document.getElementById('dice-display-container');
+        const dieSVG = container.querySelector('.die-svg');
+        if (dieSVG) {
+            dieSVG.classList.remove('rolling');
+            dieSVG.querySelector('.die-text').textContent = roll;
+            dieSVG.querySelector('.die-face').style.fill = outcome === 'Hit' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
         }
-    }
-    
-    const resultLine = document.getElementById('dice-roll-result-line');
-    resultLine.textContent = `${total} - ${outcome.toUpperCase()}!`;
-    resultLine.className = `result-line ${outcome.toLowerCase()}`;
-    document.getElementById('dice-roll-details').textContent = `(${roll} + ${bonus} bonus)`;
-    
-    if (isMyRoll) {
-        document.getElementById('dice-roll-result-container').classList.remove('hidden');
-        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-    }
-
-    if (needsDamageRoll && isMyRoll) {
-        const damageBtn = document.createElement('button');
-        damageBtn.id = 'dice-roll-damage-btn';
-        damageBtn.className = 'btn btn-special';
-        damageBtn.textContent = `Roll for Damage (${damageDice})`;
-        damageBtn.onclick = () => {
-            socket.emit('playerAction', { action: 'resolve_damage', weaponId, targetId });
-            damageBtn.disabled = true;
-        };
-        const actions = modal.querySelector('.modal-actions');
-        const oldBtn = document.getElementById('dice-roll-damage-btn');
-        if (oldBtn) oldBtn.remove();
         
-        actions.appendChild(damageBtn);
+        const resultContainer = document.getElementById('dice-roll-result-container');
+        const resultLine = document.getElementById('dice-roll-result-line');
+        const detailsLine = document.getElementById('dice-roll-details');
+        const damageLine = document.getElementById('dice-roll-damage-line');
+        
+        resultLine.textContent = `${total} - ${outcome.toUpperCase()}!`;
+        resultLine.className = `result-line ${outcome.toLowerCase()}`;
+        detailsLine.textContent = `(Roll: ${roll} + Bonus: ${bonus})`;
+        
+        resultContainer.classList.remove('hidden');
+        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+        
+        if (outcome === 'Hit') {
+             setTimeout(() => {
+                damageLine.textContent = `Dealt ${totalDamage} damage!`;
+                damageLine.classList.remove('hidden');
+                showToast(`${data.rollerName} dealt ${totalDamage} damage to ${data.targetName}!`, 'hit');
+             }, 500);
+        } else {
+             damageLine.classList.add('hidden');
+        }
 
-    } else if (isMyRoll) {
-        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
         if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-        clientState.rollModalCloseTimeout = setTimeout(() => modal.classList.add('hidden'), 3000);
+        clientState.rollModalCloseTimeout = setTimeout(() => {
+            document.getElementById('dice-roll-modal').classList.add('hidden');
+        }, 4000);
+        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
     }
     
-    showToast(`${rollerName} attacks ${targetName}... ${total} is a ${outcome}!`, outcome.toLowerCase());
+    showToast(`${data.rollerName} attacks ${data.targetName}... ${total} is a ${outcome}!`, outcome.toLowerCase());
 }
-
-function displayDamageResult(data) {
-    const { rollerName, targetName, damage } = data;
-    showToast(`${rollerName} dealt ${damage} damage to ${targetName}!`, 'hit');
-    
-    const isMyRoll = data.rollerId === myId;
-    if (isMyRoll) {
-        const modal = document.getElementById('dice-roll-modal');
-        const oldBtn = document.getElementById('dice-roll-damage-btn');
-        if (oldBtn) oldBtn.remove();
-
-        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-        clientState.rollModalCloseTimeout = setTimeout(() => modal.classList.add('hidden'), 3000);
-    }
-}
-
 
 // --- 6. SOCKET.IO EVENT HANDLERS ---
 socket.on('gameStateUpdate', (newState) => {
@@ -941,7 +938,6 @@ socket.on('gameStateUpdate', (newState) => {
     // Check for "Your Turn" popup trigger
     const myPlayer = newState.players[myId];
     if(myPlayer) {
-        const oldPlayer = oldState.players ? oldState.players[myId] : null;
         const isMyTurnNow = newState.gameState.turnOrder[newState.gameState.currentPlayerIndex] === myId;
         const wasMyTurnBefore = oldState.gameState ? oldState.gameState.turnOrder[oldState.gameState.currentPlayerIndex] === myId : false;
         if(isMyTurnNow && !wasMyTurnBefore && !myPlayer.isDowned) {
@@ -972,14 +968,11 @@ socket.on('actionError', (message) => {
 });
 
 socket.on('promptAttackRoll', (data) => {
-    showDiceRollModal({ action: 'attack', ...data });
+    showDiceRollModal({ ...data });
 });
 
-socket.on('attackResult', (data) => {
-    displayAttackResult(data);
-});
-socket.on('damageResult', (data) => {
-    displayDamageResult(data);
+socket.on('attackResolved', (data) => {
+    displayAttackResolution(data);
 });
 
 socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
