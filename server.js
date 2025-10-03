@@ -578,12 +578,12 @@ class GameManager {
         // Skip over any players who are downed or disconnected.
         do {
             nextIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
-            attempts++;
             const nextPlayerId = room.gameState.turnOrder[nextIndex];
             const nextPlayer = room.players[nextPlayerId];
             if (nextPlayer && !nextPlayer.isDowned && !nextPlayer.disconnected) {
                 break; // Found a valid player
             }
+            attempts++;
         } while (attempts <= room.gameState.turnOrder.length)
 
         // If all explorers are downed, the game is over.
@@ -591,7 +591,7 @@ class GameManager {
             .filter(p => p.role === 'Explorer' && !p.isNpc)
             .every(p => p.isDowned || p.disconnected);
 
-        if (allExplorersDown) {
+        if (allExplorersDown && attempts > room.gameState.turnOrder.length) {
             room.gameState.phase = 'game_over';
             room.gameState.winner = 'Monsters';
             this.emitGameState(roomId);
@@ -793,78 +793,98 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
-    resolveAttackRoll(room, player, { weaponId, targetId }, socket) {
-        const target = room.gameState.board.monsters.find(m => m.id === targetId);
-        if (!target) return;
+    resolveAttackRoll(room, player, payload, socket) {
+        try {
+            const { weaponId, targetId } = payload;
+            const target = room.gameState.board.monsters.find(m => m.id === targetId);
+            const weapon = weaponId === 'unarmed' 
+                ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
+                : Object.values(player.equipment).find(e => e && e.id === weaponId);
 
-        const hitBonus = player.stats.hitBonus || 0;
-        const hitRoll = this.rollDice('1d20');
-        const totalRoll = hitRoll + hitBonus;
-        const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
-        
-        const weapon = weaponId === 'unarmed' 
-            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-            : Object.values(player.equipment).find(e => e && e.id === weaponId);
-        if (!weapon) return;
+            if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
+                console.error(`Error resolving attack roll: Invalid target or weapon data.`, { weaponId, targetId });
+                socket.emit('actionError', 'A server error occurred with weapon/target data.');
+                socket.emit('diceRollError');
+                return;
+            }
 
-        const resultPayload = {
-            rollerId: player.id, rollerName: player.name, targetName: target.name,
-            weaponName: weapon.name,
-            roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
-            outcome,
-        };
-        
-        // Emit the hit/miss result to the entire room.
-        io.to(room.id).emit('attackResolved', resultPayload);
+            const hitBonus = player.stats.hitBonus || 0;
+            const hitRoll = this.rollDice('1d20');
+            const totalRoll = hitRoll + hitBonus;
+            const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
+            
+            const resultPayload = {
+                rollerId: player.id, rollerName: player.name, targetName: target.name,
+                weaponName: weapon.name,
+                roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
+                outcome,
+            };
+            
+            io.to(room.id).emit('attackResolved', resultPayload);
 
-        // If it was a hit, prompt the roller to roll for damage.
-        if (outcome === 'Hit') {
-            socket.emit('promptDamageRoll', {
-                title: `Damage Roll vs ${target.name}`,
-                dice: weapon.effect.dice,
-                bonus: player.stats.damageBonus || 0,
-                weaponId,
-                targetId
-            });
+            if (outcome === 'Hit') {
+                socket.emit('promptDamageRoll', {
+                    title: `Damage Roll vs ${target.name}`,
+                    dice: weapon.effect.dice,
+                    bonus: player.stats.damageBonus || 0,
+                    weaponId,
+                    targetId
+                });
+            }
+
+            this.emitGameState(room.id);
+        } catch (e) {
+            console.error("Critical error in resolveAttackRoll:", e);
+            socket.emit('actionError', 'A server error occurred during attack resolution.');
+            socket.emit('diceRollError');
         }
-
-        this.emitGameState(room.id);
     }
     
-    resolveDamageRoll(room, player, { weaponId, targetId }) {
-        const weapon = weaponId === 'unarmed' 
-            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-            : Object.values(player.equipment).find(e => e && e.id === weaponId);
-        if (!weapon) return;
+    resolveDamageRoll(room, player, payload, socket) {
+        try {
+            const { weaponId, targetId } = payload;
+            const weapon = weaponId === 'unarmed' 
+                ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
+                : Object.values(player.equipment).find(e => e && e.id === weaponId);
+            const target = room.gameState.board.monsters.find(m => m.id === targetId);
 
-        const target = room.gameState.board.monsters.find(m => m.id === targetId);
-        if (!target) return;
+            if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
+                console.error(`Error resolving damage roll: Invalid target or weapon data.`, { weaponId, targetId });
+                socket.emit('actionError', 'A server error occurred with weapon/target data.');
+                socket.emit('diceRollError');
+                return;
+            }
 
-        const damageRoll = this.rollDice(weapon.effect.dice);
-        const damageBonus = player.stats.damageBonus || 0;
-        const totalDamage = Math.max(1, damageRoll + damageBonus);
-        target.currentHp -= totalDamage;
-        
-        let wasDefeated = false;
-        if (target.currentHp <= 0) {
-            wasDefeated = true;
-            this.handleMonsterDefeated(room, target.id, player.id);
+            const damageRoll = this.rollDice(weapon.effect.dice);
+            const damageBonus = player.stats.damageBonus || 0;
+            const totalDamage = Math.max(1, damageRoll + damageBonus);
+            target.currentHp -= totalDamage;
+            
+            let wasDefeated = false;
+            if (target.currentHp <= 0) {
+                wasDefeated = true;
+                this.handleMonsterDefeated(room, target.id, player.id);
+            }
+            
+            const damagePayload = {
+                rollerId: player.id,
+                rollerName: player.name,
+                targetId: target.id,
+                targetName: target.name,
+                damageDice: weapon.effect.dice,
+                damageRoll,
+                damageBonus,
+                totalDamage,
+                wasDefeated,
+            };
+
+            io.to(room.id).emit('damageResolved', damagePayload);
+            this.emitGameState(room.id);
+        } catch (e) {
+            console.error("Critical error in resolveDamageRoll:", e);
+            socket.emit('actionError', 'A server error occurred during damage resolution.');
+            socket.emit('diceRollError');
         }
-        
-        const damagePayload = {
-            rollerId: player.id,
-            rollerName: player.name,
-            targetId: target.id,
-            targetName: target.name,
-            damageDice: weapon.effect.dice,
-            damageRoll,
-            damageBonus,
-            totalDamage,
-            wasDefeated,
-        };
-
-        io.to(room.id).emit('damageResolved', damagePayload);
-        this.emitGameState(room.id); // This will update the monster's HP for all clients
     }
 
 

@@ -378,20 +378,24 @@ function renderUI() {
     const desktopCharacterPanel = get('character-sheet-block');
     const mobileCharacterPanel = get('mobile-screen-character');
     
-    if (phase === 'class_selection') {
-        get('lobby-controls').classList.remove('hidden');
-        get('mobile-lobby-controls').classList.remove('hidden');
-        const allReady = Object.values(players).filter(p => !p.isNpc).every(p => p.class);
-        get('start-game-btn').disabled = !allReady;
-        get('mobile-start-game-btn').disabled = !allReady;
-        
-        if (myId !== hostId) {
-            get('lobby-controls').classList.add('hidden');
-            get('mobile-lobby-controls').classList.add('hidden');
-        }
+    // Hide all lobby controls by default
+    get('lobby-controls').classList.add('hidden');
+    get('mobile-lobby-controls').classList.add('hidden');
 
+    if (phase === 'class_selection') {
         if (myPlayer.class) {
-            const waitingHTML = `<h2 class="panel-header">Class Chosen!</h2><p class="panel-content">Waiting for the host to start the game...</p>`;
+            let waitingHTML = `<h2 class="panel-header">Class Chosen!</h2><p class="panel-content">Waiting for the host to start the game...</p>`;
+            
+            if (myId === hostId) {
+                const allReady = Object.values(players).filter(p => !p.isNpc).every(p => p.class);
+                const disabledAttr = allReady ? '' : 'disabled';
+                const buttonHTML = `<div class="lobby-controls-character-panel">
+                    <button id="character-sheet-start-game-btn" class="btn btn-primary" ${disabledAttr}>Start Game</button>
+                    ${!allReady ? '<p class="waiting-text">Waiting for other players to choose a class...</p>' : ''}
+                </div>`;
+                waitingHTML += buttonHTML;
+            }
+
             desktopCharacterPanel.innerHTML = waitingHTML;
             mobileCharacterPanel.innerHTML = `<div class="panel mobile-panel">${waitingHTML}</div>`;
             get('class-selection-modal').classList.add('hidden');
@@ -399,8 +403,6 @@ function renderUI() {
             renderClassSelection(desktopCharacterPanel, mobileCharacterPanel);
         }
     } else if (phase === 'started') {
-        get('lobby-controls').classList.add('hidden');
-        get('mobile-lobby-controls').classList.add('hidden');
         get('class-selection-modal').classList.add('hidden');
         renderGameplayState(myPlayer, gameState);
     }
@@ -781,10 +783,12 @@ function initializeUI() {
 
 function initializeGameUIListeners() {
     document.body.addEventListener('click', (e) => {
+        // Class selection on mobile
         const classBtn = e.target.closest('.select-class-btn');
         if (classBtn) {
             socket.emit('chooseClass', { classId: classBtn.dataset.classId });
         }
+        // Use class ability
         if (e.target.id === 'use-ability-btn') {
             const playerClass = currentRoomState.players[myId]?.class;
             if (playerClass) {
@@ -792,12 +796,14 @@ function initializeGameUIListeners() {
                 socket.emit('playerAction', { action: 'useAbility', abilityName });
             }
         }
+        // Start game button on character panel
+        if (e.target.id === 'character-sheet-start-game-btn') {
+            socket.emit('startGame');
+        }
     });
 
     ['start-game-btn', 'mobile-start-game-btn'].forEach(id => {
-        document.getElementById(id).addEventListener('click', () => {
-            socket.emit('startGame');
-        });
+        document.getElementById(id).addEventListener('click', () => socket.emit('startGame'));
     });
 
     ['chat-form', 'mobile-chat-form'].forEach(id => {
@@ -829,14 +835,27 @@ function initializeGameUIListeners() {
     document.getElementById('chat-toggle-btn').addEventListener('click', () => document.getElementById('chat-overlay').classList.toggle('hidden'));
     document.getElementById('chat-close-btn').addEventListener('click', () => document.getElementById('chat-overlay').classList.add('hidden'));
 
-    ['menu-toggle-btn', 'mobile-menu-toggle-btn'].forEach(id => {
-        const btn = document.getElementById(id);
-        const dropdown = document.getElementById(id.replace('toggle', 'dropdown'));
-        btn.addEventListener('click', (e) => {
+    // --- Menu Dropdown Logic ---
+    const menuButtons = ['menu-toggle-btn', 'mobile-menu-toggle-btn'];
+    const dropdowns = ['menu-dropdown', 'mobile-menu-dropdown'];
+    menuButtons.forEach(btnId => {
+        document.getElementById(btnId).addEventListener('click', e => {
             e.stopPropagation();
-            dropdown.classList.toggle('hidden');
+            const targetDropdownId = btnId.replace('toggle', 'dropdown');
+            const targetDropdown = document.getElementById(targetDropdownId);
+            const isHidden = targetDropdown.classList.contains('hidden');
+            // Hide all dropdowns first
+            dropdowns.forEach(id => document.getElementById(id).classList.add('hidden'));
+            // If the target was hidden, show it
+            if (isHidden) {
+                targetDropdown.classList.remove('hidden');
+            }
         });
     });
+    document.addEventListener('click', () => {
+        dropdowns.forEach(id => document.getElementById(id).classList.add('hidden'));
+    });
+    // --- End Menu Dropdown Logic ---
 
     const leaveGameAction = () => {
         sessionStorage.removeItem('qc_roomId');
@@ -851,12 +870,6 @@ function initializeGameUIListeners() {
     ['join-voice-btn', 'mobile-join-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.join()));
     ['leave-voice-btn', 'mobile-leave-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.leave()));
     ['mute-voice-btn', 'mobile-mute-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.toggleMute()));
-
-
-    document.addEventListener('click', () => {
-        document.getElementById('menu-dropdown').classList.add('hidden');
-        document.getElementById('mobile-menu-dropdown').classList.add('hidden');
-    });
 
     document.querySelector('.info-tabs-panel .tab-buttons').addEventListener('click', (e) => {
         if (e.target.classList.contains('tab-btn')) {
@@ -1467,6 +1480,15 @@ socket.on('roomClosed', ({ message }) => {
 
 socket.on('actionError', (message) => {
     showToast(message, 'error');
+});
+
+socket.on('diceRollError', () => {
+    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    clientState.diceAnimationInterval = null;
+    clientState.rollResponseTimeout = null;
+    clientState.currentRollData = null;
+    document.getElementById('dice-roll-modal').classList.add('hidden');
 });
 
 socket.on('promptAttackRoll', (data) => {

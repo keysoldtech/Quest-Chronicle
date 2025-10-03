@@ -117,6 +117,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .mode-title { font-weight: 700; display: block; margin-bottom: 0.25rem; font-family: var(--font-title); }
 .mode-desc { font-size: 0.8rem; color: var(--color-text-secondary); font-family: var(--font-body); }
 .mode-btn.active .mode-desc { color: rgba(255, 255, 255, 0.8); }
+.build-number-font-menu { font-family: var(--font-body); color: var(--color-text-secondary); font-size: 0.9rem; margin-top: 2rem; }
 
 .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; background: var(--color-bg-dark); padding: 1rem; border-radius: 4px; text-align: left; }
 .or-divider { text-align: center; color: var(--color-text-secondary); position: relative; margin: 0.5rem 0; width: 100%; font-family: var(--font-title); }
@@ -126,6 +127,8 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 #player-name-input, #room-code-input, .input-field { padding: 10px 15px; border: 2px solid var(--color-border); border-radius: 4px; background-color: #2b2521; color: var(--color-text-primary); font-size: 1.1em; transition: all 0.2s; }
 #player-name-input:focus, #room-code-input:focus, .input-field:focus { border-color: var(--color-special); outline: none; }
 .lobby-controls { padding: 1rem; border-top: 1px solid var(--color-border); }
+.lobby-controls-character-panel { padding: 1rem; border-top: 1px solid var(--color-border); margin-top: 1rem; }
+.waiting-text { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.5rem; text-align: center; }
 
 /* --- 4. BUTTONS & FORMS --- */
 .btn { padding: 0.75rem 1.5rem; border: 2px solid var(--color-border); border-radius: 4px; font-family: var(--font-title); font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
@@ -153,6 +156,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .header-info { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .ap-counter { font-weight: bold; font-size: 1.2rem; color: var(--stat-color-ap); display: flex; align-items: center; gap: 0.25rem; background-color: var(--color-surface); padding: 0.25rem 0.75rem; border-radius: 20px; border: 1px solid var(--color-border); }
 .header-controls { display: flex; align-items: center; gap: 1rem; }
+.build-number-font { font-family: var(--font-body); color: var(--color-text-secondary); font-size: 0.9rem; }
 .room-code-display { background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.25rem 0.75rem; text-align: center; }
 .room-code-display span { color: var(--color-text-secondary); font-size: 0.75rem; display: block; font-family: var(--font-title); }
 .room-code-display p { font-weight: 700; font-size: 1.2rem; letter-spacing: 2px; }
