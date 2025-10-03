@@ -213,29 +213,25 @@
             <!-- ================= MOBILE LAYOUT ================= -->
             <div class="game-area-mobile">
                 <header class="mobile-header">
-                    <!-- Tier 1: Player/Turn Info -->
-                    <div class="header-tier top-tier">
-                        <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
+                    <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
+                    <div class="mobile-resources">
+                        <div id="mobile-header-player-stats" class="hidden">
+                            <div class="player-health-bar-container mobile">
+                                <div class="progress-bar-wrapper">
+                                    <div class="progress-bar health">
+                                        <div id="mobile-player-health-bar" class="progress-bar-fill"></div>
+                                    </div>
+                                    <span id="mobile-player-health-text" class="progress-bar-text"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <p id="ap-counter-mobile" class="ap-counter hidden"></p>
+                    </div>
+                    <div class="mobile-header-controls">
                         <div class="room-code-display mobile">
-                            <span>Code</span>
+                            <span>CODE</span>
                             <p id="mobile-room-code">----</p>
                         </div>
-                        <p class="turn-counter mobile">Turn <span id="mobile-turn-counter">0</span></p>
-                    </div>
-                    <!-- Tier 2: Resources & Actions -->
-                    <div class="header-tier bottom-tier">
-                         <div id="mobile-header-player-stats" class="hidden resource-stack">
-                             <div class="player-health-bar-container mobile">
-                                 <div class="progress-bar-wrapper">
-                                     <div class="progress-bar health">
-                                         <div id="mobile-player-health-bar" class="progress-bar-fill"></div>
-                                     </div>
-                                     <span id="mobile-player-health-text" class="progress-bar-text"></span>
-                                 </div>
-                             </div>
-                         </div>
-                         <p id="ap-counter-mobile" class="ap-counter hidden resource-stack"></p>
-                         <button id="mobile-help-btn" class="btn btn-sm btn-icon action-button"><span class="material-symbols-outlined">help</span></button>
                          <div class="header-menu">
                              <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon action-button"><span class="material-symbols-outlined">menu</span></button>
                              <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
@@ -316,21 +312,23 @@
                     </div>
                 </main>
     
-                <div id="mobile-action-bar" class="mobile-action-bar hidden">
-                    <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge</button>
-                    <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard (1AP)</button>
-                    <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite (1AP)</button>
-                    <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest (2AP)</button>
-                    <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
+                <div id="mobile-bottom-chrome">
+                    <div id="mobile-action-bar" class="mobile-action-bar hidden">
+                        <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge</button>
+                        <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard</button>
+                        <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite</button>
+                        <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest</button>
+                        <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
+                    </div>
+                    
+                    <nav class="mobile-bottom-nav">
+                        <button class="nav-btn active" data-screen="game"><span class="material-symbols-outlined">swords</span>Game</button>
+                        <button class="nav-btn" data-screen="character"><span class="material-symbols-outlined">person</span>Character</button>
+                        <button class="nav-btn" data-screen="party"><span class="material-symbols-outlined">groups</span>Party</button>
+                        <button class="nav-btn" data-screen="info"><span class="material-symbols-outlined">public</span>Info</button>
+                        <button class="nav-btn" data-screen="log"><span class="material-symbols-outlined">chat</span>Log</button>
+                    </nav>
                 </div>
-                
-                <nav class="mobile-bottom-nav">
-                    <button class="nav-btn active" data-screen="game"><span class="material-symbols-outlined">swords</span>Game</button>
-                    <button class="nav-btn" data-screen="character"><span class="material-symbols-outlined">person</span>Character</button>
-                    <button class="nav-btn" data-screen="party"><span class="material-symbols-outlined">groups</span>Party</button>
-                    <button class="nav-btn" data-screen="info"><span class="material-symbols-outlined">public</span>Info</button>
-                    <button class="nav-btn" data-screen="log"><span class="material-symbols-outlined">chat</span>Log</button>
-                </nav>
             </div>
     
         </div>

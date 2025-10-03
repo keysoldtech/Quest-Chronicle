@@ -303,29 +303,27 @@ class GameManager {
     }
 
     dealStartingLoadout(room, player) {
-        const { gameMode } = room.gameState;
+        const { settings } = room;
         
         // Equips a weapon/armor directly from the class-appropriate deck.
         const dealAndEquip = (type) => {
             const card = this.drawCardFromDeck(room.id, type, player.class);
             if (card) player.equipment[type] = card;
         };
-
-        if (gameMode !== 'Advanced') dealAndEquip('weapon');
-        if (gameMode !== 'Advanced') dealAndEquip('armor');
-
-        // Give the player cards defined in their class's starting deck.
-        const classData = gameData.classes[player.class];
-        if (classData && classData.startingDeck) {
-            for (const cardName in classData.startingDeck) {
-                const quantity = classData.startingDeck[cardName];
-                const cardTemplate = cardDataMap[cardName];
-                if (cardTemplate) {
-                    for (let i = 0; i < quantity; i++) {
-                        this._giveCardToPlayer(room, player, { ...cardTemplate, id: this.generateUniqueCardId() });
-                    }
-                }
-            }
+    
+        if (settings.startWithWeapon) dealAndEquip('weapon');
+        if (settings.startWithArmor) dealAndEquip('armor');
+    
+        // Give player starting items from the item deck based on settings
+        for (let i = 0; i < (settings.startingItems || 0); i++) {
+            const card = this.drawCardFromDeck(room.id, 'item');
+            if (card) this._giveCardToPlayer(room, player, card);
+        }
+    
+        // Give player starting spells from the spell deck based on settings
+        for (let i = 0; i < (settings.startingSpells || 0); i++) {
+            const card = this.drawCardFromDeck(room.id, 'spell');
+            if (card) this._giveCardToPlayer(room, player, card);
         }
     }
 
