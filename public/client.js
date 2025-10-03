@@ -402,7 +402,7 @@ function renderGameplayState(myPlayer, gameState) {
                 <strong>${event.name}</strong>
                 <span>${event.description}</span>
             </div>
-            <span class="world-event-duration">Turns Left: ${gameState.worldEvents.duration}</span>
+            <span class="world-event-duration">Rounds Left: ${gameState.worldEvents.duration}</span>
         `;
         worldEventBanner.innerHTML = bannerHTML;
         mobileWorldEventBanner.innerHTML = bannerHTML;
@@ -731,6 +731,20 @@ function initializeGameUIListeners() {
      });
      
      document.getElementById('game-over-leave-btn').addEventListener('click', leaveGameAction);
+     
+     // Discovery Modal Listeners
+     document.getElementById('discovery-confirm-btn').addEventListener('click', () => {
+        if (!clientState.activeItem || !clientState.activeItem.selectedCardId) return;
+        socket.emit('playerAction', { action: 'resolveDiscovery', cardToReplaceId: clientState.activeItem.selectedCardId });
+        document.getElementById('discovery-modal').classList.add('hidden');
+        clientState.activeItem = null;
+     });
+     document.getElementById('discovery-decline-btn').addEventListener('click', () => {
+        if (!clientState.activeItem || !clientState.activeItem.newCard) return;
+        socket.emit('playerAction', { action: 'resolveDiscovery', cardToReplaceId: clientState.activeItem.newCard.id });
+        document.getElementById('discovery-modal').classList.add('hidden');
+        clientState.activeItem = null;
+     });
 
      // Help Modal Listeners
      document.getElementById('help-btn').addEventListener('click', showHelpModal);
@@ -810,6 +824,57 @@ function showClaimLootModal(item) {
     document.getElementById('claim-loot-modal').classList.remove('hidden');
 }
 
+function showDiscoveryModal({ newCard }) {
+    const modal = document.getElementById('discovery-modal');
+    const myPlayer = currentRoomState.players[myId];
+    if (!myPlayer) return;
+
+    const newItemContainer = document.getElementById('discovery-new-item-container');
+    const equippedContainer = document.getElementById('discovery-equipped-container');
+    const handContainer = document.getElementById('discovery-hand-container');
+    const confirmBtn = document.getElementById('discovery-confirm-btn');
+
+    clientState.activeItem = { newCard, selectedCardId: null };
+    confirmBtn.disabled = true;
+    
+    newItemContainer.innerHTML = '';
+    equippedContainer.innerHTML = '';
+    handContainer.innerHTML = '';
+
+    const allSelectableCards = [];
+
+    const handleCardSelection = (cardEl, cardId) => {
+        allSelectableCards.forEach(c => c.classList.remove('selected-for-discard'));
+        cardEl.classList.add('selected-for-discard');
+        clientState.activeItem.selectedCardId = cardId;
+        confirmBtn.disabled = false;
+    };
+
+    // Render new card
+    const newCardEl = createCardElement(newCard);
+    newItemContainer.appendChild(newCardEl);
+
+    // Render equipped items
+    Object.values(myPlayer.equipment).forEach(item => {
+        if (item) {
+            const cardEl = createCardElement(item);
+            cardEl.onclick = () => handleCardSelection(cardEl, item.id);
+            equippedContainer.appendChild(cardEl);
+            allSelectableCards.push(cardEl);
+        }
+    });
+
+    // Render hand
+    myPlayer.hand.forEach(card => {
+        const cardEl = createCardElement(card);
+        cardEl.onclick = () => handleCardSelection(cardEl, card.id);
+        handContainer.appendChild(cardEl);
+        allSelectableCards.push(cardEl);
+    });
+
+    modal.classList.remove('hidden');
+}
+
 function handleUseConsumable(card) {
     const effect = card.effect;
     if (effect.target === 'any-player') {
@@ -855,7 +920,7 @@ const helpPages = [
             <p>This is a cooperative dungeon-crawling adventure. Your goal is to survive the challenges thrown at you by the Dungeon Master (DM) and emerge victorious.</p>
             <h3>Game Flow</h3>
             <ul>
-                <li>The game proceeds in turns, starting with the DM.</li>
+                <li>The game proceeds in rounds, starting with the DM.</li>
                 <li>On your turn, you'll use Action Points (AP) to perform actions like attacking, using items, or resting.</li>
                 <li>The DM will spawn monsters and trigger world events to challenge the party.</li>
             </ul>
@@ -905,7 +970,7 @@ const helpPages = [
             <ul>
                 <li><b>Rarity:</b> Items can be Common, Uncommon (Green), Rare (Blue), or Legendary (Purple). Higher rarities provide better bonuses.</li>
                 <li><b>Claiming Loot:</b> When an item is discovered, it appears in the "Party Discoveries" tab. Any player can click "Claim" to assign it to a party member.</li>
-                <li><b>Hand Size:</b> Be aware of your hand size limit. If you gain a card while your hand is full, you'll be prompted to discard one.</li>
+                <li><b>Individual Discovery:</b> Every 3 rounds, you'll get a personal chance to find a rare item and swap it with one you currently hold.</li>
             </ul>
         `
     },
@@ -1165,6 +1230,10 @@ socket.on('attackResolved', (data) => {
 
 socket.on('damageResolved', (data) => {
     displayDamageRollResult(data);
+});
+
+socket.on('promptIndividualDiscovery', (data) => {
+    showDiscoveryModal(data);
 });
 
 socket.on('chooseToDiscard', ({ newCard, currentHand }) => {

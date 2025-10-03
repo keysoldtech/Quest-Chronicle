@@ -125,10 +125,10 @@
                              </div>
                          </div>
                          <p id="ap-counter-desktop" class="ap-counter hidden"></p>
-                         <p class="turn-counter">Turn: <span id="turn-counter">0</span></p>
+                         <p class="turn-counter">Round: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v7.4.2</p>
+                        <p class="build-number-font">v7.4.3</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -400,6 +400,32 @@
                 </div>
                 <div class="modal-actions">
                     <button id="confirm-discard-btn" class="btn btn-primary" disabled>Confirm Discard</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Individual Discovery Modal -->
+        <div id="discovery-modal" class="modal-overlay hidden">
+            <div class="modal-content large">
+                <h2 class="panel-header">A New Discovery!</h2>
+                <p>You've found something special. You can swap it for one of your current items, or leave it behind.</p>
+                <div class="discovery-choice-container">
+                    <div class="discovery-choice-section">
+                        <h3>Discovered Item</h3>
+                        <div id="discovery-new-item-container" class="card-container-row"></div>
+                    </div>
+                    <div class="discovery-choice-section">
+                        <h3>Your Equipped Items</h3>
+                        <div id="discovery-equipped-container" class="card-container-row"></div>
+                    </div>
+                    <div class="discovery-choice-section">
+                        <h3>Your Hand</h3>
+                        <div id="discovery-hand-container" class="card-container-row"></div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button id="discovery-decline-btn" class="btn btn-secondary">Leave It</button>
+                    <button id="discovery-confirm-btn" class="btn btn-primary" disabled>Confirm Swap</button>
                 </div>
             </div>
         </div>

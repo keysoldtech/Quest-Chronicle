@@ -133,6 +133,8 @@ class GameManager {
             equipment: { weapon: null, armor: null },
             statusEffects: [],
             usedAbilityThisTurn: false,
+            isResolvingDiscovery: false,
+            discoveryItem: null,
         };
     }
 
@@ -474,6 +476,13 @@ class GameManager {
         player.stats = this.calculatePlayerStats(player);
         player.currentAp = player.stats.maxAP;
         player.usedAbilityThisTurn = false;
+
+        // Check for Individual Discovery event every 3 rounds for human players
+        if (!player.isNpc && room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0) {
+            this.triggerIndividualDiscovery(room, player);
+            this.emitGameState(roomId);
+            return; // Halt the turn until discovery is resolved.
+        }
     
         // If there's an active world event, activate the skill challenge phase for the player
         if (room.gameState.worldEvents.currentEvent?.eventType === 'skill_challenge') {
@@ -683,10 +692,15 @@ class GameManager {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
         if (!room || !player || player.isDowned) return;
+
+        // Block most actions if the player is in the middle of a discovery.
+        if (player.isResolvingDiscovery && payload.action !== 'resolveDiscovery') {
+            return socket.emit('actionError', 'You must resolve your discovery first.');
+        }
         
         const isMyTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === player.id;
         // Allow certain actions (claiming loot, discarding for new cards) even when it's not your turn.
-        if (!isMyTurn && !['chooseNewCardDiscard', 'claimLoot'].includes(payload.action)) {
+        if (!isMyTurn && !['chooseNewCardDiscard', 'claimLoot', 'resolveDiscovery'].includes(payload.action)) {
             return socket.emit('actionError', "It's not your turn.");
         }
     
@@ -697,6 +711,7 @@ class GameManager {
             'useConsumable': this.resolveUseConsumable,
             'claimLoot': this.resolveClaimLoot,
             'chooseNewCardDiscard': this.resolveNewCardDiscard,
+            'resolveDiscovery': this.resolveDiscovery,
             'guard': this.resolveGuard,
             'respite': this.resolveRespite,
             'rest': this.resolveRest,
@@ -969,16 +984,16 @@ class GameManager {
     }
 
     // --- 3.8. Loot & Item Generation ---
-    generateLoot(roomId, playerClass) {
+    generateLoot(roomId, playerClass, rarityBoost = 0) {
         const baseCard = this.drawCardFromDeck(roomId, 'treasure', playerClass);
         if (!baseCard) return null;
         
-        // Determine rarity
         const roll = Math.random() * 100;
         let rarity = 'Common';
-        if (roll < 5) rarity = 'Legendary';       // 5%
-        else if (roll < 20) rarity = 'Rare';      // 15%
-        else if (roll < 50) rarity = 'Uncommon';  // 30%
+        // Rarity thresholds: Legendary < 5, Rare < 20, Uncommon < 50
+        if (roll < (5 + rarityBoost)) rarity = 'Legendary';
+        else if (roll < (20 + rarityBoost)) rarity = 'Rare';
+        else if (roll < (50 + rarityBoost)) rarity = 'Uncommon';
 
         if (rarity === 'Common') {
             baseCard.id = this.generateUniqueCardId();
@@ -1010,6 +1025,85 @@ class GameManager {
     }
 
     // --- 3.9. Event & Challenge Handling ---
+    triggerIndividualDiscovery(room, player) {
+        const socket = io.sockets.sockets.get(player.id);
+        if (!socket) return;
+        
+        // Generate a high-quality loot item. A boost of 25 makes Rare/Legendary much more likely.
+        const discoveredItem = this.generateLoot(room.id, player.class, 25);
+        
+        if (discoveredItem) {
+            player.isResolvingDiscovery = true;
+            player.discoveryItem = discoveredItem;
+            room.chatLog.push({ type: 'system-good', text: `${player.name} has made a personal discovery!` });
+            socket.emit('promptIndividualDiscovery', { newCard: discoveredItem });
+        }
+    }
+
+    resolveDiscovery(room, player, { cardToReplaceId }) {
+        if (!player.isResolvingDiscovery || !player.discoveryItem) return;
+        const newCard = player.discoveryItem;
+
+        const deckMap = { 'Weapon': 'weapon', 'Armor': 'armor', 'Consumable': 'item', 'Spell': 'spell' };
+        
+        // Case 1: Player declines the new item.
+        if (cardToReplaceId === newCard.id) {
+            const deckName = deckMap[newCard.type];
+            if (deckName && room.gameState.decks[deckName]) {
+                room.gameState.decks[deckName].push(newCard);
+                shuffle(room.gameState.decks[deckName]);
+            } else { // Fallback for other types
+                room.gameState.discardPile.push(newCard);
+            }
+            room.chatLog.push({ type: 'system', text: `${player.name} decided to leave the ${newCard.name} behind.` });
+        } else {
+            // Case 2: Player swaps with an item.
+            let replacedCard = null;
+            let replacedIn = null; // 'hand', 'equipment.weapon', 'equipment.armor'
+
+            // Check equipment first
+            if (player.equipment.weapon?.id === cardToReplaceId) {
+                replacedCard = player.equipment.weapon;
+                replacedIn = 'equipment.weapon';
+            } else if (player.equipment.armor?.id === cardToReplaceId) {
+                replacedCard = player.equipment.armor;
+                replacedIn = 'equipment.armor';
+            } else {
+                // Check hand
+                const handIndex = player.hand.findIndex(c => c.id === cardToReplaceId);
+                if (handIndex > -1) {
+                    [replacedCard] = player.hand.splice(handIndex, 1);
+                    replacedIn = 'hand';
+                }
+            }
+
+            if (replacedCard && replacedIn) {
+                 // Return the old card to its deck
+                const deckName = deckMap[replacedCard.type] || 'item'; // Default to item deck
+                if (room.gameState.decks[deckName]) {
+                    room.gameState.decks[deckName].push(replacedCard);
+                    shuffle(room.gameState.decks[deckName]);
+                } else {
+                    room.gameState.discardPile.push(replacedCard);
+                }
+
+                // Give the player the new card
+                if (replacedIn === 'equipment.weapon') player.equipment.weapon = newCard;
+                else if (replacedIn === 'equipment.armor') player.equipment.armor = newCard;
+                else if (replacedIn === 'hand') player.hand.push(newCard);
+                
+                room.chatLog.push({ type: 'system-good', text: `${player.name} swapped their ${replacedCard.name} for a newfound ${newCard.name}!` });
+
+            }
+        }
+        
+        // Reset state and recalculate stats
+        player.isResolvingDiscovery = false;
+        player.discoveryItem = null;
+        player.stats = this.calculatePlayerStats(player);
+        this.emitGameState(room.id);
+    }
+    
     resolveSkillCheck(room, player, _, socket) {
         if (!room.gameState.skillChallenge.isActive) return;
         const challenge = room.gameState.skillChallenge.details;
