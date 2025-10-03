@@ -571,7 +571,10 @@ class GameManager {
                     this.endCurrentTurn(roomId);
                 }
             } catch (error) {
-                console.error(`[CRITICAL] Error during AI turn for ${player.name} (${player.id}). The game will proceed to the next turn. Error:`, error);
+                // Enhanced error logging for better debugging.
+                console.error(`[CRITICAL AI ERROR] An error occurred during the turn for ${player.name} (Role: ${player.role}, ID: ${player.id}). The game will proceed to the next turn to prevent a stall.`);
+                console.error("Error Details:", error.stack || error);
+                
                 // Even if AI fails, end its turn to not block the game.
                 if(room.gameState.phase === 'started') {
                     this.endCurrentTurn(roomId);
@@ -597,17 +600,18 @@ class GameManager {
         if (!room || room.gameState.turnOrder.length === 0 || room.gameState.phase !== 'started') return;
     
         // --- End-of-Turn Cleanup Phase ---
+        // This block handles effects that expire at the end of a player's or the DM's turn.
         const oldPlayerIndex = room.gameState.currentPlayerIndex;
         if (oldPlayerIndex > -1) {
             const oldPlayer = room.players[room.gameState.turnOrder[oldPlayerIndex]];
             if (oldPlayer) {
-                // Shield HP expires at the end of the player's turn.
+                // Shield HP always expires at the end of the player's turn.
                 if (oldPlayer.role === 'Explorer') oldPlayer.stats.shieldHp = 0;
                 
-                // Decrement duration of all status effects.
+                // Decrement duration of all status effects on the active player.
                 oldPlayer.statusEffects = oldPlayer.statusEffects.map(e => ({...e, duration: e.duration - 1})).filter(e => e.duration > 0);
     
-                // DM turn cleanup applies to monsters.
+                // If it was the DM's turn, also decrement status effects on all monsters.
                 if (oldPlayer.role === 'DM') {
                     room.gameState.board.monsters.forEach(m => {
                         m.statusEffects = m.statusEffects.map(e => ({...e, duration: e.duration - 1})).filter(e => e.duration > 0);
@@ -615,23 +619,24 @@ class GameManager {
                 }
             }
         }
-        // Reset challenge flag for next player
+        // Reset the skill challenge flag for the next player.
         room.gameState.skillChallenge.isActive = false; 
     
         // --- Find Next Player Phase ---
+        // This loop ensures the game skips over any players who are downed or disconnected.
         let nextIndex, attempts = 0;
-        // Loop to find the next valid player, skipping downed or disconnected ones.
         do {
             nextIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             const nextPlayerId = room.gameState.turnOrder[nextIndex];
             const nextPlayer = room.players[nextPlayerId];
             if (nextPlayer && !nextPlayer.isDowned && !nextPlayer.disconnected) {
-                break; // Found a valid player
+                break; // Found a valid, active player.
             }
             attempts++;
         } while (attempts <= room.gameState.turnOrder.length)
 
         // --- Game Over Check ---
+        // Checks if all human explorers are downed or have left the game.
         const allExplorersDown = Object.values(room.players)
             .filter(p => p.role === 'Explorer' && !p.isNpc)
             .every(p => p.isDowned || p.disconnected);
@@ -640,12 +645,12 @@ class GameManager {
             room.gameState.phase = 'game_over';
             room.gameState.winner = 'Monsters';
             this.emitGameState(roomId);
-            return;
+            return; // Stop the turn sequence.
         }
 
         // --- Start Next Turn ---
         room.gameState.currentPlayerIndex = nextIndex;
-        // Increment turn count at the start of the DM's turn (index 0).
+        // The turn counter increments only at the start of a full round (i.e., when it's the DM's turn again).
         if (nextIndex === 0) {
             room.gameState.turnCount++; 
         }
