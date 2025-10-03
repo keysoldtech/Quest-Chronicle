@@ -251,6 +251,20 @@ function createCardElement(card, options = {}) {
     const actionContainer = document.createElement('div');
     actionContainer.className = 'card-action-buttons';
 
+    // Add a details button to ALL cards that are not in the detailed view modal already
+    if (!isDetailedView) {
+        const detailsBtn = document.createElement('button');
+        detailsBtn.className = 'btn btn-xs btn-secondary btn-icon';
+        detailsBtn.setAttribute('title', 'View Details');
+        detailsBtn.setAttribute('aria-label', 'View Details');
+        detailsBtn.innerHTML = `<span class="material-symbols-outlined">search</span>`;
+        detailsBtn.onclick = (e) => {
+            e.stopPropagation();
+            showCardDetailsModal(card);
+        };
+        actionContainer.appendChild(detailsBtn);
+    }
+
     if (isEquippable) {
         const equipBtn = document.createElement('button');
         equipBtn.textContent = 'Equip (1AP)';
@@ -303,19 +317,6 @@ function createCardElement(card, options = {}) {
     if (actionContainer.hasChildNodes()) {
         cardDiv.appendChild(actionContainer);
     }
-    
-    // If it's not a detailed view card itself, add a click listener to open the details modal.
-    if (!isDetailedView) {
-        cardDiv.addEventListener('click', (e) => {
-            // Prevent modal from opening if an action button was clicked,
-            // or if the card is already part of an attack/target sequence.
-            if (e.target.closest('button') || cardDiv.classList.contains('targetable') || cardDiv.classList.contains('attackable-weapon')) {
-                return;
-            }
-            showCardDetailsModal(card);
-        });
-    }
-
 
     return cardDiv;
 }
@@ -1512,6 +1513,29 @@ function handleDiceRoll() {
 
 // --- 6. SOCKET EVENT HANDLERS ---
 function initializeSocketListeners() {
+    // The 'connect' event fires on initial connection AND on reconnection.
+    socket.on('connect', () => {
+        // This logic is crucial for rejoining a game after a temporary disconnect
+        // (e.g., switching mobile apps) without a full page reload.
+        const storedRoomId = sessionStorage.getItem('qc_roomId');
+        const storedPlayerId = sessionStorage.getItem('qc_playerId');
+        
+        // `currentRoomState.id` acts as a flag that we were already in a game
+        // before this 'connect' event happened.
+        if (storedRoomId && storedPlayerId && currentRoomState && currentRoomState.id) {
+            console.log(`Attempting to rejoin room ${storedRoomId} after reconnect.`);
+            socket.emit('rejoinRoom', { roomId: storedRoomId, playerId: storedPlayerId });
+        }
+    });
+
+    // Use Page Visibility API to force a reconnection attempt when user returns to the app
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && !socket.connected) {
+            console.log('App resumed, socket disconnected. Attempting to reconnect...');
+            socket.connect();
+        }
+    });
+
     socket.on('gameStateUpdate', (newState) => {
         currentRoomState = newState;
         renderUI();

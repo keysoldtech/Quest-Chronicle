@@ -256,13 +256,13 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .card-container-row { display: flex; gap: 1rem; padding: 1rem; overflow-x: auto; flex-grow: 1; }
 .empty-pool-text { padding: 1rem; color: var(--color-text-secondary); text-align: center; width: 100%; font-family: var(--font-title); }
 .card { width: 175px; min-width: 175px; height: 245px; background-color: var(--color-surface-light); border: 2px solid var(--color-border); border-radius: 8px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; position: relative; transition: all 0.2s; overflow: hidden; background-image: var(--panel-texture); }
-.card:not(.targetable):not(.attackable-weapon) { cursor: pointer; }
+.card:not(.targetable):not(.attackable-weapon) { cursor: default; }
 .card:hover { transform: translateY(-5px) scale(1.02); box-shadow: var(--shadow-lg); }
 .card.targetable { cursor: crosshair; border-color: var(--color-danger); }
 .card.targetable:hover { box-shadow: 0 0 10px var(--color-danger); }
 .attackable-weapon { cursor: pointer; } .attackable-weapon:hover { border-color: var(--color-primary); }
 .attackable-weapon.selected-weapon { border-color: var(--color-special); transform: translateY(-5px) scale(1.02); box-shadow: 0 0 10px var(--color-special), var(--shadow-lg); }
-.card-action-buttons { position: absolute; bottom: 0.5rem; left: 0; width: 100%; z-index: 2; display: flex; justify-content: center; gap: 0.5rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+.card-action-buttons { position: absolute; bottom: 0.5rem; left: 0; width: 100%; z-index: 2; display: flex; justify-content: center; align-items: center; gap: 0.5rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
 .card:hover .card-action-buttons { opacity: 1; pointer-events: auto; }
 .card-header { padding: 0.75rem; } .card-content { padding: 0 .75rem; flex-grow: 1; } .card-footer { padding: 0.75rem; background-color: rgba(0,0,0,0.2); border-top: 1px solid var(--color-border); }
 .card-title { font-family: var(--font-title); font-size: 1.1rem; color: var(--color-text-primary); }
@@ -293,6 +293,17 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .icon-str { color: var(--stat-color-str); } .icon-dex { color: var(--stat-color-dex); } .icon-con { color: var(--stat-color-con); }
 .card.shake { animation: shake 0.82s cubic-bezier(.36,.07,.19,.97) both; }
 @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+
+.card-action-buttons .btn-icon {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    line-height: 1;
+}
+.card-action-buttons .btn-icon .material-symbols-outlined {
+    font-size: 18px;
+    vertical-align: middle;
+}
 
 /* --- 10. INFO PANEL, ACTION BAR, CHAT --- */
 .info-tabs-panel { display: flex; flex-direction: column; }
