@@ -62,7 +62,7 @@ function createCardElement(card, options = {}) {
             <div class="card-bonus" title="Attack Bonus"><span class="material-symbols-outlined icon-damage">colorize</span>+${card.attackBonus || 0}</div>
             <div class="card-bonus" title="Armor Class"><span class="material-symbols-outlined icon-shield">security</span>${card.requiredRollToHit || 10}</div>
         </div>` : '';
-    const weaponDiceHTML = card.type === 'Weapon' ? `<div class="card-bonus" title="Damage Dice"><span class="material-symbols-outlined icon-damage">casino</span>${card.effect.dice}</div>` : '';
+    const damageDiceHTML = card.effect?.dice ? `<div class="card-bonus" title="Damage Dice"><span class="material-symbols-outlined icon-damage">casino</span>${card.effect.dice}</div>` : '';
     const apCostHTML = card.apCost ? `<div class="card-bonus" title="AP Cost"><span class="material-symbols-outlined icon-ap">bolt</span>${card.apCost}</div>` : '';
     
     const bonuses = card.effect?.bonuses;
@@ -73,9 +73,13 @@ function createCardElement(card, options = {}) {
             damageBonus: { icon: 'swords', color: 'damage' }, 
             shieldBonus: { icon: 'security', color: 'shield' }, 
             maxHp: { icon: 'favorite', color: 'hp' },
+            hitBonus: { icon: 'colorize', color: 'int' },
             str: { icon: 'fitness_center', color: 'str' }, 
             dex: { icon: 'sprint', color: 'dex' }, 
-            con: { icon: 'shield_person', color: 'con' }
+            con: { icon: 'shield_person', color: 'con' },
+            int: { icon: 'school', color: 'int' },
+            wis: { icon: 'self_improvement', color: 'wis' },
+            cha: { icon: 'star', color: 'cha' }
         };
         bonusesHTML = Object.entries(bonuses).map(([key, value]) => {
             if (value === 0) return '';
@@ -97,6 +101,7 @@ function createCardElement(card, options = {}) {
         <div class="card-footer">
             <div class="card-bonuses-grid">
                 ${monsterStatsHTML}
+                ${damageDiceHTML}
                 ${bonusesHTML}
                 ${apCostHTML}
             </div>

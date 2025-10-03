@@ -1033,11 +1033,12 @@ class GameManager {
             roll = this.rollDice('1d20');
         }
         
-        // TODO: Add stat modifiers based on challenge.skill
-        const total = roll; 
+        const statBonus = player.stats[challenge.skill] || 0;
+        const total = roll + statBonus;
+        const advantageText = hasAdvantage ? ' w/ Adv' : '';
 
         if (total >= challenge.dc) {
-            room.chatLog.push({ type: 'system-good', text: `${player.name} succeeds the skill check! (Rolled ${total})` });
+            room.chatLog.push({ type: 'system-good', text: `${player.name} succeeds the skill check! (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc})` });
             const lootCard = this.generateLoot(room.id, player.class);
             if (lootCard) {
                 room.gameState.lootPool.push(lootCard);
@@ -1046,7 +1047,7 @@ class GameManager {
         } else {
             const damage = this.rollDice('1d6');
             this.applyDamage(player, damage);
-            room.chatLog.push({ type: 'system-bad', text: `${player.name} fails the skill check (Rolled ${total}) and takes ${damage} damage from the hazardous event!` });
+            room.chatLog.push({ type: 'system-bad', text: `${player.name} fails the skill check (Roll: ${roll}${advantageText} + ${statBonus} ${challenge.skill.toUpperCase()} = ${total} vs DC ${challenge.dc}) and takes ${damage} damage!` });
         }
         
         room.gameState.skillChallenge.isActive = false;
