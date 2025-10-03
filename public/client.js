@@ -16,7 +16,8 @@ const clientState = {
     currentRollData: null,  // Holds data for an active roll modal
     activeItem: null,       // For modals needing item context (e.g., claiming loot)
     diceAnimationInterval: null,
-    rollModalCloseTimeout: null
+    rollModalCloseTimeout: null,
+    helpModalPage: 0,
 };
 
 // --- 2. CORE RENDERING ENGINE ---
@@ -386,14 +387,26 @@ function renderGameplayState(myPlayer, gameState) {
     });
 
     // World Events
-    const worldEventContainers = [get('world-events-container'), get('mobile-world-events-container')];
-    worldEventContainers.forEach(c => c.innerHTML = '');
-    if (gameState.worldEvents.currentEvent) {
-        worldEventContainers.forEach(container => container.appendChild(createCardElement(gameState.worldEvents.currentEvent)));
+    const worldEventBanner = get('active-world-event-display');
+    const mobileWorldEventBanner = get('mobile-active-world-event-display');
+    const event = gameState.worldEvents.currentEvent;
+    if (event) {
+        const bannerHTML = `
+            <span class="material-symbols-outlined">public</span>
+            <div class="world-event-text">
+                <strong>${event.name}</strong>
+                <span>${event.description}</span>
+            </div>
+            <span class="world-event-duration">Turns Left: ${gameState.worldEvents.duration}</span>
+        `;
+        worldEventBanner.innerHTML = bannerHTML;
+        mobileWorldEventBanner.innerHTML = bannerHTML;
+        worldEventBanner.classList.remove('hidden');
+        mobileWorldEventBanner.classList.remove('hidden');
     } else {
-        worldEventContainers.forEach(container => container.innerHTML = `<p class="empty-pool-text">The world is calm.</p>`);
+        worldEventBanner.classList.add('hidden');
+        mobileWorldEventBanner.classList.add('hidden');
     }
-
 
     renderCharacterPanel(get('character-sheet-block'), get('mobile-screen-character'), myPlayer, isMyTurn);
 
@@ -645,6 +658,14 @@ function initializeGameUIListeners() {
             dropdown.classList.toggle('hidden');
         });
     });
+
+    const leaveGameAction = () => {
+        sessionStorage.removeItem('qc_roomId');
+        sessionStorage.removeItem('qc_playerId');
+        window.location.reload();
+    };
+    document.getElementById('leave-game-btn').addEventListener('click', leaveGameAction);
+    document.getElementById('mobile-leave-game-btn').addEventListener('click', leaveGameAction);
     
     document.addEventListener('click', () => {
         document.getElementById('menu-dropdown').classList.add('hidden');
@@ -704,11 +725,14 @@ function initializeGameUIListeners() {
         clientState.activeItem = null;
      });
      
-     document.getElementById('game-over-leave-btn').addEventListener('click', () => {
-         sessionStorage.removeItem('qc_roomId');
-         sessionStorage.removeItem('qc_playerId');
-         window.location.reload();
-     });
+     document.getElementById('game-over-leave-btn').addEventListener('click', leaveGameAction);
+
+     // Help Modal Listeners
+     document.getElementById('help-btn').addEventListener('click', showHelpModal);
+     document.getElementById('mobile-help-btn').addEventListener('click', showHelpModal);
+     document.getElementById('help-close-btn').addEventListener('click', hideHelpModal);
+     document.getElementById('help-prev-btn').addEventListener('click', () => navigateHelpModal(-1));
+     document.getElementById('help-next-btn').addEventListener('click', () => navigateHelpModal(1));
 }
 
 // --- 4. MODAL & POPUP LOGIC ---
@@ -816,6 +840,96 @@ function showSkillChallengeModal(challenge) {
     document.getElementById('skill-challenge-title').textContent = challenge.name;
     document.getElementById('skill-challenge-description').textContent = challenge.description;
     document.getElementById('skill-challenge-modal').classList.remove('hidden');
+}
+
+// Help Modal Logic
+const helpPages = [
+    {
+        title: "Welcome to Quest & Chronicle",
+        content: `
+            <p>This is a cooperative dungeon-crawling adventure. Your goal is to survive the challenges thrown at you by the Dungeon Master (DM) and emerge victorious.</p>
+            <h3>Game Flow</h3>
+            <ul>
+                <li>The game proceeds in turns, starting with the DM.</li>
+                <li>On your turn, you'll use Action Points (AP) to perform actions like attacking, using items, or resting.</li>
+                <li>The DM will spawn monsters and trigger world events to challenge the party.</li>
+            </ul>
+        `
+    },
+    {
+        title: "Your Character Stats",
+        content: `
+            <p>Your character's abilities are defined by several key stats:</p>
+            <ul>
+                <li><b>HP (Health Points):</b> Your life force. If it reaches 0, you are Downed.</li>
+                <li><b>AP (Action Points):</b> The resource you spend each turn to take actions.</li>
+                <li><b>Damage Bonus:</b> Added to your damage rolls when you hit with a weapon.</li>
+                <li><b>Shield Bonus:</b> Your defense. Monsters must roll higher than 10 + your Shield Bonus to hit you.</li>
+                <li><b>Hit Bonus:</b> Added to your d20 roll when you attack.</li>
+                <li><b>Core Stats (STR, DEX, etc.):</b> These influence class abilities and may be used for skill checks.</li>
+            </ul>
+        `
+    },
+    {
+        title: "Common Actions",
+        content: `
+            <p>On your turn, you can spend AP on these actions from the action bar:</p>
+            <ul>
+                <li><b>Guard (1 AP):</b> Gain temporary Shield HP equal to your Shield Bonus. This lasts until the start of your next turn.</li>
+                <li><b>Respite (1 AP):</b> A quick breather. Heals you for a small amount (1d4).</li>
+                <li><b>Rest (2 AP):</b> A longer rest. Heals you based on your class's Health Dice.</li>
+                <li><b>Equip (1 AP):</b> Drag an equippable item from your hand to the equipment slots.</li>
+            </ul>
+            <p>Attacking and using card abilities also cost AP, as listed on the card.</p>
+        `
+    },
+    {
+        title: "Combat Explained",
+        content: `
+            <p>Combat is resolved with a two-step dice roll process.</p>
+            <ol>
+                <li><b>Roll to Hit:</b> When you attack, you roll a 20-sided die (d20). The result is <b>(Your d20 Roll + Your Hit Bonus)</b>. If this total meets or exceeds the monster's Armor Class (AC), you hit!</li>
+                <li><b>Roll for Damage:</b> On a successful hit, you roll your weapon's damage dice. The total damage is <b>(Your Damage Roll + Your Damage Bonus)</b>.</li>
+            </ol>
+        `
+    },
+    {
+        title: "Items & Loot",
+        content: `
+            <p>Defeating monsters and overcoming challenges can reward the party with loot.</p>
+            <ul>
+                <li><b>Rarity:</b> Items can be Common, Uncommon (Green), Rare (Blue), or Legendary (Purple). Higher rarities provide better bonuses.</li>
+                <li><b>Claiming Loot:</b> When an item is discovered, it appears in the "Party Discoveries" tab. Any player can click "Claim" to assign it to a party member.</li>
+                <li><b>Hand Size:</b> Be aware of your hand size limit. If you gain a card while your hand is full, you'll be prompted to discard one.</li>
+            </ul>
+        `
+    },
+];
+
+function renderHelpPage() {
+    const page = helpPages[clientState.helpModalPage];
+    document.getElementById('help-content').innerHTML = `<h3>${page.title}</h3>${page.content}`;
+    document.getElementById('help-page-indicator').textContent = `Page ${clientState.helpModalPage + 1} / ${helpPages.length}`;
+    document.getElementById('help-prev-btn').disabled = clientState.helpModalPage === 0;
+    document.getElementById('help-next-btn').disabled = clientState.helpModalPage === helpPages.length - 1;
+}
+
+function showHelpModal() {
+    clientState.helpModalPage = 0;
+    renderHelpPage();
+    document.getElementById('help-modal').classList.remove('hidden');
+}
+
+function hideHelpModal() {
+    document.getElementById('help-modal').classList.add('hidden');
+}
+
+function navigateHelpModal(direction) {
+    const newPage = clientState.helpModalPage + direction;
+    if (newPage >= 0 && newPage < helpPages.length) {
+        clientState.helpModalPage = newPage;
+        renderHelpPage();
+    }
 }
 
 

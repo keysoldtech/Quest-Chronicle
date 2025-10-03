@@ -105,20 +105,20 @@ const armorCards = [
     { name: "Crystal Hide", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 6, ap: 0 }, description: "Resistance to non-magical damage." } },
     { name: "Earth-Forged Mail", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 7, ap: -1 }, description: "Resistance to Bludgeoning damage." } },
     { name: "Fury Cuirass", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 6, ap: 1 }, description: "While below half health, gain +1 to attack rolls." } },
-    { name: "Hide Vest", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 2, ap: 1 }, description: "None." } },
+    { name: "Hide Vest", type: "Armor", class: ["Any"], effect: { bonuses: { shieldBonus: 2, ap: 1 }, description: "Simple but effective protection made from cured animal hide." } },
     { name: "Indomitable Plating", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 10, ap: -2 }, description: "Ignores the first point of damage from any attack." } },
     { name: "Ironclad Harness", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 8, ap: -1 }, description: "Complete coverage in heavy metal, but restricts movement." } },
     { name: "Link Hauberk", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 4, ap: 0 }, description: "Interlocking rings provide reliable defense." } },
-    { name: "Nightfall Shroud", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 1, ap: 3 }, description: "Advantage on Stealth checks." } },
+    { name: "Nightfall Shroud", type: "Armor", class: ["Any"], effect: { bonuses: { shieldBonus: 1, ap: 3 }, description: "Advantage on Stealth checks." } },
     { name: "Phase Shroud", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 5, ap: 0 }, description: "Once per turn, may force an attacker to reroll their attack roll." } },
     { name: "Plate Cuirass", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 6, ap: 0 }, description: "A sturdy defense for the chest." } },
     { name: "Round Shield", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 1, ap: 0 }, description: "+1 to Block rolls." } },
     { name: "Scaled Vest", type: "Armor", class: ["Warrior", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 5, ap: 0 }, description: "Overlapping plates deflect blows." } },
     { name: "Spellward Plate", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 7, ap: 0 }, description: "+1 to saving throws against spells." } },
-    { name: "Spiritweave Robes", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 2, ap: 2 }, description: "Resistance to Necrotic damage." } },
-    { name: "Sylvan Shroud", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 3, ap: 2 }, description: "Advantage on Dexterity saving throws." } },
+    { name: "Spiritweave Robes", type: "Armor", class: ["Any"], effect: { bonuses: { shieldBonus: 2, ap: 2 }, description: "Resistance to Necrotic damage." } },
+    { name: "Sylvan Shroud", type: "Armor", class: ["Any"], effect: { bonuses: { shieldBonus: 3, ap: 2 }, description: "Advantage on Dexterity saving throws." } },
     { name: "Thornmail", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 4, ap: -1 }, description: "Deals 1 damage to attacker on a critical hit against the wearer." } },
-    { name: "Toughened Hides", type: "Armor", class: ["Warrior", "Mage", "Rogue", "Cleric", "Ranger", "Barbarian"], effect: { bonuses: { shieldBonus: 3, ap: 1 }, description: "Resistance to Piercing damage." } },
+    { name: "Toughened Hides", type: "Armor", class: ["Any"], effect: { bonuses: { shieldBonus: 3, ap: 1 }, description: "Resistance to Piercing damage." } },
     { name: "Wyrmscale Mail", type: "Armor", class: ["Warrior"], effect: { bonuses: { shieldBonus: 9, ap: 0 }, description: "Immunity to one type of elemental damage (Fire, Cold, etc.). Player's choice." } }
 ];
 
@@ -198,7 +198,7 @@ const itemCards = [
     { name: "Scroll of Shockwave", type: "Scroll", category: "Consumable", apCost: 1, effect: { type: "spell", spellName: "Shockwave", description: "Allows the user to cast the Shockwave spell as if they were a spellcaster." } },
     { name: "Climber's Spikes", type: "Utility", category: "General", relevantSkill: "str", effect: { description: "Provides advantage on difficult Strength (Athletics) or Dexterity (Acrobatics) checks for climbing." } },
     { name: "Climbing Hook", type: "Utility", category: "General", relevantSkill: "str", effect: { description: "Can be used with a rope for ascending or descending. Provides advantage on Strength (Athletics) checks." } },
-    { name: "Consecrated Emblem", type: "Utility", category: "General", class: ["Cleric"], effect: { description: "Can be used as a focus for casting certain spells. May have other minor effects when interacting with undead or evil entities." } },
+    { name: "Consecrated Emblem", type: "Utility", category: "General", class: ["Cleric"], effect: { description: "A holy symbol that can be used as a focus for casting divine spells. May ward off minor undead." } },
     { name: "Iron Pry", type: "Utility", category: "General", relevantSkill: "str", effect: { description: "Provides advantage on Strength checks made to force open doors, chests, or containers." } },
     { name: "Lockpicks & Shims", type: "Utility", category: "General", class: ["Rogue"], relevantSkill: "dex", effect: { description: "Provides advantage on Skill Challenges related to picking locks or disarming simple traps." } },
     { name: "Spark & Steel", type: "Utility", category: "General", effect: { description: "Allows the user to light fires or other flammable objects quickly." } },
@@ -211,29 +211,29 @@ const itemCards = [
 // The different types can be used for GM flavor.
 const worldEventCards = [
     // Beneficial
-    { name: "A Moment of Clarity", type: "World Event", eventType: "Beneficial", description: "Success: A puzzling mystery becomes clear. Failure: The mystery becomes more confusing.", skill: "int", dc: 12 },
-    { name: "Divine Favor", type: "World Event", eventType: "Beneficial", description: "Success: You gain a blessing (DM's choice). Failure: You attract the attention of a devious entity.", skill: "wis", dc: 13 },
-    { name: "Helpful Local", type: "World Event", eventType: "Beneficial", description: "Success: A friendly local offers assistance. Failure: The local is unhelpful or suspicious.", skill: "cha", dc: 12 },
-    { name: "Inspiration Surge", type: "World Event", eventType: "Beneficial", description: "The next ability check, attack roll, or saving throw is made with advantage." },
-    { name: "Lucky Find", type: "World Event", eventType: "Beneficial", description: "Success: You find a valuable item (DM's choice). Failure: You find nothing of value.", skill: "wis", dc: 10 },
+    { name: "A Moment of Clarity", type: "World Event", duration: 1, eventType: "skill_challenge", description: "A puzzling mystery becomes clear.", skill: "int", dc: 12 },
+    { name: "Divine Favor", type: "World Event", duration: 2, eventType: "Beneficial", description: "All players gain +1 to their next roll." },
+    { name: "Helpful Local", type: "World Event", duration: 1, eventType: "skill_challenge", description: "A friendly local offers assistance if you can persuade them.", skill: "cha", dc: 12 },
+    { name: "Inspiration Surge", type: "World Event", duration: 2, eventType: "Beneficial", description: "The next ability check, attack roll, or saving throw for each player is made with advantage." },
+    { name: "Lucky Find", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You spot something valuable, if you can perceive it.", skill: "wis", dc: 10 },
     // Hindrance
-    { name: "Dangerous Terrain", type: "World Event", eventType: "Hindrance", description: "Success: You navigate the terrain safely. Failure: You suffer a minor injury or delay.", skill: "str", dc: 11 },
-    { name: "Sudden Illness", type: "World Event", eventType: "Hindrance", description: "Success: You feel unwell but recover quickly. Failure: You contract a minor illness (DM's choice).", skill: "con", dc: 14 },
-    { name: "Wrong Turn", type: "World Event", eventType: "Hindrance", description: "Success: You realize the error quickly. Failure: You become lost and waste 1d4 hours.", skill: "wis", dc: 10 },
+    { name: "Dangerous Terrain", type: "World Event", duration: 1, eventType: "skill_challenge", description: "The path ahead is treacherous. Navigate it carefully.", skill: "str", dc: 11 },
+    { name: "Sudden Illness", type: "World Event", duration: 2, eventType: "Hindrance", description: "A wave of nausea washes over the party. All players have disadvantage on STR checks.", skill: "con", dc: 14 },
+    { name: "Wrong Turn", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You question your path. Can you find the way?", skill: "wis", dc: 10 },
     // Combat
-    { name: "Critical Moment", type: "World Event", eventType: "Combat", description: "Your next attack automatically hits. (Advantage means the player rolls two d20s and takes the higher of the two results.)" },
-    { name: "Environmental Hazard", type: "World Event", eventType: "Combat", description: "Success: You avoid the hazard. Failure: You are caught in a sudden environmental change.", skill: "dex", dc: 13 },
-    { name: "Last Stand", type: "World Event", eventType: "Combat", description: "Success: You gain temporary hit points. Failure: You gain a level of exhaustion.", skill: "con", dc: 11 },
+    { name: "Critical Moment", type: "World Event", duration: 2, eventType: "Combat", description: "The air crackles with energy. All attacks have a +2 bonus to their roll." },
+    { name: "Environmental Hazard", type: "World Event", duration: 1, eventType: "skill_challenge", description: "The environment itself turns against you!", skill: "dex", dc: 13 },
+    { name: "Last Stand", type: "World Event", duration: 2, eventType: "Combat", description: "All players gain 5 temporary hit points." },
     // Exploration
-    { name: "Ancient Inscription", type: "World Event", eventType: "Exploration", description: "Success: You decipher the inscription. Failure: The inscription remains a mystery.", skill: "int", dc: 12 },
-    { name: "Collapsing Floor", type: "World Event", eventType: "Exploration", description: "Success: You avoid falling. Failure: You fall, taking 1d6 damage.", skill: "dex", dc: 14 },
-    { name: "Hidden Passage", type: "World Event", eventType: "Exploration", description: "Success: You discover a secret passage. Failure: You miss the passage entirely.", skill: "wis", dc: 13 },
+    { name: "Ancient Inscription", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You find an ancient text. Can you decipher it?", skill: "int", dc: 12 },
+    { name: "Collapsing Floor", type: "World Event", duration: 1, eventType: "skill_challenge", description: "The ground beneath you trembles!", skill: "dex", dc: 14 },
+    { name: "Hidden Passage", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You notice an oddity in the stonework.", skill: "wis", dc: 13 },
     // Social
-    { name: "False Accusation", type: "World Event", eventType: "Social", description: "Success: You convince others of your innocence. Failure: You are wrongly blamed and suffer the consequences.", skill: "cha", dc: 14 },
-    { name: "Offered a Bribe", type: "World Event", eventType: "Social", description: "Success: You resist the bribe. Failure: You accept the bribe and its consequences.", skill: "wis", dc: 13 },
+    { name: "False Accusation", type: "World Event", duration: 1, eventType: "skill_challenge", description: "Someone is wrongly blamed. Can you clear their name?", skill: "cha", dc: 14 },
+    { name: "Offered a Bribe", type: "World Event", duration: 1, eventType: "skill_challenge", description: "An official offers you a deal. Do you take it?", skill: "wis", dc: 13 },
     // Weather
-    { name: "Arctic Squall", type: "World Event", eventType: "Weather", description: "A sudden, biting wind howls. CON Save DC 12 or gain one level of exhaustion.", skill: "con", dc: 12 },
-    { name: "Misty Veil", type: "World Event", eventType: "Weather", description: "An unnaturally thick, silent mist rolls in. WIS (Perception) DC 14 to avoid becoming lost.", skill: "wis", dc: 14 }
+    { name: "Arctic Squall", type: "World Event", duration: 2, eventType: "Weather", description: "A sudden, biting wind howls. CON Save DC 12 each turn or take 1d4 cold damage.", skill: "con", dc: 12 },
+    { name: "Misty Veil", type: "World Event", duration: 2, eventType: "Weather", description: "An unnaturally thick mist rolls in. All ranged attacks have disadvantage.", skill: "wis", dc: 14 }
 ];
 
 const partyEventCards = worldEventCards.filter(e => ['Social', 'Beneficial'].includes(e.eventType));

@@ -423,31 +423,40 @@ class GameManager {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
         if (!room || !player || player.isDowned) return;
-
+    
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
         if (cardIndex === -1) return;
-
+    
         // Equip cost: 1 AP during combat
         if (room.gameState.phase === 'started' && player.currentAp < 1) {
             return socket.emit('actionError', 'Not enough AP to equip an item.');
         }
         
         const cardToEquip = player.hand[cardIndex];
-        const itemType = cardToEquip.type.toLowerCase();
-
+        const itemType = cardToEquip.type.toLowerCase(); // 'weapon' or 'armor'
+    
         if (itemType !== 'weapon' && itemType !== 'armor') return;
         
         // Deduct AP if in combat
         if (room.gameState.phase === 'started') {
             player.currentAp -= 1;
         }
-
-        // Swap item from hand to equipment slot, moving old item back to hand.
+    
+        // Remove the new item from hand.
         player.hand.splice(cardIndex, 1);
+    
+        // If an item is already equipped in that slot, return it to the appropriate deck.
         if (player.equipment[itemType]) {
-            this._giveCardToPlayer(room, player, player.equipment[itemType]);
+            const oldItem = player.equipment[itemType];
+            const deckName = oldItem.type.toLowerCase();
+            if (room.gameState.decks[deckName]) {
+                room.gameState.decks[deckName].push(oldItem);
+                shuffle(room.gameState.decks[deckName]);
+                room.chatLog.push({ type: 'system', text: `${player.name} returned their ${oldItem.name} to the deck.` });
+            }
         }
         
+        // Equip the new item.
         player.equipment[itemType] = cardToEquip;
         player.stats = this.calculatePlayerStats(player); // Recalculate stats with new item
         this.emitGameState(room.id);
