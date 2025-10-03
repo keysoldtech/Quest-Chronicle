@@ -17,6 +17,7 @@ const clientState = {
     activeItem: null,       // For modals needing item context (e.g., claiming loot)
     diceAnimationInterval: null,
     rollModalCloseTimeout: null,
+    rollResponseTimeout: null,
     helpModalPage: 0,
 };
 
@@ -1093,11 +1094,29 @@ function handleDiceRoll() {
     dieSVG.classList.add('rolling');
     
     const action = clientState.currentRollData.type === 'attack' ? 'resolveAttackRoll' : 'resolveDamageRoll';
+    socket.emit('playerAction', { action: action, ...clientState.currentRollData });
 
-    setTimeout(() => {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-        socket.emit('playerAction', { action: action, ...clientState.currentRollData });
-    }, 1000);
+    // Add a timeout for robustness.
+    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    clientState.rollResponseTimeout = setTimeout(() => {
+        // This will only fire if we don't get a response from the server.
+        if (clientState.diceAnimationInterval) {
+            clearInterval(clientState.diceAnimationInterval);
+            clientState.diceAnimationInterval = null;
+
+            if (dieSVG) {
+                dieSVG.classList.remove('rolling');
+                dieSVG.querySelector('.die-text').textContent = 'ERR';
+            }
+            
+            showToast("No response from server. Roll cancelled.", 'error');
+            
+            // Update modal UI to show it's over
+            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+            document.getElementById('dice-roll-confirm-btn').disabled = false; // Reset for next time
+            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+        }
+    }, 5000); // 5-second timeout
 }
 
 function displayAttackRollResult(data) {
@@ -1106,7 +1125,12 @@ function displayAttackRollResult(data) {
 
     if (rollerId !== myId) return;
 
+    // Clear the response timeout since we got a response.
+    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    clientState.rollResponseTimeout = null;
+
     if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+    clientState.diceAnimationInterval = null;
 
     const container = document.getElementById('dice-display-container');
     const dieSVG = container.querySelector('.die-svg');
@@ -1152,8 +1176,13 @@ function displayDamageRollResult(data) {
     }
 
     if (rollerId !== myId) return;
+    
+    // Clear the response timeout since we got a response.
+    if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+    clientState.rollResponseTimeout = null;
 
     if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+    clientState.diceAnimationInterval = null;
     
     const dieSVG = document.querySelector('#dice-display-container .die-svg');
     if(dieSVG) {
