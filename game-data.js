@@ -209,27 +209,42 @@ const itemCards = [
 
 // --- 6.5. Event Cards ---
 const worldEventCards = [
-    // Beneficial
-    { name: "A Moment of Clarity", type: "World Event", duration: 1, eventType: "skill_challenge", description: "A puzzling mystery becomes clear.", skill: "int", dc: 12 },
+    // Simple Skill Challenges with explicit outcomes
+    { 
+        name: "Ancient Inscription", type: "World Event", duration: 1, eventType: "skill_challenge", 
+        description: "You find an ancient text. Can you decipher it?", skill: "int", dc: 12,
+        success: { type: "loot", text: "The inscription reveals the location of a hidden item!" },
+        failure: { type: "none", text: "The language is too obscure to understand." }
+    },
+    { 
+        name: "Hidden Passage", type: "World Event", duration: 1, eventType: "skill_challenge", 
+        description: "You notice an oddity in the stonework.", skill: "wis", dc: 13,
+        success: { type: "loot", text: "You find a loose stone and pry it open, revealing a hidden compartment!" },
+        failure: { type: "none", text: "The stonework seems normal upon closer inspection." }
+    },
+
+    // Standard Events
     { name: "Divine Favor", type: "World Event", duration: 2, eventType: "Beneficial", description: "All players gain +1 to their next roll." },
-    { name: "Helpful Local", type: "World Event", duration: 1, eventType: "skill_challenge", description: "A friendly local offers assistance if you can persuade them.", skill: "cha", dc: 12 },
+    { name: "Helpful Local", type: "World Event", duration: 1, eventType: "skill_challenge", description: "A friendly local offers assistance if you can persuade them.", skill: "cha", dc: 12, success: { type: "loot", text: "The local gratefully gives you a helpful item!" }, failure: { type: "none", text: "The local is wary of your party and offers no help." } },
     { name: "Inspiration Surge", type: "World Event", duration: 2, eventType: "Beneficial", description: "The next ability check, attack roll, or saving throw for each player is made with advantage." },
-    { name: "Lucky Find", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You spot something valuable, if you can perceive it.", skill: "wis", dc: 10 },
+    { name: "Lucky Find", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You spot something valuable, if you can perceive it.", skill: "wis", dc: 10, success: { type: "loot", text: "Your keen eyes spot a valuable item someone else missed!" }, failure: { type: "none", text: "It was just a glint of light on a rock." } },
+    
     // Hindrance
-    { name: "Sudden Illness", type: "World Event", duration: 2, eventType: "Hindrance", description: "A wave of nausea washes over the party. All players have disadvantage on STR checks.", skill: "con", dc: 14 },
-    { name: "Wrong Turn", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You question your path. Can you find the way?", skill: "wis", dc: 10 },
+    { name: "Sudden Illness", type: "World Event", duration: 2, eventType: "Hindrance", description: "A wave of nausea washes over the party. All players have disadvantage on STR checks.", skill: "con", dc: 14, success: { type: "none", text: "You manage to fight off the sickness." }, failure: { type: "none", text: "A wave of sickness weakens you." } },
+    { name: "Wrong Turn", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You question your path. Can you find the way?", skill: "wis", dc: 10, success: { type: "none", text: "You confidently find the correct path." }, failure: { type: "none", text: "You waste time wandering before getting back on track." } },
+    
     // Combat
     { name: "Critical Moment", type: "World Event", duration: 2, eventType: "Combat", description: "The air crackles with energy. All attacks have a +2 bonus to their roll." },
     { name: "Last Stand", type: "World Event", duration: 2, eventType: "Combat", description: "All players gain 5 temporary hit points." },
-    // Exploration
-    { name: "Ancient Inscription", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You find an ancient text. Can you decipher it?", skill: "int", dc: 12 },
-    { name: "Hidden Passage", type: "World Event", duration: 1, eventType: "skill_challenge", description: "You notice an oddity in the stonework.", skill: "wis", dc: 13 },
+    
     // Social
-    { name: "False Accusation", type: "World Event", duration: 1, eventType: "skill_challenge", description: "Someone is wrongly blamed. Can you clear their name?", skill: "cha", dc: 14 },
-    { name: "Offered a Bribe", type: "World Event", duration: 1, eventType: "skill_challenge", description: "An official offers you a deal. Do you take it?", skill: "wis", dc: 13 },
+    { name: "False Accusation", type: "World Event", duration: 1, eventType: "skill_challenge", description: "Someone is wrongly blamed. Can you clear their name?", skill: "cha", dc: 14, success: { type: "loot", text: "You clear their name and are rewarded for your honesty." }, failure: { type: "none", text: "Your words fall on deaf ears." } },
+    { name: "Offered a Bribe", type: "World Event", duration: 1, eventType: "skill_challenge", description: "An official offers you a deal. Do you take it?", skill: "wis", dc: 13, success: { type: "none", text: "You see through the deception and refuse the offer." }, failure: { type: "none", text: "You consider the offer, but it seems too risky." } },
+    
     // Weather
-    { name: "Arctic Squall", type: "World Event", duration: 2, eventType: "Weather", description: "A sudden, biting wind howls. CON Save DC 12 each turn or take 1d4 cold damage.", skill: "con", dc: 12 },
-    { name: "Misty Veil", type: "World Event", duration: 2, eventType: "Weather", description: "An unnaturally thick mist rolls in. All ranged attacks have disadvantage.", skill: "wis", dc: 14 },
+    { name: "Arctic Squall", type: "World Event", duration: 2, eventType: "Weather", description: "A sudden, biting wind howls. CON Save DC 12 each turn or take 1d4 cold damage.", skill: "con", dc: 12, success: { type: "none", text: "You brace against the cold." }, failure: { type: "damage", value: "1d4", text: "The biting cold seeps into your bones." } },
+    { name: "Misty Veil", type: "World Event", duration: 2, eventType: "Weather", description: "An unnaturally thick mist rolls in. All ranged attacks have disadvantage.", skill: "wis", dc: 14, success: { type: "none", text: "You navigate the mist with ease." }, failure: { type: "none", text: "The thick mist disorients you." } },
+    
     // Multi-stage challenges
     { 
         name: "Collapsing Floor", 
@@ -237,10 +252,9 @@ const worldEventCards = [
         duration: 1, 
         eventType: "multi_stage_skill_challenge",
         stages: [
-            { description: "The ground shakes! Make a DEX check to keep your footing!", skill: "dex", dc: 12, failure: { type: "damage", value: "1d4", text: "You stumble and take damage!" } },
-            { description: "A chasm opens! Make a STR check to leap across!", skill: "str", dc: 14, failure: { type: "damage", value: "1d8", text: "You fall short and take heavy damage!" } }
-        ],
-        success: { text: "You navigate the collapsing floor and find a hidden shortcut!" }
+            { description: "The ground shakes! Make a DEX check to keep your footing!", skill: "dex", dc: 12, success: {text: "You keep your balance!"}, failure: { type: "damage", value: "1d4", text: "You stumble and take damage!" } },
+            { description: "A chasm opens! Make a STR check to leap across!", skill: "str", dc: 14, success: {text: "You clear the gap!"}, failure: { type: "damage", value: "1d8", text: "You fall short and take heavy damage!" } }
+        ]
     },
     { 
         name: "Dangerous Terrain", 
@@ -248,10 +262,9 @@ const worldEventCards = [
         duration: 1, 
         eventType: "multi_stage_skill_challenge",
         stages: [
-            { description: "The path is slick with mud. Make a DEX check to stay upright.", skill: "dex", dc: 11, failure: { type: "damage", value: "1d4", text: "You slip and twist your ankle." } },
-            { description: "Thorny vines block the way. Make a STR check to push through.", skill: "str", dc: 13, failure: { type: "damage", value: "1d6", text: "The thorns tear at you as you struggle." } }
-        ],
-        success: { text: "You expertly navigate the treacherous terrain." }
+            { description: "The path is slick with mud. Make a DEX check to stay upright.", skill: "dex", dc: 11, success: {text: "You navigate the mud easily."}, failure: { type: "damage", value: "1d4", text: "You slip and twist your ankle." } },
+            { description: "Thorny vines block the way. Make a STR check to push through.", skill: "str", dc: 13, success: {text: "You push through the vines."}, failure: { type: "damage", value: "1d6", text: "The thorns tear at you as you struggle." } }
+        ]
     },
 ];
 
@@ -283,10 +296,9 @@ const environmentalCards = [
                 apCost: 1, 
                 eventType: "multi_stage_skill_challenge",
                 stages: [
-                    { description: "First, inspect the chest for traps. (WIS Check)", skill: "wis", dc: 13, failure: { type: "damage", value: "2d6", text: "You miss the trigger and a poisoned dart shoots out!" } },
-                    { description: "You've found the mechanism. Now, carefully disable it. (DEX Check)", skill: "dex", dc: 15, failure: { type: "damage", value: "1d10", text: "Your hand slips and the trap partially triggers!" } }
-                ],
-                success: { type: "loot", text: "You deftly disarm the trap and claim the treasure within!" }
+                    { description: "First, inspect the chest for traps. (WIS Check)", skill: "wis", dc: 13, success: { text: "You spot a hidden dart mechanism!" }, failure: { type: "damage", value: "2d6", text: "You miss the trigger and a poisoned dart shoots out!" } },
+                    { description: "You've found the mechanism. Now, carefully disable it. (DEX Check)", skill: "dex", dc: 15, success: { type: "loot", text: "You deftly disarm the trap and claim the treasure within!" }, failure: { type: "damage", value: "1d10", text: "Your hand slips and the trap partially triggers!" } }
+                ]
             }
         ]
     }
