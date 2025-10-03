@@ -784,7 +784,8 @@ function initializeUI() {
                 startWithArmor: document.getElementById('setting-armor').checked,
                 startingItems: parseInt(document.getElementById('setting-items').value, 10),
                 startingSpells: parseInt(document.getElementById('setting-spells').value, 10),
-                lootDropRate: parseInt(document.getElementById('setting-loot-rate').value, 10)
+                lootDropRate: parseInt(document.getElementById('setting-loot-rate').value, 10),
+                discoveryRolls: document.getElementById('setting-discovery-rolls').checked
             };
         }
         socket.emit('createRoom', payload);

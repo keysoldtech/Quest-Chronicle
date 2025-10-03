@@ -162,7 +162,7 @@ class GameManager {
     
         const defaultSettings = {
             startWithWeapon: true, startWithArmor: true, startingItems: 2, 
-            startingSpells: 2, lootDropRate: 80, maxHandSize: 7
+            startingSpells: 2, lootDropRate: 80, maxHandSize: 7, discoveryRolls: true
         };
     
         const newRoom = {
@@ -1114,10 +1114,15 @@ class GameManager {
         
         player.isResolvingDiscovery = true;
 
-        if (room.gameState.gameMode === 'Advanced') {
+        const discoveryRollsEnabled = 
+            room.gameState.gameMode === 'Beginner' || 
+            room.gameState.gameMode === 'Advanced' ||
+            (room.gameState.gameMode === 'Custom' && room.settings.discoveryRolls);
+
+        if (discoveryRollsEnabled) {
             socket.emit('promptDiscoveryRoll', { title: 'Roll for Fortune!', dice: '1d20' });
         } else {
-            // Beginner and Custom mode use a fixed high boost
+            // If rolls are disabled (only possible in Custom), use a fixed high boost
             const discoveredItem = this.generateLoot(room.id, player.class, 25);
             if (discoveredItem) {
                 player.discoveryItem = discoveredItem;
