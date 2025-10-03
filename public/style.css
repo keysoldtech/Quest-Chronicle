@@ -152,7 +152,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .panel-content { padding: 1rem; flex-grow: 1; overflow-y: auto; }
 
 /* --- 7. GAME HEADER & CONTROLS --- */
-.game-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; flex-wrap: wrap; gap: 1rem; }
+.game-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
 .header-info { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
 
 /* Redesigned Player Resources (HP/AP/Hope) */
@@ -179,7 +179,6 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .party-hope-meter-container.inspired .party-hope-meter .progress-bar-fill { background-color: var(--color-success); }
 .party-hope-meter-container.inspired .party-hope-meter .material-symbols-outlined { color: var(--color-success); }
 
-
 .header-controls { display: flex; align-items: center; gap: 1rem; }
 .build-number-font { font-family: var(--font-body); color: var(--color-text-secondary); font-size: 0.9rem; }
 .room-code-display { background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.25rem 0.75rem; text-align: center; }
@@ -189,6 +188,50 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .menu-dropdown { position: absolute; top: 110%; right: 0; background-color: var(--color-surface-light); border: 1px solid var(--color-border); border-radius: 4px; box-shadow: var(--shadow-lg); z-index: 1000; width: 200px; }
 .menu-item { display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 0.75rem 1rem; background: none; border: none; color: var(--color-text-primary); text-align: left; cursor: pointer; font-size: 1rem; }
 .menu-item:hover { background-color: rgba(255,255,255,0.1); } .menu-item.danger { color: var(--color-danger); }
+
+/* Adjustments for expandable header */
+.game-header {
+    flex-direction: column;
+    align-items: stretch; /* Override default */
+    gap: 0; /* Let children handle gap */
+    padding: 0;
+}
+
+.header-main-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.5rem;
+}
+
+#header-expand-toggle .material-symbols-outlined {
+    transition: transform 0.3s ease-in-out;
+}
+
+#header-expand-toggle.active .material-symbols-outlined {
+    transform: rotate(180deg);
+    color: var(--color-special);
+}
+
+.header-expanded-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+    display: flex;
+    justify-content: center;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.header-expanded-content:not(.hidden) {
+    max-height: 80px; /* Ample height for the hope meter */
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-top: 1px solid var(--color-border);
+    margin: 0 0.5rem;
+}
 
 /* --- 8. PLAYER HEALTH, TURN & STATS --- */
 .turn-counter { font-weight: bold; font-size: 1rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem; background-color: var(--color-surface); padding: 0.25rem 0.75rem; border-radius: 20px; border: 1px solid var(--color-border); }
@@ -421,7 +464,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 }
 
 @media (max-width: 1300px) and (min-width: 1024px) {
-    .game-header {
+    .header-main-row {
         justify-content: center;
     }
 }

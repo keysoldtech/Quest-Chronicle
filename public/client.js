@@ -1034,6 +1034,19 @@ function initializeGameUIListeners() {
      document.getElementById('skill-challenge-decline-btn').addEventListener('click', () => {
          document.getElementById('skill-challenge-modal').classList.add('hidden');
      });
+
+    // Header expand toggle
+    const headerExpandBtn = document.getElementById('header-expand-toggle');
+    if (headerExpandBtn) {
+        headerExpandBtn.addEventListener('click', () => {
+            const expandedContent = document.getElementById('header-expanded-content');
+            if (expandedContent) {
+                const isNowVisible = !expandedContent.classList.toggle('hidden');
+                headerExpandBtn.classList.toggle('active', isNowVisible);
+                headerExpandBtn.setAttribute('aria-expanded', isNowVisible);
+            }
+        });
+    }
 }
 
 // --- 4. MODAL & POPUP LOGIC ---
