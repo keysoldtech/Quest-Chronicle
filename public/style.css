@@ -78,12 +78,15 @@ body.in-game {
     justify-content: stretch;
 }
 
-/* VIEW MANAGEMENT */
+/* --- Global Container Reset (v6.5.53) --- */
 .screen {
-    display: none;
     width: 100%;
-    height: 100%;
+    min-height: 100vh; 
+    height: auto;
+    position: relative; 
+    display: none; /* Hidden by default */
 }
+/* Active screen is shown by client.js */
 .screen.active {
     display: block;
 }
@@ -91,11 +94,6 @@ body.in-game {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
-}
-#game-screen {
-    width: 100%;
-    height: 100vh;
 }
 
 .background-animation {
@@ -124,13 +122,19 @@ body.in-game {
 .hidden { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
 
-/* --- MENU / LOBBY STYLES --- */
+/* --- MENU / LOBBY STYLES (v6.5.53) --- */
+#menu-screen {
+    display: flex; 
+    justify-content: center;
+    align-items: center;
+    flex-direction: column; 
+    background-color: #1a1a1a; 
+    color: white;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
 .menu-container {
-    background-color: var(--color-surface);
-    padding: 2rem 2.5rem;
-    border-radius: 8px;
-    border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-lg);
     width: 100%;
     max-width: 600px;
     display: flex;
@@ -156,7 +160,7 @@ body.in-game {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    text-align: left;
+    align-items: center;
 }
 
 .menu-section h3 {
@@ -170,6 +174,7 @@ body.in-game {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 0.75rem;
+    width: 100%;
 }
 
 .mode-btn {
@@ -217,6 +222,7 @@ body.in-game {
     background: var(--color-bg-dark);
     padding: 1rem;
     border-radius: 4px;
+    text-align: left;
 }
 .settings-grid label {
     display: flex;
@@ -230,6 +236,7 @@ body.in-game {
     font-weight: bold;
     position: relative;
     margin: 0.5rem 0;
+    width: 100%;
 }
 .or-divider::before, .or-divider::after {
     content: '';
@@ -244,7 +251,51 @@ body.in-game {
 
 .join-section {
     display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
     gap: 0.5rem;
+}
+
+#player-name-input, #room-code-input {
+    padding: 12px 15px;
+    margin: 8px 0;
+    width: 85%; /* Use percentage for mobile width */
+    max-width: 350px; /* Cap size on desktop */
+    border: 1px solid #555;
+    border-radius: 5px;
+    background-color: #333;
+    color: white;
+    font-size: 1.1em;
+    box-sizing: border-box;
+}
+
+#create-room-btn, #join-room-btn {
+    padding: 10px 20px;
+    margin-top: 15px;
+    width: 90%; /* Slightly wider than input fields */
+    max-width: 380px;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    font-size: 1.2em;
+    font-weight: bold;
+    box-sizing: border-box;
+    transition: background-color 0.2s;
+    color: white;
+}
+#create-room-btn {
+    background-color: #4CAF50; /* Green */
+}
+#join-room-btn {
+    background-color: #2196F3; /* Blue */
+    margin-top: 0;
+}
+#create-room-btn:hover {
+    background-color: #45a049;
+}
+#join-room-btn:hover {
+    background-color: #0b7dda;
 }
 
 /* --- BUTTONS --- */
@@ -1115,36 +1166,22 @@ body.in-game {
     }
 }
 
-/* --- Menu Input & Button Style Overrides --- */
-#player-name-input, #room-code-input {
-    padding: 12px 15px;
-    border: 1px solid #555;
-    border-radius: 5px;
-    background-color: #333;
-    color: white;
-    font-size: 1.1em;
-    font-family: var(--font-body);
-}
-
-#create-room-btn, #join-room-btn {
-    padding: 10px 20px;
-    font-size: 1.2em;
-    font-weight: bold;
-    transition: background-color 0.2s;
-}
-
-#create-room-btn {
-    background-color: #4CAF50; /* Green */
-}
-
-#join-room-btn {
-    background-color: #2196F3; /* Blue */
-}
-
-#create-room-btn:hover {
-    background-color: #45a049;
-}
-
-#join-room-btn:hover {
-    background-color: #0b7dda;
+/* --- Mobile Media Query (Applies to screens up to 768px wide) --- */
+@media (max-width: 768px) { 
+    
+    /* CRITICAL FIX: Forces the class card container to stack vertically on mobile character screen */
+    #mobile-screen-character .class-grid { 
+        display: flex;
+        flex-direction: column; 
+        align-items: center;    
+        width: 100%;
+        padding: 10px 0;
+    }
+    
+    /* Adjust individual cards to take up most of the mobile screen width */
+    #mobile-screen-character .class-card {
+        margin-bottom: 15px; /* Increase spacing */
+        width: 90%;          
+        max-width: 350px;    /* Cap width for tablets */
+    }
 }
