@@ -235,7 +235,7 @@ class GameManager {
     }
     
     createNpcs(room) {
-        const dmNpc = this.createPlayerObject('npc-dm', 'Dungeon Master');
+        const dmNpc = this.createPlayerObject('npc-dm', 'DM');
         dmNpc.role = 'DM';
         dmNpc.isNpc = true;
         room.players[dmNpc.id] = dmNpc;
@@ -684,6 +684,7 @@ class GameManager {
         const actions = {
             'attack': this.resolveAttack,
             'resolveAttackRoll': this.resolveAttackRoll,
+            'resolveDamageRoll': this.resolveDamageRoll,
             'useConsumable': this.resolveUseConsumable,
             'claimLoot': this.resolveClaimLoot,
             'chooseNewCardDiscard': this.resolveNewCardDiscard,
@@ -729,7 +730,45 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
-    resolveAttackRoll(room, player, { weaponId, targetId }) {
+    resolveAttackRoll(room, player, { weaponId, targetId }, socket) {
+        const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        if (!target) return;
+
+        const hitBonus = player.stats.hitBonus || 0;
+        const hitRoll = this.rollDice('1d20');
+        const totalRoll = hitRoll + hitBonus;
+        const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
+        
+        const weapon = weaponId === 'unarmed' 
+            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
+            : Object.values(player.equipment).find(e => e && e.id === weaponId);
+        if (!weapon) return;
+
+        const resultPayload = {
+            rollerId: player.id, rollerName: player.name, targetName: target.name,
+            weaponName: weapon.name,
+            roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
+            outcome,
+        };
+        
+        // Emit the hit/miss result to the entire room.
+        io.to(room.id).emit('attackResolved', resultPayload);
+
+        // If it was a hit, prompt the roller to roll for damage.
+        if (outcome === 'Hit') {
+            socket.emit('promptDamageRoll', {
+                title: `Damage Roll vs ${target.name}`,
+                dice: weapon.effect.dice,
+                bonus: player.stats.damageBonus || 0,
+                weaponId,
+                targetId
+            });
+        }
+
+        this.emitGameState(room.id);
+    }
+    
+    resolveDamageRoll(room, player, { weaponId, targetId }) {
         const weapon = weaponId === 'unarmed' 
             ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
             : Object.values(player.equipment).find(e => e && e.id === weaponId);
@@ -738,37 +777,33 @@ class GameManager {
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
         if (!target) return;
 
-        const hitBonus = player.stats.hitBonus || 0;
-        const hitRoll = this.rollDice('1d20');
-        const totalRoll = hitRoll + hitBonus;
-        const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
-
-        const resultPayload = {
-            rollerId: player.id, rollerName: player.name, targetName: target.name,
-            weaponName: weapon.name,
-            roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
-            outcome,
+        const damageRoll = this.rollDice(weapon.effect.dice);
+        const damageBonus = player.stats.damageBonus || 0;
+        const totalDamage = Math.max(1, damageRoll + damageBonus);
+        target.currentHp -= totalDamage;
+        
+        let wasDefeated = false;
+        if (target.currentHp <= 0) {
+            wasDefeated = true;
+            this.handleMonsterDefeated(room, target.id, player.id);
+        }
+        
+        const damagePayload = {
+            rollerId: player.id,
+            rollerName: player.name,
+            targetId: target.id,
+            targetName: target.name,
+            damageDice: weapon.effect.dice,
+            damageRoll,
+            damageBonus,
+            totalDamage,
+            wasDefeated,
         };
 
-        if (outcome === 'Hit') {
-            const damageRoll = this.rollDice(weapon.effect.dice);
-            const damageBonus = player.stats.damageBonus || 0;
-            const totalDamage = Math.max(1, damageRoll + damageBonus);
-            target.currentHp -= totalDamage;
-
-            resultPayload.damageDice = weapon.effect.dice;
-            resultPayload.damageRoll = damageRoll;
-            resultPayload.damageBonus = damageBonus;
-            resultPayload.totalDamage = totalDamage;
-
-            if (target.currentHp <= 0) {
-                this.handleMonsterDefeated(room, target.id, player.id);
-            }
-        }
-
-        io.to(room.id).emit('attackResolved', resultPayload);
-        this.emitGameState(room.id);
+        io.to(room.id).emit('damageResolved', damagePayload);
+        this.emitGameState(room.id); // This will update the monster's HP for all clients
     }
+
 
     // Applies damage, accounting for shield HP first.
     applyDamage(target, damageAmount) {

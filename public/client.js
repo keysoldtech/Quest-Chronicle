@@ -862,8 +862,8 @@ function createDieSVG(sides, value) {
 }
 
 
-function showDiceRollModal(data) {
-    clientState.currentRollData = data;
+function showDiceRollModal(data, type) {
+    clientState.currentRollData = { ...data, type }; // type is 'attack' or 'damage'
     const { title, dice, bonus, targetAC } = data;
     const modal = document.getElementById('dice-roll-modal');
     document.getElementById('dice-roll-title').textContent = title;
@@ -882,9 +882,11 @@ function showDiceRollModal(data) {
     document.getElementById('dice-roll-result-line').textContent = '';
     document.getElementById('dice-roll-damage-line').textContent = '';
     document.getElementById('dice-roll-details').textContent = '';
-
-    document.getElementById('dice-roll-confirm-btn').classList.remove('hidden');
-    document.getElementById('dice-roll-confirm-btn').disabled = false;
+    
+    const confirmBtn = document.getElementById('dice-roll-confirm-btn');
+    confirmBtn.textContent = type === 'attack' ? 'Roll to Hit' : 'Roll Damage';
+    confirmBtn.classList.remove('hidden');
+    confirmBtn.disabled = false;
     document.getElementById('dice-roll-close-btn').classList.add('hidden');
     
     modal.classList.remove('hidden');
@@ -905,59 +907,86 @@ function handleDiceRoll() {
     }, 50);
 
     dieSVG.classList.add('rolling');
+    
+    const action = clientState.currentRollData.type === 'attack' ? 'resolveAttackRoll' : 'resolveDamageRoll';
 
     setTimeout(() => {
         if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-        socket.emit('playerAction', { action: 'resolveAttackRoll', ...clientState.currentRollData });
+        socket.emit('playerAction', { action: action, ...clientState.currentRollData });
     }, 1000);
 }
 
-function displayAttackResolution(data) {
-    const { roll, bonus, total, outcome, rollerId, totalDamage, damageRoll } = data;
-    const isMyRoll = rollerId === myId;
+function displayAttackRollResult(data) {
+    const { roll, bonus, total, outcome, rollerId } = data;
+    showToast(`${data.rollerName} attacks ${data.targetName}... ${total} is a ${outcome}!`, outcome.toLowerCase());
+
+    if (rollerId !== myId) return;
+
+    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+
+    const container = document.getElementById('dice-display-container');
+    const dieSVG = container.querySelector('.die-svg');
+    if (dieSVG) {
+        dieSVG.classList.remove('rolling');
+        dieSVG.querySelector('.die-text').textContent = roll;
+        dieSVG.querySelector('.die-shape').style.fill = outcome === 'Hit' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
+    }
     
-    if (isMyRoll) {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+    const resultContainer = document.getElementById('dice-roll-result-container');
+    const resultLine = document.getElementById('dice-roll-result-line');
+    const detailsLine = document.getElementById('dice-roll-details');
+    
+    resultLine.textContent = `${total} - ${outcome.toUpperCase()}!`;
+    resultLine.className = `result-line ${outcome.toLowerCase()}`;
+    detailsLine.textContent = `(Roll: ${roll} + Bonus: ${bonus})`;
+    
+    resultContainer.classList.remove('hidden');
+    document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
 
-        const container = document.getElementById('dice-display-container');
-        const dieSVG = container.querySelector('.die-svg');
-        if (dieSVG) {
-            dieSVG.classList.remove('rolling');
-            dieSVG.querySelector('.die-text').textContent = roll;
-            dieSVG.querySelector('.die-shape').style.fill = outcome === 'Hit' ? 'var(--color-success-dark)' : 'var(--color-danger-dark)';
-        }
-        
-        const resultContainer = document.getElementById('dice-roll-result-container');
-        const resultLine = document.getElementById('dice-roll-result-line');
-        const detailsLine = document.getElementById('dice-roll-details');
-        const damageLine = document.getElementById('dice-roll-damage-line');
-        
-        resultLine.textContent = `${total} - ${outcome.toUpperCase()}!`;
-        resultLine.className = `result-line ${outcome.toLowerCase()}`;
-        detailsLine.textContent = `(Roll: ${roll} + Bonus: ${bonus})`;
-        
-        resultContainer.classList.remove('hidden');
-        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-        
-        if (outcome === 'Hit') {
-             setTimeout(() => {
-                damageLine.textContent = `Dealt ${totalDamage} damage!`;
-                damageLine.classList.remove('hidden');
-                showToast(`${data.rollerName} dealt ${totalDamage} damage to ${data.targetName}!`, 'hit');
-             }, 500);
-        } else {
-             damageLine.classList.add('hidden');
-        }
-
+    if (outcome === 'Miss') {
         if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
         clientState.rollModalCloseTimeout = setTimeout(() => {
             document.getElementById('dice-roll-modal').classList.add('hidden');
-        }, 4000);
+        }, 3000);
         document.getElementById('dice-roll-close-btn').classList.remove('hidden');
     }
-    
-    showToast(`${data.rollerName} attacks ${data.targetName}... ${total} is a ${outcome}!`, outcome.toLowerCase());
+    // If it's a hit, we wait for the server to send the damage roll prompt.
 }
+
+function displayDamageRollResult(data) {
+    const { rollerId, totalDamage, damageRoll, damageBonus, targetId } = data;
+    showToast(`${data.rollerName} dealt ${totalDamage} damage to ${data.targetName}!`, 'hit');
+    
+    // Animate monster shake for everyone
+    const monsterCard = document.querySelector(`.card[data-monster-id="${targetId}"]`);
+    if (monsterCard) {
+        monsterCard.classList.add('shake');
+        setTimeout(() => monsterCard.classList.remove('shake'), 820);
+    }
+
+    if (rollerId !== myId) return;
+
+    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+    
+    const dieSVG = document.querySelector('#dice-display-container .die-svg');
+    if(dieSVG) {
+        dieSVG.classList.remove('rolling');
+        dieSVG.querySelector('.die-text').textContent = damageRoll;
+        dieSVG.querySelector('.die-shape').style.fill = 'var(--color-special)';
+    }
+
+    const damageLine = document.getElementById('dice-roll-damage-line');
+    damageLine.textContent = `Dealt ${totalDamage} damage!`;
+    document.getElementById('dice-roll-details').textContent = `(Roll: ${damageRoll} + Bonus: ${damageBonus})`;
+    damageLine.classList.remove('hidden');
+
+    if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+    clientState.rollModalCloseTimeout = setTimeout(() => {
+        document.getElementById('dice-roll-modal').classList.add('hidden');
+    }, 4000);
+    document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+}
+
 
 // --- 6. SOCKET.IO EVENT HANDLERS ---
 socket.on('gameStateUpdate', (newState) => {
@@ -998,11 +1027,19 @@ socket.on('actionError', (message) => {
 });
 
 socket.on('promptAttackRoll', (data) => {
-    showDiceRollModal({ ...data });
+    showDiceRollModal(data, 'attack');
+});
+
+socket.on('promptDamageRoll', (data) => {
+    showDiceRollModal(data, 'damage');
 });
 
 socket.on('attackResolved', (data) => {
-    displayAttackResolution(data);
+    displayAttackRollResult(data);
+});
+
+socket.on('damageResolved', (data) => {
+    displayDamageRollResult(data);
 });
 
 socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
