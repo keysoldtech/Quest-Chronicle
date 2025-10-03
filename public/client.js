@@ -176,9 +176,10 @@ function createCardElement(card, options = {}) {
         return emptyCardDiv;
     }
 
-    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false, isInteractable = false } = options;
+    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false, isInteractable = false, isDetailedView = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
+    if(isDetailedView) cardDiv.classList.add('detailed-view');
     cardDiv.dataset.cardId = card.id;
 
     if (card.rarity) {
@@ -302,6 +303,19 @@ function createCardElement(card, options = {}) {
     if (actionContainer.hasChildNodes()) {
         cardDiv.appendChild(actionContainer);
     }
+    
+    // If it's not a detailed view card itself, add a click listener to open the details modal.
+    if (!isDetailedView) {
+        cardDiv.addEventListener('click', (e) => {
+            // Prevent modal from opening if an action button was clicked,
+            // or if the card is already part of an attack/target sequence.
+            if (e.target.closest('button') || cardDiv.classList.contains('targetable') || cardDiv.classList.contains('attackable-weapon')) {
+                return;
+            }
+            showCardDetailsModal(card);
+        });
+    }
+
 
     return cardDiv;
 }
@@ -1044,6 +1058,11 @@ function initializeGameUIListeners() {
          document.getElementById('skill-challenge-modal').classList.add('hidden');
      });
 
+    // Card Details Modal Listener
+    document.getElementById('card-details-close-btn').addEventListener('click', () => {
+        document.getElementById('card-details-modal').classList.add('hidden');
+    });
+
     // Header expand toggle
     const headerExpandBtn = document.getElementById('header-expand-toggle');
     if (headerExpandBtn) {
@@ -1149,6 +1168,18 @@ function showClaimLootModal(item) {
 
     document.getElementById('claim-loot-title').textContent = `Claim ${item.name}`;
     document.getElementById('claim-loot-modal').classList.remove('hidden');
+}
+
+function showCardDetailsModal(card) {
+    const modal = document.getElementById('card-details-modal');
+    const container = document.getElementById('card-details-container');
+    container.innerHTML = '';
+    
+    // Render a larger, detailed version of the card
+    const detailedCardEl = createCardElement(card, { isDetailedView: true });
+    container.appendChild(detailedCardEl);
+    
+    modal.classList.remove('hidden');
 }
 
 function showDiscoveryModal({ newCard }) {
@@ -1428,13 +1459,14 @@ function showDiceRollModal(data, type) {
     if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
     clientState.rollResponseTimeout = setTimeout(() => {
         const modal = document.getElementById('dice-roll-modal');
-        if (!modal.classList.contains('hidden') && !document.getElementById('dice-roll-close-btn').classList.contains('hidden')) {
-             // Only auto-close if the result has been shown. If the button is still "Roll Dice", there might be a server lag.
-        } else if (!modal.classList.contains('hidden') && document.getElementById('dice-roll-confirm-btn').disabled) {
-            // If the button is disabled (i.e., we are waiting for server), don't auto-close.
-        } else {
-            // If it's still just showing 'Roll Dice', maybe show an error.
-            console.warn("Dice roll timed out waiting for server response.");
+        // Check if the modal is still in the "waiting for roll" state
+        if (!modal.classList.contains('hidden') && document.getElementById('dice-roll-confirm-btn').disabled) {
+            showToast('Roll timed out. Please try again.', 'error');
+            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+            const confirmBtn = document.getElementById('dice-roll-confirm-btn');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Roll Dice';
+            document.getElementById('dice-display-container').innerHTML = createDieSVG(sides, '?');
         }
     }, 8000); // 8 seconds
 }
@@ -1454,19 +1486,11 @@ function handleDiceRoll() {
     
     const [, sides] = clientState.currentRollData.dice.split('d').map(Number);
 
+    // Start a slower, more deliberate animation that will run until the server responds.
     clientState.diceAnimationInterval = setInterval(() => {
         const randomValue = Math.floor(Math.random() * sides) + 1;
         svg.querySelector('.die-text').textContent = randomValue;
-    }, 100);
-
-    // Stop animation after a bit, waiting for server result
-    setTimeout(() => {
-        if (clientState.diceAnimationInterval) {
-            clearInterval(clientState.diceAnimationInterval);
-            clientState.diceAnimationInterval = null;
-        }
-        svg.classList.remove('rolling');
-    }, 1000);
+    }, 150);
     
     // Send appropriate socket event based on roll type
     const payload = { ...clientState.currentRollData };
@@ -1563,6 +1587,7 @@ function initializeSocketListeners() {
 
     socket.on('damageResolved', (result) => {
         if (result.rollerId === myId) {
+            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
             if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
             
             const sides = result.damageDice.split('d')[1];
@@ -1596,6 +1621,7 @@ function initializeSocketListeners() {
      socket.on('discoveryRollResolved', (result) => {
         if (result.rollerId !== myId) return;
 
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         const container = document.getElementById('dice-display-container');
         container.innerHTML = createDieSVG(20, result.roll);
@@ -1620,6 +1646,7 @@ function initializeSocketListeners() {
 
     socket.on('skillCheckResolved', (result) => {
         if (result.rollerId === myId) {
+            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
             if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
             const container = document.getElementById('dice-display-container');
             container.innerHTML = createDieSVG(20, result.roll);
