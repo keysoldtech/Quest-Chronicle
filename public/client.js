@@ -1436,15 +1436,6 @@ function handleDiceRoll() {
         const randomValue = Math.floor(Math.random() * sides) + 1;
         svg.querySelector('.die-text').textContent = randomValue;
     }, 100);
-
-    // Stop animation after a bit, waiting for server result
-    setTimeout(() => {
-        if (clientState.diceAnimationInterval) {
-            clearInterval(clientState.diceAnimationInterval);
-            clientState.diceAnimationInterval = null;
-        }
-        svg.classList.remove('rolling');
-    }, 1000);
     
     // Send appropriate socket event based on roll type
     const payload = { ...clientState.currentRollData };
@@ -1517,6 +1508,7 @@ function initializeSocketListeners() {
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         
         const container = document.getElementById('dice-display-container');
+        container.querySelector('.die-svg').classList.remove('rolling');
         container.innerHTML = createDieSVG(20, result.roll);
 
         const resultLine = document.getElementById('dice-roll-result-line');
@@ -1535,11 +1527,14 @@ function initializeSocketListeners() {
     });
 
     socket.on('damageResolved', (result) => {
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         
         const sides = result.damageDice.split('d')[1];
-        document.getElementById('dice-display-container').innerHTML = createDieSVG(sides, result.damageRoll);
-        document.getElementById('dice-display-container').querySelector('.die-svg').classList.add('result-glow');
+        const container = document.getElementById('dice-display-container');
+        container.querySelector('.die-svg').classList.remove('rolling');
+        container.innerHTML = createDieSVG(sides, result.damageRoll);
+        container.querySelector('.die-svg').classList.add('result-glow');
 
         document.getElementById('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
         document.getElementById('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
@@ -1559,8 +1554,10 @@ function initializeSocketListeners() {
     });
     
      socket.on('discoveryRollResolved', (result) => {
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         const container = document.getElementById('dice-display-container');
+        container.querySelector('.die-svg').classList.remove('rolling');
         container.innerHTML = createDieSVG(20, result.roll);
         container.querySelector('.die-svg').classList.add('result-glow');
 
@@ -1582,8 +1579,10 @@ function initializeSocketListeners() {
     });
 
     socket.on('skillCheckResolved', (result) => {
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         const container = document.getElementById('dice-display-container');
+        container.querySelector('.die-svg').classList.remove('rolling');
         container.innerHTML = createDieSVG(20, result.roll);
         container.querySelector('.die-svg').classList.add('result-glow');
 

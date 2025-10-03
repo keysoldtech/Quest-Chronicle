@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.0.9 - Mobile Header Fix</p>
+            <p class="build-number-font-menu">v9.0.10 - Modal & Animation Fixes</p>
         </div>
     </div>
     
@@ -145,7 +145,7 @@
                          <p class="turn-counter">Round: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v9.0.9 - Mobile Header Fix</p>
+                        <p class="build-number-font">v9.0.10 - Modal & Animation Fixes</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -418,20 +418,24 @@
 
         <!-- Choose to Discard Modal -->
         <div id="choose-discard-modal" class="modal-overlay hidden">
-            <div class="modal-content">
-                <h2 class="panel-header">Hand is Full!</h2>
-                <p>Your hand is full. Choose a card to discard to make room for the new card.</p>
-                <div class="discard-choice-container">
-                    <div class="discard-choice-section">
-                        <h3>New Card</h3>
-                        <div id="new-card-to-discard-container" class="card-container-row"></div>
-                    </div>
-                    <div class="discard-choice-section">
-                        <h3>Your Hand</h3>
-                        <div id="hand-cards-to-discard-container" class="card-container-row"></div>
+            <div class="modal-content large">
+                <div class="modal-header-fixed">
+                    <h2 class="panel-header">Hand is Full!</h2>
+                    <p>Your hand is full. Choose a card to discard to make room for the new card.</p>
+                </div>
+                <div class="modal-scroll-container">
+                    <div class="discard-choice-container">
+                        <div class="discard-choice-section">
+                            <h3>New Card</h3>
+                            <div id="new-card-to-discard-container" class="card-container-row"></div>
+                        </div>
+                        <div class="discard-choice-section">
+                            <h3>Your Hand</h3>
+                            <div id="hand-cards-to-discard-container" class="card-container-row"></div>
+                        </div>
                     </div>
                 </div>
-                <div class="modal-actions">
+                <div class="modal-actions modal-footer-fixed">
                     <button id="confirm-discard-btn" class="btn btn-primary" disabled>Confirm Discard</button>
                 </div>
             </div>
@@ -444,7 +448,7 @@
                     <h2 class="panel-header">A Fateful Choice</h2>
                     <p>You have made a new discovery, but can only carry one. Select the item you wish to keep.</p>
                 </div>
-                <div class="discovery-scroll-container">
+                <div class="modal-scroll-container">
                     <div class="discovery-choice-container">
                         <div class="discovery-choice-section">
                             <h3>Equipped Item</h3>
@@ -470,12 +474,16 @@
         <!-- Claim Loot / Target Selection Modal -->
         <div id="claim-loot-modal" class="modal-overlay hidden">
             <div class="modal-content">
-                <h2 id="claim-loot-title" class="panel-header">Claim Loot For...</h2>
-                <p id="claim-loot-prompt">Who should receive this item?</p>
-                <div id="claim-loot-player-list" class="button-grid">
-                    <!-- Player buttons will be rendered here by client.js -->
+                 <div class="modal-header-fixed">
+                    <h2 id="claim-loot-title" class="panel-header">Claim Loot For...</h2>
+                    <p id="claim-loot-prompt">Who should receive this item?</p>
                 </div>
-                <div class="modal-actions">
+                <div class="modal-scroll-container">
+                    <div id="claim-loot-player-list" class="button-grid">
+                        <!-- Player buttons will be rendered here by client.js -->
+                    </div>
+                </div>
+                <div class="modal-actions modal-footer-fixed">
                     <button id="claim-loot-cancel-btn" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>

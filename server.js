@@ -526,16 +526,16 @@ class GameManager {
         const player = room.players[room.gameState.turnOrder[room.gameState.currentPlayerIndex]];
         if (!player) return;
     
-        // Refresh stats and AP at the start of the turn.
+        // --- Start of Turn Setup ---
         player.stats = this.calculatePlayerStats(player, room.gameState.partyHope);
         player.currentAp = player.stats.maxAP;
         player.usedAbilityThisTurn = false;
-
-        // Mark first turn as taken for tutorial purposes
         if (!player.hasTakenFirstTurn) {
             player.hasTakenFirstTurn = true;
         }
+        io.to(player.id).emit('turnStarted', { playerId: player.id });
 
+        // --- Event Checks ---
         // Check for Individual Discovery event every 3 rounds for human players
         if (!player.isNpc && room.gameState.turnCount > 0 && room.gameState.turnCount % 3 === 0) {
             this.triggerIndividualDiscovery(room, player);
@@ -555,8 +555,10 @@ class GameManager {
 
         this.emitGameState(roomId);
     
-        // If the current player is an NPC, trigger their AI logic.
+        // --- AI Turn Logic ---
         if (player.isNpc) {
+            // This robust try/catch ensures that any error during an AI turn will be logged
+            // and the turn will end gracefully, preventing the entire game from stalling.
             try {
                 await new Promise(res => setTimeout(res, 1500)); // Pause for dramatic effect
                 if (player.role === 'DM') {
@@ -569,7 +571,7 @@ class GameManager {
                     this.endCurrentTurn(roomId);
                 }
             } catch (error) {
-                console.error(`[CRITICAL] Error during AI turn for ${player.name} (${player.id}):`, error);
+                console.error(`[CRITICAL] Error during AI turn for ${player.name} (${player.id}). The game will proceed to the next turn. Error:`, error);
                 // Even if AI fails, end its turn to not block the game.
                 if(room.gameState.phase === 'started') {
                     this.endCurrentTurn(roomId);
@@ -613,12 +615,12 @@ class GameManager {
                 }
             }
         }
-
-        room.gameState.skillChallenge.isActive = false; // Reset challenge flag for next player
+        // Reset challenge flag for next player
+        room.gameState.skillChallenge.isActive = false; 
     
-        // --- Find Next Player ---
+        // --- Find Next Player Phase ---
         let nextIndex, attempts = 0;
-        // Skip over any players who are downed or disconnected.
+        // Loop to find the next valid player, skipping downed or disconnected ones.
         do {
             nextIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             const nextPlayerId = room.gameState.turnOrder[nextIndex];
@@ -629,7 +631,7 @@ class GameManager {
             attempts++;
         } while (attempts <= room.gameState.turnOrder.length)
 
-        // If all explorers are downed, the game is over.
+        // --- Game Over Check ---
         const allExplorersDown = Object.values(room.players)
             .filter(p => p.role === 'Explorer' && !p.isNpc)
             .every(p => p.isDowned || p.disconnected);
@@ -641,8 +643,12 @@ class GameManager {
             return;
         }
 
+        // --- Start Next Turn ---
         room.gameState.currentPlayerIndex = nextIndex;
-        if (nextIndex === 0) room.gameState.turnCount++; // Increment turn count when DM's turn starts.
+        // Increment turn count at the start of the DM's turn (index 0).
+        if (nextIndex === 0) {
+            room.gameState.turnCount++; 
+        }
     
         this.startTurn(roomId);
     }
