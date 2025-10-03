@@ -53,6 +53,22 @@ function shuffle(array) {
     return array;
 }
 
+/**
+ * Sanitizes a string by escaping HTML characters to prevent XSS.
+ * @param {string} unsafe The string to sanitize.
+ * @returns {string} The sanitized string.
+ */
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return '';
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
+
 // --- 3. GAME STATE MANAGEMENT (GameManager Class) ---
 class GameManager {
     // --- 3.1. Constructor & Core Utilities ---
@@ -766,7 +782,10 @@ class GameManager {
     }
     
     resolveAttack(room, player, { cardId, targetId, narrative }, socket) {
-        if (narrative) room.chatLog.push({ type: 'narrative', playerName: player.name, text: narrative, timestamp: Date.now() });
+        if (narrative) {
+            const sanitizedNarrative = escapeHtml(narrative.substring(0, 250));
+            room.chatLog.push({ type: 'narrative', playerName: player.name, text: sanitizedNarrative, timestamp: Date.now() });
+        }
 
         const weapon = cardId === 'unarmed' 
             ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' }, apCost: 1 }
@@ -1215,7 +1234,8 @@ class GameManager {
         const player = room?.players[socket.id];
         if (!room || !player) return;
 
-        room.chatLog.push({ type: 'chat', playerId: player.id, playerName: player.name, channel, text: message, timestamp: Date.now() });
+        const sanitizedMessage = escapeHtml(message.substring(0, 250));
+        room.chatLog.push({ type: 'chat', playerId: player.id, playerName: player.name, channel, text: sanitizedMessage, timestamp: Date.now() });
         this.emitGameState(room.id);
     }
     

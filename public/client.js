@@ -408,7 +408,7 @@ function renderUI() {
     }
     
     const skillChallengeModal = get('skill-challenge-modal');
-    if (gameState.skillChallenge.isActive) {
+    if (gameState.skillChallenge.isActive && gameState.turnOrder[gameState.currentPlayerIndex] === myId) {
         showSkillChallengeModal(gameState.skillChallenge.details);
     } else {
         skillChallengeModal.classList.add('hidden');
@@ -836,24 +836,32 @@ function initializeGameUIListeners() {
     document.getElementById('chat-close-btn').addEventListener('click', () => document.getElementById('chat-overlay').classList.add('hidden'));
 
     // --- Menu Dropdown Logic ---
-    const menuButtons = ['menu-toggle-btn', 'mobile-menu-toggle-btn'];
-    const dropdowns = ['menu-dropdown', 'mobile-menu-dropdown'];
-    menuButtons.forEach(btnId => {
-        document.getElementById(btnId).addEventListener('click', e => {
+    const menuToggleBtns = ['menu-toggle-btn', 'mobile-menu-toggle-btn'];
+    const menuDropdowns = ['menu-dropdown', 'mobile-menu-dropdown'];
+
+    menuToggleBtns.forEach(btnId => {
+        document.getElementById(btnId).addEventListener('click', (e) => {
             e.stopPropagation();
-            const targetDropdownId = btnId.replace('toggle', 'dropdown');
-            const targetDropdown = document.getElementById(targetDropdownId);
-            const isHidden = targetDropdown.classList.contains('hidden');
-            // Hide all dropdowns first
-            dropdowns.forEach(id => document.getElementById(id).classList.add('hidden'));
-            // If the target was hidden, show it
-            if (isHidden) {
-                targetDropdown.classList.remove('hidden');
+            const dropdownId = btnId.replace('toggle-btn', 'dropdown');
+            const dropdown = document.getElementById(dropdownId);
+            const isCurrentlyHidden = dropdown.classList.contains('hidden');
+
+            // Always hide all dropdowns first
+            menuDropdowns.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+            // If the one we clicked was hidden, show it.
+            if (isCurrentlyHidden) {
+                dropdown.classList.remove('hidden');
             }
         });
     });
-    document.addEventListener('click', () => {
-        dropdowns.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+    // Global click listener to close menus if click is outside
+    document.addEventListener('click', (e) => {
+        const isClickInsideMenu = e.target.closest('.header-menu');
+        if (!isClickInsideMenu) {
+            menuDropdowns.forEach(id => document.getElementById(id).classList.add('hidden'));
+        }
     });
     // --- End Menu Dropdown Logic ---
 
@@ -946,6 +954,15 @@ function initializeGameUIListeners() {
      document.getElementById('help-close-btn').addEventListener('click', hideHelpModal);
      document.getElementById('help-prev-btn').addEventListener('click', () => navigateHelpModal(-1));
      document.getElementById('help-next-btn').addEventListener('click', () => navigateHelpModal(1));
+
+     // Skill Challenge Modal Listeners
+     document.getElementById('skill-challenge-resolve-btn').addEventListener('click', () => {
+         socket.emit('playerAction', { action: 'resolveSkillCheck' });
+         document.getElementById('skill-challenge-modal').classList.add('hidden');
+     });
+     document.getElementById('skill-challenge-decline-btn').addEventListener('click', () => {
+         document.getElementById('skill-challenge-modal').classList.add('hidden');
+     });
 }
 
 // --- 4. MODAL & POPUP LOGIC ---
