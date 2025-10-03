@@ -278,14 +278,23 @@ class GameManager {
         if (!card) return;
     
         if (player.hand.length >= room.settings.maxHandSize) {
-            const playerSocket = io.sockets.sockets.get(player.id);
-            if (playerSocket) {
-                // If the player is connected, prompt them to choose a card to discard.
-                playerSocket.emit('chooseToDiscard', { newCard: card, currentHand: player.hand });
+            if (player.isNpc) {
+                // NPC LOGIC: Automatically discard the oldest card (at index 0) to make room.
+                const discardedCard = player.hand.shift();
+                room.gameState.discardPile.push(discardedCard);
+                player.hand.push(card);
+                 room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full. Discarded ${discardedCard.name} for ${card.name}.` });
+
             } else {
-                // If they're disconnected, discard the new card automatically to prevent game stall.
-                room.gameState.discardPile.push(card);
-                room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full and they are disconnected. '${card.name}' was discarded.` });
+                const playerSocket = io.sockets.sockets.get(player.id);
+                if (playerSocket) {
+                    // HUMAN LOGIC: Prompt connected player to choose.
+                    playerSocket.emit('chooseToDiscard', { newCard: card, currentHand: player.hand });
+                } else {
+                    // Fallback for disconnected humans: Discard the new card to prevent game stall.
+                    room.gameState.discardPile.push(card);
+                    room.chatLog.push({ type: 'system', text: `${player.name}'s hand was full and they are disconnected. '${card.name}' was discarded.` });
+                }
             }
         } else {
             player.hand.push(card);
@@ -983,12 +992,29 @@ class GameManager {
         
         // If the game hasn't started, just remove them.
         if (room.gameState.phase === 'class_selection') {
+            // If the host disconnects during setup, close the room for everyone.
+            if (player.id === room.hostId) {
+                io.to(roomId).emit('roomClosed', { message: 'The host has disconnected. The room has been closed.' });
+                // Clean up sockets from room
+                const socketsInRoom = io.sockets.adapter.rooms.get(roomId);
+                if (socketsInRoom) {
+                    socketsInRoom.forEach(socketId => {
+                        const sock = io.sockets.sockets.get(socketId);
+                        if(sock) sock.leave(roomId);
+                    });
+                }
+                delete this.rooms[roomId];
+                return;
+            }
             delete room.players[socket.id];
         } else {
             // If the game is running, give them 60 seconds to reconnect before removal.
             player.cleanupTimer = setTimeout(() => {
                 if (room.players[socket.id]?.disconnected) {
                     delete room.players[socket.id];
+                    // Also remove from turn order to prevent errors
+                    const turnIndex = room.gameState.turnOrder.indexOf(socket.id);
+                    if(turnIndex > -1) room.gameState.turnOrder.splice(turnIndex, 1);
                     this.emitGameState(roomId);
                 }
             }, 60000);
@@ -1018,6 +1044,12 @@ class GameManager {
             socket.join(roomId);
             this.socketToRoom[socket.id] = roomId;
             
+            // Update turn order with new socket id
+            const turnIndex = room.gameState.turnOrder.indexOf(oldSocketId);
+            if (turnIndex > -1) {
+                room.gameState.turnOrder[turnIndex] = socket.id;
+            }
+
             socket.emit('playerIdentity', { playerId: playerObject.playerId, roomId });
             room.chatLog.push({ type: 'system', text: `${playerObject.name} has reconnected.` });
             this.emitGameState(roomId);

@@ -152,9 +152,14 @@ function renderUI() {
     if (!currentRoomState || !currentRoomState.id) return;
     const myPlayer = currentRoomState.players[myId];
     if (!myPlayer) {
-        if (sessionStorage.getItem('qc_playerId')) return;
-        sessionStorage.removeItem('qc_roomId');
-        window.location.reload();
+        // If we have a player ID, it means we were in a game but are no longer.
+        // This can happen if the host disconnects or we were kicked.
+        // We should clear session and reload.
+        if (sessionStorage.getItem('qc_playerId')) {
+            sessionStorage.removeItem('qc_roomId');
+            sessionStorage.removeItem('qc_playerId');
+            window.location.reload();
+        }
         return;
     }
 
@@ -163,8 +168,6 @@ function renderUI() {
     const get = id => document.getElementById(id);
 
     // --- Phase 1: Show/Hide Major Screens ---
-    // CRITICAL FIX: This is the single, authoritative block for managing screen visibility.
-    // The previous implementation had conflicting logic that caused the menu screen to persist.
     if (phase === 'class_selection' || phase === 'started' || phase === 'game_over') {
         get('menu-screen').classList.remove('active');
         get('game-screen').classList.add('active');
@@ -172,7 +175,7 @@ function renderUI() {
             initializeGameUIListeners();
             gameUIInitialized = true;
         }
-    } else { // 'lobby' or any other state
+    } else { 
         get('menu-screen').classList.add('active');
         get('game-screen').classList.remove('active');
     }
@@ -241,22 +244,36 @@ function renderUI() {
     }
 }
 
-function createClassCardElement(id, data) {
+function createClassCardElement(id, data, forMobile = false) {
     const cardDiv = document.createElement('div');
     cardDiv.className = 'class-card';
     cardDiv.dataset.classId = id;
 
+    const statsHTML = `
+        <div class="class-stat-item" title="Health Points"><span class="material-symbols-outlined icon-hp">favorite</span> ${data.baseHp}</div>
+        <div class="class-stat-item" title="Action Points"><span class="material-symbols-outlined icon-ap">bolt</span> ${data.baseAP}</div>
+        <div class="class-stat-item" title="Damage Bonus"><span class="material-symbols-outlined icon-damage">swords</span> +${data.baseDamageBonus}</div>
+        <div class="class-stat-item" title="Shield Bonus"><span class="material-symbols-outlined icon-shield">security</span> +${data.baseShieldBonus}</div>
+    `;
+
+    const buttonHTML = forMobile ? `<button class="select-class-btn btn btn-primary btn-sm" data-class-id="${id}">Select ${id}</button>` : '';
+
     cardDiv.innerHTML = `
-        <h3>${id}</h3>
-        <div class="class-stats">
-            <p><strong>HP:</strong> ${data.baseHp}</p><p><strong>Dmg:</strong> +${data.baseDamageBonus}</p>
-            <p><strong>Shld:</strong> +${data.baseShieldBonus}</p><p><strong>AP:</strong> ${data.baseAP}</p>
+        <div class="class-card-header">
+            <h3>${id}</h3>
         </div>
-        <div class="class-ability">
-            <p><strong>${data.ability.name}</strong></p>
-            <p class="ability-desc">${data.ability.description}</p>
+        <div class="class-card-body">
+            <div class="class-stats">
+                ${statsHTML}
+            </div>
+            <div class="class-ability">
+                <p><strong>${data.ability.name}</strong></p>
+                <p class="ability-desc">${data.ability.description}</p>
+            </div>
         </div>
-        <button class="select-class-btn btn btn-primary btn-sm" data-class-id="${id}">Select ${id}</button>
+        <div class="class-card-footer">
+             ${buttonHTML}
+        </div>
     `;
     return cardDiv;
 }
@@ -271,18 +288,13 @@ function showClassSelectionModal() {
     let selectedClassId = null;
 
     Object.entries(classData).forEach(([id, data]) => {
-        const cardElement = createClassCardElement(id, data);
-        if (cardElement.querySelector('.select-class-btn')) {
-            cardElement.querySelector('.select-class-btn').style.display = 'none';
-        }
-
+        const cardElement = createClassCardElement(id, data, false);
         cardElement.addEventListener('click', () => {
             displayContainer.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected-item'));
             cardElement.classList.add('selected-item');
             selectedClassId = id;
             confirmBtn.disabled = false;
         });
-        
         displayContainer.appendChild(cardElement);
     });
 
@@ -306,7 +318,7 @@ function renderClassSelection(desktopContainer, mobileContainer) {
         const classSelectionHTML = `
             <h2 class="panel-header">Choose Your Class</h2>
             <div class="panel-content class-grid">
-                ${Object.entries(classData).map(([id, data]) => createClassCardElement(id, data).outerHTML).join('')}
+                ${Object.entries(classData).map(([id, data]) => createClassCardElement(id, data, true).outerHTML).join('')}
             </div>`;
         
         switchMobileScreen('character');
@@ -583,8 +595,9 @@ function initializeUI() {
 
 function initializeGameUIListeners() {
     document.body.addEventListener('click', (e) => {
-        if (e.target.classList.contains('select-class-btn')) {
-            socket.emit('chooseClass', { classId: e.target.dataset.classId });
+        const classBtn = e.target.closest('.select-class-btn');
+        if (classBtn) {
+            socket.emit('chooseClass', { classId: classBtn.dataset.classId });
         }
         if (e.target.id === 'use-ability-btn') {
             const playerClass = currentRoomState.players[myId]?.class;
@@ -943,6 +956,16 @@ socket.on('playerIdentity', ({ playerId, roomId }) => {
     sessionStorage.setItem('qc_playerId', playerId);
     sessionStorage.setItem('qc_roomId', roomId);
 });
+
+socket.on('roomClosed', ({ message }) => {
+    showToast(message, 'error');
+    setTimeout(() => {
+        sessionStorage.removeItem('qc_roomId');
+        sessionStorage.removeItem('qc_playerId');
+        window.location.reload();
+    }, 3000);
+});
+
 
 socket.on('actionError', (message) => {
     showToast(message, 'error');

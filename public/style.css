@@ -223,6 +223,23 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .result-line.hit { color: var(--color-success); } .result-line.miss { color: var(--color-danger); }
 .roll-details { text-align: center; color: var(--color-text-secondary); }
 
+/* --- CLASS SELECTION STYLES (NEW) --- */
+.modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); z-index: 1500; display: flex; align-items: center; justify-content: center; }
+#class-selection-modal .modal-content { max-width: 90vw; width: 1200px; height: 90vh; }
+#desktop-class-card-display { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; padding: 1rem; overflow-y: auto; flex-grow: 1; }
+.class-card { background: var(--color-surface-light); border: 2px solid var(--color-border); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; cursor: pointer; transition: all 0.2s ease-in-out; }
+.class-card:hover { transform: translateY(-5px); border-color: var(--color-special); }
+.class-card.selected-item { border-color: var(--color-primary); box-shadow: 0 0 15px var(--color-primary); transform: scale(1.03); }
+.class-card-header h3 { font-family: var(--font-title); font-size: 2rem; color: var(--color-special); text-align: center; }
+.class-card-body { flex-grow: 1; display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem; }
+.class-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; border-bottom: 1px solid var(--color-border); padding-bottom: 1rem; }
+.class-stat-item { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }
+.class-stat-item .material-symbols-outlined { font-size: 1.5rem; }
+.class-ability { background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; }
+.class-ability strong { font-family: var(--font-title); font-size: 1.1rem; }
+.class-ability .ability-desc { font-size: 0.9rem; color: var(--color-text-secondary); margin-top: 0.5rem; }
+.class-card-footer { margin-top: auto; padding-top: 1rem; text-align: center; }
+
 /* --- 13. RESPONSIVE STYLES (MOBILE) --- */
 @media (max-width: 1023px) {
     .game-area-desktop { display: none; }
@@ -238,6 +255,9 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 0.5rem 0; background: none; border: none; color: var(--color-text-secondary); font-size: 0.8rem; }
     .nav-btn.active { color: var(--color-primary); }
     .nav-btn .material-symbols-outlined { font-size: 1.5rem; }
+    .class-grid { display: flex; flex-direction: column; gap: 1rem; }
+    .class-card { cursor: default; } /* No hover effects on mobile */
+    .class-card:hover { transform: none; }
 }
 
 @media (min-width: 1024px) {
