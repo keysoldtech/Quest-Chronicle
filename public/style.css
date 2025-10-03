@@ -388,7 +388,8 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     .game-area-mobile { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
     .mobile-header { flex-shrink: 0; position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; background: var(--color-surface); padding: 0.5rem; border-bottom: 1px solid var(--color-border); }
     .mobile-header .turn-indicator-font { font-size: 1.2rem; flex-shrink: 0; }
-    .mobile-resources { display: flex; align-items: center; gap: 0.5rem; flex-grow: 1; justify-content: center; min-width: 0; }
+    .mobile-header-right-cluster { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; flex-grow: 1; min-width: 0; }
+    .mobile-resources { display: flex; align-items: center; gap: 0.5rem; justify-content: center; min-width: 0; }
     .mobile-header .player-health-bar-container.mobile { background-color: transparent; padding: 0; border: none; max-width: 100px; width: 100%; }
     .mobile-header .progress-bar { height: 12px; }
     .mobile-header .progress-bar-text { font-size: 0.65rem; }

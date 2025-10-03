@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.0.8 - Card Layout Fix</p>
+            <p class="build-number-font-menu">v9.0.9 - Mobile Header Fix</p>
         </div>
     </div>
     
@@ -145,7 +145,7 @@
                          <p class="turn-counter">Round: <span id="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v9.0.8 - Card Layout Fix</p>
+                        <p class="build-number-font">v9.0.9 - Mobile Header Fix</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -228,42 +228,44 @@
             <div class="game-area-mobile">
                 <header class="mobile-header">
                     <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
-                    <div class="mobile-resources">
-                        <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden">
-                             <span class="party-hope-label">Party Hope</span>
-                            <div class="party-hope-meter mobile">
-                                <span class="material-symbols-outlined">stars</span>
-                                <span id="party-hope-text-mobile"></span>
+                    <div class="mobile-header-right-cluster">
+                        <div class="mobile-resources">
+                            <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden">
+                                <span class="party-hope-label">Party Hope</span>
+                                <div class="party-hope-meter mobile">
+                                    <span class="material-symbols-outlined">stars</span>
+                                    <span id="party-hope-text-mobile"></span>
+                                </div>
+                            </div>
+                            <div id="mobile-resources-container" class="player-resources-container mobile hidden">
+                                <div class="player-health-bar-container mobile">
+                                    <span class="material-symbols-outlined">favorite</span>
+                                    <div class="progress-bar-wrapper">
+                                        <div class="progress-bar health">
+                                            <div id="mobile-player-health-bar" class="progress-bar-fill"></div>
+                                        </div>
+                                        <span id="mobile-player-health-text" class="progress-bar-text"></span>
+                                    </div>
+                                </div>
+                                <p id="ap-counter-mobile" class="ap-counter"></p>
                             </div>
                         </div>
-                         <div id="mobile-resources-container" class="player-resources-container mobile hidden">
-                             <div class="player-health-bar-container mobile">
-                                 <span class="material-symbols-outlined">favorite</span>
-                                 <div class="progress-bar-wrapper">
-                                     <div class="progress-bar health">
-                                         <div id="mobile-player-health-bar" class="progress-bar-fill"></div>
-                                     </div>
-                                     <span id="mobile-player-health-text" class="progress-bar-text"></span>
-                                 </div>
-                             </div>
-                             <p id="ap-counter-mobile" class="ap-counter"></p>
+                        <div class="mobile-header-controls">
+                            <div class="room-code-display mobile">
+                                <span>CODE</span>
+                                <p id="mobile-room-code">----</p>
+                            </div>
+                            <div class="header-menu">
+                                <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
+                                <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
+                                    <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
+                                    <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Voice</button>
+                                    <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
+                                    <button id="mobile-leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
+                                    <button id="mobile-leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="mobile-header-controls">
-                        <div class="room-code-display mobile">
-                            <span>CODE</span>
-                            <p id="mobile-room-code">----</p>
-                        </div>
-                         <div class="header-menu">
-                             <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
-                             <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
-                                 <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
-                                 <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Voice</button>
-                                 <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
-                                 <button id="mobile-leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
-                                 <button id="mobile-leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
-                             </div>
-                         </div>
                     </div>
                 </header>
                 
