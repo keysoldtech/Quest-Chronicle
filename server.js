@@ -515,12 +515,6 @@ class GameManager {
         // Equip the new item.
         player.equipment[itemType] = cardToEquip;
         player.stats = this.calculatePlayerStats(player, room.gameState.partyHope); // Recalculate stats with new item
-        
-        io.to(room.id).emit('actionFeedback', {
-            playerName: player.name,
-            actionText: `equipped the ${cardToEquip.name}.`,
-            type: 'info'
-        });
         this.emitGameState(room.id);
     }
     
@@ -536,8 +530,6 @@ class GameManager {
         player.stats = this.calculatePlayerStats(player, room.gameState.partyHope);
         player.currentAp = player.stats.maxAP;
         player.usedAbilityThisTurn = false;
-
-        io.to(player.id).emit('turnStarted', { playerId: player.id });
 
         // Mark first turn as taken for tutorial purposes
         if (!player.hasTakenFirstTurn) {
@@ -626,14 +618,16 @@ class GameManager {
     
         // --- Find Next Player ---
         let nextIndex, attempts = 0;
-        let nextPlayer;
+        // Skip over any players who are downed or disconnected.
         do {
             nextIndex = (room.gameState.currentPlayerIndex + 1) % room.gameState.turnOrder.length;
             const nextPlayerId = room.gameState.turnOrder[nextIndex];
-            nextPlayer = room.players[nextPlayerId];
-            room.gameState.currentPlayerIndex = nextIndex; // Move index forward
+            const nextPlayer = room.players[nextPlayerId];
+            if (nextPlayer && !nextPlayer.isDowned && !nextPlayer.disconnected) {
+                break; // Found a valid player
+            }
             attempts++;
-        } while ((!nextPlayer || nextPlayer.isDowned || nextPlayer.disconnected) && attempts <= room.gameState.turnOrder.length)
+        } while (attempts <= room.gameState.turnOrder.length)
 
         // If all explorers are downed, the game is over.
         const allExplorersDown = Object.values(room.players)
@@ -646,7 +640,8 @@ class GameManager {
             this.emitGameState(roomId);
             return;
         }
-        
+
+        room.gameState.currentPlayerIndex = nextIndex;
         if (nextIndex === 0) room.gameState.turnCount++; // Increment turn count when DM's turn starts.
     
         this.startTurn(roomId);
@@ -812,17 +807,19 @@ class GameManager {
     handlePlayerAction(socket, payload) {
         const room = this.findRoomBySocket(socket);
         const player = room?.players[socket.id];
-    
-        // --- 1. Initial Validation ---
-        if (!room || !player) {
-            console.error(`[CRITICAL] Action from socket ${socket.id} with no room/player data.`);
-            return;
+        if (!room || !player || player.isDowned || room.gameState.isPaused) return;
+
+        // Block most actions if the player is in the middle of a discovery.
+        if (player.isResolvingDiscovery && !['resolveDiscovery', 'resolveDiscoveryRoll'].includes(payload.action)) {
+            return socket.emit('actionError', 'You must resolve your discovery first.');
         }
-        if (player.isDowned || room.gameState.isPaused) {
-            return; // Silently ignore actions if player is downed or game is paused.
+        
+        const isMyTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === player.id;
+        // Allow certain actions (claiming loot, discarding for new cards) even when it's not your turn.
+        if (!isMyTurn && !['chooseNewCardDiscard', 'claimLoot', 'resolveDiscovery', 'resolveDiscoveryRoll'].includes(payload.action)) {
+            return socket.emit('actionError', "It's not your turn.");
         }
     
-        // --- 2. Action Mapping & Validation ---
         const actions = {
             'attack': this.resolveAttack,
             'resolveAttackRoll': this.resolveAttackRoll,
@@ -841,39 +838,10 @@ class GameManager {
             'resolveSkillCheckRoll': this.resolveSkillCheckRoll,
             'resolveSkillInteraction': this.resolveSkillInteraction,
         };
+    
         const actionHandler = actions[payload.action];
-    
-        if (!actionHandler) {
-            console.warn(`[WARN] Received unhandled action: '${payload.action}' from ${player.name}`);
-            return;
-        }
-    
-        // --- 3. Turn & State-Based Validation ---
-        const isMyTurn = room.gameState.turnOrder[room.gameState.currentPlayerIndex] === player.id;
-        const isOffTurnActionAllowed = [
-            'chooseNewCardDiscard', 
-            'claimLoot', 
-            'resolveDiscovery', 
-            'resolveDiscoveryRoll'
-        ].includes(payload.action);
-    
-        if (!isMyTurn && !isOffTurnActionAllowed) {
-            return socket.emit('actionError', "It's not your turn.");
-        }
-    
-        if (player.isResolvingDiscovery && !['resolveDiscovery', 'resolveDiscoveryRoll'].includes(payload.action)) {
-            return socket.emit('actionError', 'You must resolve your discovery first.');
-        }
-    
-        // --- 4. Execution with Error Handling ---
-        try {
+        if (actionHandler) {
             actionHandler.call(this, room, player, payload, socket);
-        } catch (error) {
-            console.error(`[CRITICAL] Error executing action '${payload.action}' for player ${player.name}:`, error);
-            // Inform the client that a server error occurred so they are not stuck.
-            socket.emit('actionError', 'A server error occurred. Please try again.');
-            // If the error happened during a roll, tell the client to reset their dice modal.
-            socket.emit('diceRollError');
         }
     }
     
@@ -909,93 +877,103 @@ class GameManager {
     }
     
     resolveAttackRoll(room, player, payload, socket) {
-        const { weaponId, targetId } = payload;
-        const target = room.gameState.board.monsters.find(m => m.id === targetId);
-        const weapon = weaponId === 'unarmed' 
-            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-            : Object.values(player.equipment).find(e => e && e.id === weaponId);
+        try {
+            const { weaponId, targetId } = payload;
+            const target = room.gameState.board.monsters.find(m => m.id === targetId);
+            const weapon = weaponId === 'unarmed' 
+                ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
+                : Object.values(player.equipment).find(e => e && e.id === weaponId);
 
-        if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
-            console.error(`Error resolving attack roll: Invalid target or weapon data.`, { weaponId, targetId });
-            socket.emit('actionError', 'A server error occurred with weapon/target data.');
+            if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
+                console.error(`Error resolving attack roll: Invalid target or weapon data.`, { weaponId, targetId });
+                socket.emit('actionError', 'A server error occurred with weapon/target data.');
+                socket.emit('diceRollError');
+                return;
+            }
+
+            const hitBonus = player.stats.hitBonus || 0;
+            const hitRoll = this.rollDice('1d20');
+            const totalRoll = hitRoll + hitBonus;
+            
+            if (hitRoll === 20) { // Critical Hit!
+                room.gameState.partyHope = Math.min(10, room.gameState.partyHope + 1);
+                room.chatLog.push({ type: 'system-good', text: `${player.name} landed a CRITICAL HIT! Party Hope increases!`, timestamp: Date.now() });
+            }
+
+            const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
+            
+            const resultPayload = {
+                rollerId: player.id, rollerName: player.name, targetName: target.name,
+                weaponName: weapon.name,
+                roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
+                outcome,
+            };
+            
+            io.to(room.id).emit('attackResolved', resultPayload);
+
+            if (outcome === 'Hit') {
+                socket.emit('promptDamageRoll', {
+                    title: `Damage Roll vs ${target.name}`,
+                    dice: weapon.effect.dice,
+                    bonus: player.stats.damageBonus || 0,
+                    weaponId,
+                    targetId
+                });
+            }
+
+            this.emitGameState(room.id);
+        } catch (e) {
+            console.error("Critical error in resolveAttackRoll:", e);
+            socket.emit('actionError', 'A server error occurred during attack resolution.');
             socket.emit('diceRollError');
-            return;
         }
-
-        const hitBonus = player.stats.hitBonus || 0;
-        const hitRoll = this.rollDice('1d20');
-        const totalRoll = hitRoll + hitBonus;
-        
-        if (hitRoll === 20) { // Critical Hit!
-            room.gameState.partyHope = Math.min(10, room.gameState.partyHope + 1);
-            room.chatLog.push({ type: 'system-good', text: `${player.name} landed a CRITICAL HIT! Party Hope increases!`, timestamp: Date.now() });
-        }
-
-        const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
-        room.chatLog.push({ type: 'combat', text: `${player.name} attacks ${target.name} with ${weapon.name}... Rolled a ${totalRoll}. It's a ${outcome}!`, timestamp: Date.now() });
-        
-        const resultPayload = {
-            rollerId: player.id, rollerName: player.name, targetName: target.name,
-            weaponName: weapon.name,
-            roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
-            outcome,
-        };
-        
-        io.to(room.id).emit('attackResolved', resultPayload);
-
-        if (outcome === 'Hit') {
-            socket.emit('promptDamageRoll', {
-                title: `Damage Roll vs ${target.name}`,
-                dice: weapon.effect.dice,
-                bonus: player.stats.damageBonus || 0,
-                weaponId,
-                targetId
-            });
-        }
-
-        this.emitGameState(room.id);
     }
     
     resolveDamageRoll(room, player, payload, socket) {
-        const { weaponId, targetId } = payload;
-        const weapon = weaponId === 'unarmed' 
-            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-            : Object.values(player.equipment).find(e => e && e.id === weaponId);
-        const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        try {
+            const { weaponId, targetId } = payload;
+            const weapon = weaponId === 'unarmed' 
+                ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
+                : Object.values(player.equipment).find(e => e && e.id === weaponId);
+            const target = room.gameState.board.monsters.find(m => m.id === targetId);
 
-        if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
-            console.error(`Error resolving damage roll: Invalid target or weapon data.`, { weaponId, targetId });
-            socket.emit('actionError', 'A server error occurred with weapon/target data.');
+            if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
+                console.error(`Error resolving damage roll: Invalid target or weapon data.`, { weaponId, targetId });
+                socket.emit('actionError', 'A server error occurred with weapon/target data.');
+                socket.emit('diceRollError');
+                return;
+            }
+
+            const damageRoll = this.rollDice(weapon.effect.dice);
+            const damageBonus = player.stats.damageBonus || 0;
+            const totalDamage = Math.max(1, damageRoll + damageBonus);
+            target.currentHp -= totalDamage;
+            
+            let wasDefeated = false;
+            if (target.currentHp <= 0) {
+                wasDefeated = true;
+                this.handleMonsterDefeated(room, target.id, player.id);
+            }
+            
+            const damagePayload = {
+                rollerId: player.id,
+                rollerName: player.name,
+                targetId: target.id,
+                targetName: target.name,
+                damageDice: weapon.effect.dice,
+                damageRoll,
+                damageBonus,
+                totalDamage,
+                wasDefeated,
+            };
+
+            io.to(room.id).emit('damageResolved', damagePayload);
+            this.emitGameState(room.id);
+        } catch (e) {
+            console.error("Critical error in resolveDamageRoll:", e);
+            socket.emit('actionError', 'A server error occurred during damage resolution.');
             socket.emit('diceRollError');
-            return;
         }
-
-        const damageRoll = this.rollDice(weapon.effect.dice);
-        const damageBonus = player.stats.damageBonus || 0;
-        const totalDamage = Math.max(1, damageRoll + damageBonus);
-        target.currentHp -= totalDamage;
-        room.chatLog.push({ type: 'combat-hit', text: `${player.name} dealt ${totalDamage} damage to ${target.name}.`, timestamp: Date.now() });
-        
-        let wasDefeated = false;
-        if (target.currentHp <= 0) {
-            wasDefeated = true;
-            this.handleMonsterDefeated(room, target.id, player.id);
-        }
-        
-        const damagePayload = {
-            rollerId: player.id,
-            rollerName: player.name,
-            targetId: target.id,
-            targetName: target.name,
-            damageDice: weapon.effect.dice,
-            damageRoll,
-            damageBonus,
-            totalDamage,
-            wasDefeated,
-        };
-
-        io.to(room.id).emit('damageResolved', damagePayload);
-        this.emitGameState(room.id);
     }
 
 
@@ -1082,11 +1060,6 @@ class GameManager {
         player.currentAp -= gameData.actionCosts.guard;
         player.stats.shieldHp += player.stats.shieldBonus;
         room.chatLog.push({ type: 'action', text: `${player.name} takes a defensive stance, gaining ${player.stats.shieldBonus} Shield HP.`, timestamp: Date.now() });
-        io.to(room.id).emit('actionFeedback', {
-            playerName: player.name,
-            actionText: `took a defensive stance.`,
-            type: 'action'
-        });
         this.emitGameState(room.id);
     }
 
@@ -1096,11 +1069,6 @@ class GameManager {
         const healing = this.rollDice('1d4');
         player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healing);
         room.chatLog.push({ type: 'action-good', text: `${player.name} takes a brief respite, healing for ${healing} HP.`, timestamp: Date.now() });
-        io.to(room.id).emit('actionFeedback', {
-            playerName: player.name,
-            actionText: `took a brief respite, healing for ${healing} HP.`,
-            type: 'action'
-        });
         this.emitGameState(room.id);
     }
 
@@ -1111,11 +1079,6 @@ class GameManager {
         const healing = this.rollDice(`${classData.healthDice}d4`);
         player.stats.currentHp = Math.min(player.stats.maxHp, player.stats.currentHp + healing);
         room.chatLog.push({ type: 'action-good', text: `${player.name} takes a full rest, healing for ${healing} HP.`, timestamp: Date.now() });
-        io.to(room.id).emit('actionFeedback', {
-            playerName: player.name,
-            actionText: `took a full rest, healing for ${healing} HP.`,
-            type: 'action'
-        });
         this.emitGameState(room.id);
     }
     
@@ -1169,11 +1132,6 @@ class GameManager {
         if (success) {
             player.currentAp -= classData.ability.apCost;
             room.chatLog.push({ type: 'action-good', text: `${player.name} uses ${abilityName}!`, timestamp: Date.now() });
-            io.to(room.id).emit('actionFeedback', {
-                playerName: player.name,
-                actionText: `used ${abilityName}!`,
-                type: 'success'
-            });
             this.emitGameState(room.id);
         }
     }
@@ -1394,77 +1352,61 @@ class GameManager {
     }
 
     resolveSkillCheckRoll(room, player, payload, socket) {
-        try {
-            const challenge = room.gameState.skillChallenge.details;
-            if (!challenge) return;
-    
-            let roll, advantageText = '';
-            if (payload.hasAdvantage) {
-                const [roll1, roll2] = [this.rollDice('1d20'), this.rollDice('1d20')];
-                roll = Math.max(roll1, roll2);
-                room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage! (Rolled ${roll1}, ${roll2})`, timestamp: Date.now() });
-                advantageText = ' w/ Adv';
-            } else {
-                roll = this.rollDice('1d20');
-            }
-    
-            const isInteraction = payload.interactionData;
-            const sourceCardId = isInteraction ? payload.interactionData.cardId : room.gameState.skillChallenge.targetId;
-            const currentStageIndex = room.gameState.skillChallenge.currentStage;
-    
-            // Correctly find stageDetails based on whether it's an interaction or a world event
-            let stageDetails;
-            if (isInteraction) {
-                const allBoardCards = [...room.gameState.board.monsters, ...room.gameState.board.environment];
-                const sourceCard = allBoardCards.find(c => c.id === sourceCardId);
-                if (sourceCard && sourceCard.skillInteractions) {
-                    stageDetails = sourceCard.skillInteractions.find(i => i.name === payload.interactionData.interactionName);
-                }
-            } else {
-                 stageDetails = challenge.eventType === 'multi_stage_skill_challenge' 
-                    ? challenge.stages[currentStageIndex] 
-                    : challenge;
-            }
-            
-            if (!stageDetails) { 
-                console.error("Could not find stage details for skill check.", { payload, challenge }); 
-                throw new Error("Invalid skill check details.");
-            }
-    
-            const statBonus = player.stats[stageDetails.skill] || 0;
-            const total = roll + statBonus;
-            const outcome = total >= stageDetails.dc ? 'Success' : 'Failure';
-            
-            const effect = outcome === 'Success' ? stageDetails.success : stageDetails.failure;
-    
-            room.chatLog.push({ type: 'system', text: `${player.name} attempts ${challenge.name}... (Roll: ${roll}${advantageText} + ${statBonus} ${stageDetails.skill.toUpperCase()} = ${total} vs DC ${stageDetails.dc}) - ${outcome}!`, timestamp: Date.now() });
-            if (effect?.text) room.chatLog.push({ type: outcome === 'Success' ? 'system-good' : 'system-bad', text: effect.text, timestamp: Date.now() });
-    
-            // Apply effect
-            this.applySkillCheckEffect(room, player, effect, sourceCardId);
-    
-            // Handle multi-stage progression
-            const isMultiStage = challenge.eventType === 'multi_stage_skill_challenge';
-            if (isMultiStage && outcome === 'Success' && currentStageIndex < challenge.stages.length - 1) {
-                room.gameState.skillChallenge.currentStage++;
-                const nextStage = challenge.stages[room.gameState.skillChallenge.currentStage];
-                room.chatLog.push({ type: 'system', text: `Next stage: ${nextStage.description}`, timestamp: Date.now() });
-                // Re-trigger the check for the next stage automatically
-                this.resolveSkillCheck(room, player, { apCost: 0 }, socket);
-            } else {
-                // End the challenge
-                room.gameState.skillChallenge.isActive = false;
-                room.gameState.skillChallenge.details = null;
-                if (challenge.type === 'World Event') room.gameState.worldEvents.currentEvent = null;
-            }
-    
-            io.to(room.id).emit('skillCheckResolved', { rollerId: player.id, rollerName: player.name, roll, bonus: statBonus, total, targetAC: stageDetails.dc, outcome });
-            this.emitGameState(room.id);
-        } catch(e) {
-            console.error("[CRITICAL] Error in resolveSkillCheckRoll:", e);
-            socket.emit('actionError', 'A server error occurred during the skill check.');
-            socket.emit('diceRollError'); // This allows the client to retry
+        const challenge = room.gameState.skillChallenge.details;
+        if (!challenge) return;
+
+        let roll, advantageText = '';
+        if (payload.hasAdvantage) {
+            const [roll1, roll2] = [this.rollDice('1d20'), this.rollDice('1d20')];
+            roll = Math.max(roll1, roll2);
+            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage! (Rolled ${roll1}, ${roll2})`, timestamp: Date.now() });
+            advantageText = ' w/ Adv';
+        } else {
+            roll = this.rollDice('1d20');
         }
+
+        const isInteraction = payload.interactionData;
+        const sourceCardId = isInteraction ? payload.interactionData.cardId : room.gameState.skillChallenge.targetId;
+        const currentStageIndex = room.gameState.skillChallenge.currentStage;
+
+        const stageDetails = isInteraction 
+            ? gameData.allMonsters[sourceCardId]?.skillInteractions.find(i => i.name === payload.interactionData.interactionName) || 
+              gameData.environmentalCards.find(c => c.id === sourceCardId)?.skillInteractions.find(i => i.name === payload.interactionData.interactionName)
+            : challenge.eventType === 'multi_stage_skill_challenge' 
+            ? challenge.stages[currentStageIndex] 
+            : challenge;
+        
+        if (!stageDetails) { console.error("Could not find stage details for skill check."); return; }
+
+        const statBonus = player.stats[stageDetails.skill] || 0;
+        const total = roll + statBonus;
+        const outcome = total >= stageDetails.dc ? 'Success' : 'Failure';
+        
+        const effect = outcome === 'Success' ? stageDetails.success : stageDetails.failure;
+
+        room.chatLog.push({ type: 'system', text: `${player.name} attempts ${challenge.name}... (Roll: ${roll}${advantageText} + ${statBonus} ${stageDetails.skill.toUpperCase()} = ${total} vs DC ${stageDetails.dc}) - ${outcome}!`, timestamp: Date.now() });
+        if (effect.text) room.chatLog.push({ type: outcome === 'Success' ? 'system-good' : 'system-bad', text: effect.text, timestamp: Date.now() });
+
+        // Apply effect
+        this.applySkillCheckEffect(room, player, effect, sourceCardId);
+
+        // Handle multi-stage progression
+        const isMultiStage = challenge.eventType === 'multi_stage_skill_challenge';
+        if (isMultiStage && outcome === 'Success' && currentStageIndex < challenge.stages.length - 1) {
+            room.gameState.skillChallenge.currentStage++;
+            const nextStage = challenge.stages[room.gameState.skillChallenge.currentStage];
+            room.chatLog.push({ type: 'system', text: `Next stage: ${nextStage.description}`, timestamp: Date.now() });
+            // Re-trigger the check for the next stage automatically
+            this.resolveSkillCheck(room, player, { apCost: 0 }, socket);
+        } else {
+            // End the challenge
+            room.gameState.skillChallenge.isActive = false;
+            room.gameState.skillChallenge.details = null;
+            if (challenge.type === 'World Event') room.gameState.worldEvents.currentEvent = null;
+        }
+
+        io.to(room.id).emit('skillCheckResolved', { rollerId: player.id, rollerName: player.name, roll, bonus: statBonus, total, targetAC: stageDetails.dc, outcome });
+        this.emitGameState(room.id);
     }
     
     applySkillCheckEffect(room, player, effect, sourceCardId) {
@@ -1639,7 +1581,7 @@ class GameManager {
             
             room.players[socket.id] = playerObject;
             socket.join(roomId);
-            this.socketToRoom[socket.id] = socket.id;
+            this.socketToRoom[socket.id] = roomId;
             
             // Update turn order with new socket id
             const turnIndex = room.gameState.turnOrder.indexOf(oldSocketId);
@@ -1666,7 +1608,7 @@ class GameManager {
 
                 room.players[socket.id] = newPlayer;
                 socket.join(roomId);
-                this.socketToRoom[socket.id] = socket.id;
+                this.socketToRoom[socket.id] = roomId;
 
                 const turnIndex = room.gameState.turnOrder.indexOf(npcToReplace.id);
                 if(turnIndex > -1) room.gameState.turnOrder[turnIndex] = socket.id;

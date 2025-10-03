@@ -176,10 +176,9 @@ function createCardElement(card, options = {}) {
         return emptyCardDiv;
     }
 
-    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false, isInteractable = false, isDetailedView = false } = options;
+    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false, isInteractable = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
-    if(isDetailedView) cardDiv.classList.add('detailed-view');
     cardDiv.dataset.cardId = card.id;
 
     if (card.rarity) {
@@ -250,20 +249,6 @@ function createCardElement(card, options = {}) {
 
     const actionContainer = document.createElement('div');
     actionContainer.className = 'card-action-buttons';
-
-    // Add a details button to ALL cards that are not in the detailed view modal already
-    if (!isDetailedView) {
-        const detailsBtn = document.createElement('button');
-        detailsBtn.className = 'btn btn-xs btn-secondary btn-icon';
-        detailsBtn.setAttribute('title', 'View Details');
-        detailsBtn.setAttribute('aria-label', 'View Details');
-        detailsBtn.innerHTML = `<span class="material-symbols-outlined">search</span>`;
-        detailsBtn.onclick = (e) => {
-            e.stopPropagation();
-            showCardDetailsModal(card);
-        };
-        actionContainer.appendChild(detailsBtn);
-    }
 
     if (isEquippable) {
         const equipBtn = document.createElement('button');
@@ -911,18 +896,9 @@ function initializeGameUIListeners() {
         bar.addEventListener('click', (e) => {
             const targetId = e.target.id;
             if (targetId.includes('end-turn-btn')) socket.emit('endTurn');
-            else if (targetId.includes('guard-btn')) {
-                socket.emit('playerAction', { action: 'guard' });
-                showToast('Guarding!', 'action');
-            }
-            else if (targetId.includes('brief-respite-btn')) {
-                socket.emit('playerAction', { action: 'respite' });
-                showToast('Taking a respite...', 'action');
-            }
-            else if (targetId.includes('full-rest-btn')) {
-                socket.emit('playerAction', { action: 'rest' });
-                showToast('Resting...', 'action');
-            }
+            else if (targetId.includes('guard-btn')) socket.emit('playerAction', { action: 'guard' });
+            else if (targetId.includes('brief-respite-btn')) socket.emit('playerAction', { action: 'respite' });
+            else if (targetId.includes('full-rest-btn')) socket.emit('playerAction', { action: 'rest' });
             else if (targetId.includes('skill-challenge-btn')) {
                 const challenge = currentRoomState.gameState.skillChallenge.details;
                 if (challenge) {
@@ -1058,24 +1034,6 @@ function initializeGameUIListeners() {
      document.getElementById('skill-challenge-decline-btn').addEventListener('click', () => {
          document.getElementById('skill-challenge-modal').classList.add('hidden');
      });
-
-    // Card Details Modal Listener
-    document.getElementById('card-details-close-btn').addEventListener('click', () => {
-        document.getElementById('card-details-modal').classList.add('hidden');
-    });
-
-    // Header expand toggle
-    const headerExpandBtn = document.getElementById('header-expand-toggle');
-    if (headerExpandBtn) {
-        headerExpandBtn.addEventListener('click', () => {
-            const expandedContent = document.getElementById('header-expanded-content');
-            if (expandedContent) {
-                const isNowVisible = !expandedContent.classList.toggle('hidden');
-                headerExpandBtn.classList.toggle('active', isNowVisible);
-                headerExpandBtn.setAttribute('aria-expanded', isNowVisible);
-            }
-        });
-    }
 }
 
 // --- 4. MODAL & POPUP LOGIC ---
@@ -1169,18 +1127,6 @@ function showClaimLootModal(item) {
 
     document.getElementById('claim-loot-title').textContent = `Claim ${item.name}`;
     document.getElementById('claim-loot-modal').classList.remove('hidden');
-}
-
-function showCardDetailsModal(card) {
-    const modal = document.getElementById('card-details-modal');
-    const container = document.getElementById('card-details-container');
-    container.innerHTML = '';
-    
-    // Render a larger, detailed version of the card
-    const detailedCardEl = createCardElement(card, { isDetailedView: true });
-    container.appendChild(detailedCardEl);
-    
-    modal.classList.remove('hidden');
 }
 
 function showDiscoveryModal({ newCard }) {
@@ -1460,14 +1406,13 @@ function showDiceRollModal(data, type) {
     if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
     clientState.rollResponseTimeout = setTimeout(() => {
         const modal = document.getElementById('dice-roll-modal');
-        // Check if the modal is still in the "waiting for roll" state
-        if (!modal.classList.contains('hidden') && document.getElementById('dice-roll-confirm-btn').disabled) {
-            showToast('Roll timed out. Please try again.', 'error');
-            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-            const confirmBtn = document.getElementById('dice-roll-confirm-btn');
-            confirmBtn.disabled = false;
-            confirmBtn.textContent = 'Roll Dice';
-            document.getElementById('dice-display-container').innerHTML = createDieSVG(sides, '?');
+        if (!modal.classList.contains('hidden') && !document.getElementById('dice-roll-close-btn').classList.contains('hidden')) {
+             // Only auto-close if the result has been shown. If the button is still "Roll Dice", there might be a server lag.
+        } else if (!modal.classList.contains('hidden') && document.getElementById('dice-roll-confirm-btn').disabled) {
+            // If the button is disabled (i.e., we are waiting for server), don't auto-close.
+        } else {
+            // If it's still just showing 'Roll Dice', maybe show an error.
+            console.warn("Dice roll timed out waiting for server response.");
         }
     }, 8000); // 8 seconds
 }
@@ -1490,10 +1435,22 @@ function handleDiceRoll() {
     clientState.diceAnimationInterval = setInterval(() => {
         const randomValue = Math.floor(Math.random() * sides) + 1;
         svg.querySelector('.die-text').textContent = randomValue;
-    }, 150);
+    }, 100);
+
+    // Stop animation after a bit, waiting for server result
+    setTimeout(() => {
+        if (clientState.diceAnimationInterval) {
+            clearInterval(clientState.diceAnimationInterval);
+            clientState.diceAnimationInterval = null;
+        }
+        svg.classList.remove('rolling');
+    }, 1000);
     
-    // Use destructuring to create a clean payload for the server, excluding client-only data.
-    const { type, title, description, ...actionPayload } = clientState.currentRollData;
+    // Send appropriate socket event based on roll type
+    const payload = { ...clientState.currentRollData };
+    delete payload.type; // Remove internal type property
+    delete payload.title;
+    delete payload.description;
 
     const actionMap = {
         attack: 'resolveAttackRoll',
@@ -1501,38 +1458,14 @@ function handleDiceRoll() {
         discovery: 'resolveDiscoveryRoll',
         skillcheck: 'resolveSkillCheckRoll'
     };
-    
-    const action = actionMap[type];
+    const action = actionMap[clientState.currentRollData.type];
     if (action) {
-        socket.emit('playerAction', { action, ...actionPayload });
+        socket.emit('playerAction', { action, ...payload });
     }
 }
 
 // --- 6. SOCKET EVENT HANDLERS ---
 function initializeSocketListeners() {
-    // The 'connect' event fires on initial connection AND on reconnection.
-    socket.on('connect', () => {
-        // This logic is crucial for rejoining a game after a temporary disconnect
-        // (e.g., switching mobile apps) without a full page reload.
-        const storedRoomId = sessionStorage.getItem('qc_roomId');
-        const storedPlayerId = sessionStorage.getItem('qc_playerId');
-        
-        // `currentRoomState.id` acts as a flag that we were already in a game
-        // before this 'connect' event happened.
-        if (storedRoomId && storedPlayerId && currentRoomState && currentRoomState.id) {
-            console.log(`Attempting to rejoin room ${storedRoomId} after reconnect.`);
-            socket.emit('rejoinRoom', { roomId: storedRoomId, playerId: storedPlayerId });
-        }
-    });
-
-    // Use Page Visibility API to force a reconnection attempt when user returns to the app
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && !socket.connected) {
-            console.log('App resumed, socket disconnected. Attempting to reconnect...');
-            socket.connect();
-        }
-    });
-
     socket.on('gameStateUpdate', (newState) => {
         currentRoomState = newState;
         renderUI();
@@ -1580,69 +1513,52 @@ function initializeSocketListeners() {
     socket.on('promptSkillCheckRoll', (data) => showDiceRollModal(data, 'skillcheck'));
     
     socket.on('attackResolved', (result) => {
-        if (result.rollerId === myId) {
-            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-            if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-            
-            const container = document.getElementById('dice-display-container');
-            container.innerHTML = createDieSVG(20, result.roll);
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        
+        const container = document.getElementById('dice-display-container');
+        container.innerHTML = createDieSVG(20, result.roll);
 
-            const resultLine = document.getElementById('dice-roll-result-line');
-            resultLine.textContent = result.outcome.toUpperCase() + '!';
-            resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
-            
-            document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
-            document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        const resultLine = document.getElementById('dice-roll-result-line');
+        resultLine.textContent = result.outcome.toUpperCase() + '!';
+        resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
+        
+        document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
 
-            if (result.outcome === 'Miss') {
-                document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-                document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-                if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-                clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
-            }
-        } else {
-            const message = `${result.rollerName} attacks ${result.targetName}: ${result.outcome.toUpperCase()}! (${result.total} vs ${result.targetAC})`;
-            showToast(message, result.outcome === 'Hit' ? 'info' : 'secondary');
+        if (result.outcome === 'Miss') {
+            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
         }
     });
 
     socket.on('damageResolved', (result) => {
-        if (result.rollerId === myId) {
-            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-            if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-            
-            const sides = result.damageDice.split('d')[1];
-            document.getElementById('dice-display-container').innerHTML = createDieSVG(sides, result.damageRoll);
-            document.getElementById('dice-display-container').querySelector('.die-svg').classList.add('result-glow');
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        
+        const sides = result.damageDice.split('d')[1];
+        document.getElementById('dice-display-container').innerHTML = createDieSVG(sides, result.damageRoll);
+        document.getElementById('dice-display-container').querySelector('.die-svg').classList.add('result-glow');
 
-            document.getElementById('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
-            document.getElementById('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
-            
-            document.getElementById('dice-roll-result-container').classList.remove('hidden');
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-            
-            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+        document.getElementById('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
+        document.getElementById('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
+        
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+        
+        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+        clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
 
-            const targetCard = document.querySelector(`.card[data-monster-id="${result.targetId}"]`);
-            if (targetCard) {
-                targetCard.classList.add('shake');
-                setTimeout(() => targetCard.classList.remove('shake'), 820);
-            }
-        } else {
-            const message = `${result.rollerName} dealt ${result.totalDamage} damage to ${result.targetName}.`;
-            showToast(message, 'special');
-            if (result.wasDefeated) {
-                setTimeout(() => showToast(`${result.targetName} was defeated!`, 'success'), 500);
-            }
+        const targetCard = document.querySelector(`.card[data-monster-id="${result.targetId}"]`);
+        if (targetCard) {
+            targetCard.classList.add('shake');
+            setTimeout(() => targetCard.classList.remove('shake'), 820);
         }
     });
     
      socket.on('discoveryRollResolved', (result) => {
-        if (result.rollerId !== myId) return;
-
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         const container = document.getElementById('dice-display-container');
         container.innerHTML = createDieSVG(20, result.roll);
@@ -1666,34 +1582,21 @@ function initializeSocketListeners() {
     });
 
     socket.on('skillCheckResolved', (result) => {
-        if (result.rollerId === myId) {
-            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-            if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-            const container = document.getElementById('dice-display-container');
-            container.innerHTML = createDieSVG(20, result.roll);
-            container.querySelector('.die-svg').classList.add('result-glow');
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        const container = document.getElementById('dice-display-container');
+        container.innerHTML = createDieSVG(20, result.roll);
+        container.querySelector('.die-svg').classList.add('result-glow');
 
-            const resultLine = document.getElementById('dice-roll-result-line');
-            resultLine.textContent = result.outcome.toUpperCase() + '!';
-            resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
-            document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
-            document.getElementById('dice-roll-result-container').classList.remove('hidden');
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+        const resultLine = document.getElementById('dice-roll-result-line');
+        resultLine.textContent = result.outcome.toUpperCase() + '!';
+        resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
+        document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
+        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
 
-            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
-        } else {
-            const message = `${result.rollerName}'s skill check: ${result.outcome.toUpperCase()}! (${result.total} vs DC ${result.targetAC})`;
-            showToast(message, result.outcome === 'Success' ? 'success' : 'error');
-        }
-    });
-
-    socket.on('actionFeedback', ({ playerName, actionText, type }) => {
-        const myPlayer = currentRoomState.players[myId];
-        if (myPlayer && playerName !== myPlayer.name) {
-            showToast(`${playerName} ${actionText}`, type);
-        }
+        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+        clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
     });
 
     socket.on('promptIndividualDiscovery', (data) => {

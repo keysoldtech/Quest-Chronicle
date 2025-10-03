@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.0.14-stable</p>
+            <p class="build-number-font-menu">v9.0.8 - Card Layout Fix</p>
         </div>
     </div>
     
@@ -116,50 +116,9 @@
             <!-- ================= DESKTOP LAYOUT ================= -->
             <div class="game-area-desktop">
                 <header class="game-header">
-                    <div class="header-main-row">
-                        <div class="header-info">
-                             <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
-                            <div id="desktop-resources-container" class="player-resources-container hidden">
-                                 <div class="player-health-bar-container">
-                                     <span class="material-symbols-outlined">favorite</span>
-                                     <div class="progress-bar-wrapper">
-                                         <div class="progress-bar health">
-                                             <div id="player-health-bar" class="progress-bar-fill"></div>
-                                         </div>
-                                         <span id="player-health-text" class="progress-bar-text"></span>
-                                     </div>
-                                 </div>
-                                 <p id="ap-counter-desktop" class="ap-counter"></p>
-                            </div>
-                             <p class="turn-counter">Round: <span id="turn-counter">0</span></p>
-                        </div>
-                         <div class="header-controls">
-                            <p class="build-number-font">v9.0.14-stable</p>
-                            <div id="dm-controls" class="dm-controls hidden">
-                                 <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
-                            </div>
-                            <div class="room-code-display">
-                                <span>Room Code</span>
-                                <p id="room-code">----</p>
-                            </div>
-                             <button id="header-expand-toggle" class="btn btn-icon btn-sm" aria-label="Toggle party stats" aria-expanded="false">
-                                <span class="material-symbols-outlined">expand_more</span>
-                            </button>
-                            <div class="header-menu">
-                                <button id="menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
-                                <div id="menu-dropdown" class="menu-dropdown hidden">
-                                    <button id="chat-toggle-btn" class="menu-item"><span class="material-symbols-outlined">chat</span>Chat & Log</button>
-                                    <button id="help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
-                                    <button id="join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Join Voice</button>
-                                    <button id="mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
-                                    <button id="leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave Voice</button>
-                                    <button id="leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="header-expanded-content" class="header-expanded-content hidden">
-                        <div id="party-hope-meter-desktop" class="party-hope-meter-container hidden">
+                    <div class="header-info">
+                         <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
+                         <div id="party-hope-meter-desktop" class="party-hope-meter-container hidden">
                             <span class="party-hope-label">Party Hope</span>
                             <div class="party-hope-meter">
                                 <span class="material-symbols-outlined">stars</span>
@@ -169,6 +128,40 @@
                                     </div>
                                     <span id="party-hope-text-desktop" class="progress-bar-text"></span>
                                 </div>
+                            </div>
+                        </div>
+                        <div id="desktop-resources-container" class="player-resources-container hidden">
+                             <div class="player-health-bar-container">
+                                 <span class="material-symbols-outlined">favorite</span>
+                                 <div class="progress-bar-wrapper">
+                                     <div class="progress-bar health">
+                                         <div id="player-health-bar" class="progress-bar-fill"></div>
+                                     </div>
+                                     <span id="player-health-text" class="progress-bar-text"></span>
+                                 </div>
+                             </div>
+                             <p id="ap-counter-desktop" class="ap-counter"></p>
+                        </div>
+                         <p class="turn-counter">Round: <span id="turn-counter">0</span></p>
+                    </div>
+                     <div class="header-controls">
+                        <p class="build-number-font">v9.0.8 - Card Layout Fix</p>
+                        <div id="dm-controls" class="dm-controls hidden">
+                             <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
+                        </div>
+                        <div class="room-code-display">
+                            <span>Room Code</span>
+                            <p id="room-code">----</p>
+                        </div>
+                        <div class="header-menu">
+                            <button id="menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
+                            <div id="menu-dropdown" class="menu-dropdown hidden">
+                                <button id="chat-toggle-btn" class="menu-item"><span class="material-symbols-outlined">chat</span>Chat & Log</button>
+                                <button id="help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
+                                <button id="join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Join Voice</button>
+                                <button id="mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
+                                <button id="leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave Voice</button>
+                                <button id="leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
                             </div>
                         </div>
                     </div>
@@ -234,26 +227,15 @@
             <!-- ================= MOBILE LAYOUT ================= -->
             <div class="game-area-mobile">
                 <header class="mobile-header">
-                    <div class="mobile-header-top">
-                        <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
-                        <div class="mobile-header-controls">
-                            <div class="room-code-display mobile">
-                                <span>CODE</span>
-                                <p id="mobile-room-code">----</p>
+                    <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
+                    <div class="mobile-resources">
+                        <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden">
+                             <span class="party-hope-label">Party Hope</span>
+                            <div class="party-hope-meter mobile">
+                                <span class="material-symbols-outlined">stars</span>
+                                <span id="party-hope-text-mobile"></span>
                             </div>
-                             <div class="header-menu">
-                                 <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
-                                 <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
-                                     <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
-                                     <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Voice</button>
-                                     <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
-                                     <button id="mobile-leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
-                                     <button id="mobile-leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
-                                 </div>
-                             </div>
                         </div>
-                    </div>
-                    <div class="mobile-header-bottom">
                          <div id="mobile-resources-container" class="player-resources-container mobile hidden">
                              <div class="player-health-bar-container mobile">
                                  <span class="material-symbols-outlined">favorite</span>
@@ -266,12 +248,22 @@
                              </div>
                              <p id="ap-counter-mobile" class="ap-counter"></p>
                         </div>
-                        <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden">
-                            <div class="party-hope-meter mobile">
-                                <span class="material-symbols-outlined">stars</span>
-                                <span id="party-hope-text-mobile"></span>
-                            </div>
+                    </div>
+                    <div class="mobile-header-controls">
+                        <div class="room-code-display mobile">
+                            <span>CODE</span>
+                            <p id="mobile-room-code">----</p>
                         </div>
+                         <div class="header-menu">
+                             <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
+                             <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
+                                 <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
+                                 <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Voice</button>
+                                 <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
+                                 <button id="mobile-leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
+                                 <button id="mobile-leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
+                             </div>
+                         </div>
                     </div>
                 </header>
                 
@@ -472,18 +464,6 @@
             </div>
         </div>
 
-        <!-- Card Details Modal -->
-        <div id="card-details-modal" class="modal-overlay hidden">
-            <div class="modal-content card-details-content">
-                <div id="card-details-container">
-                    <!-- A larger version of the card will be rendered here -->
-                </div>
-                <div class="modal-actions">
-                    <button id="card-details-close-btn" class="btn btn-secondary">Close</button>
-                </div>
-            </div>
-        </div>
-
 
         <!-- Claim Loot / Target Selection Modal -->
         <div id="claim-loot-modal" class="modal-overlay hidden">
@@ -506,7 +486,7 @@
                 <p id="skill-challenge-description">Details of the challenge...</p>
                 <div class="modal-actions">
                      <button id="skill-challenge-decline-btn" class="btn btn-secondary">Maybe Later</button>
-                     <button id="skill-challenge-resolve-btn" class="btn btn-primary">Attempt</button>
+                     <button id="skill-challenge-resolve-btn" class="btn btn-primary">Attempt the Challenge</button>
                 </div>
             </div>
         </div>

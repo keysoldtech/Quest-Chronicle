@@ -152,7 +152,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .panel-content { padding: 1rem; flex-grow: 1; overflow-y: auto; }
 
 /* --- 7. GAME HEADER & CONTROLS --- */
-.game-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.game-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; flex-wrap: wrap; gap: 1rem; }
 .header-info { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
 
 /* Redesigned Player Resources (HP/AP/Hope) */
@@ -179,6 +179,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .party-hope-meter-container.inspired .party-hope-meter .progress-bar-fill { background-color: var(--color-success); }
 .party-hope-meter-container.inspired .party-hope-meter .material-symbols-outlined { color: var(--color-success); }
 
+
 .header-controls { display: flex; align-items: center; gap: 1rem; }
 .build-number-font { font-family: var(--font-body); color: var(--color-text-secondary); font-size: 0.9rem; }
 .room-code-display { background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.25rem 0.75rem; text-align: center; }
@@ -189,55 +190,11 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .menu-item { display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 0.75rem 1rem; background: none; border: none; color: var(--color-text-primary); text-align: left; cursor: pointer; font-size: 1rem; }
 .menu-item:hover { background-color: rgba(255,255,255,0.1); } .menu-item.danger { color: var(--color-danger); }
 
-/* Adjustments for expandable header */
-.game-header {
-    flex-direction: column;
-    align-items: stretch; /* Override default */
-    gap: 0; /* Let children handle gap */
-    padding: 0;
-}
-
-.header-main-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 1rem;
-    padding: 0.5rem;
-}
-
-#header-expand-toggle .material-symbols-outlined {
-    transition: transform 0.3s ease-in-out;
-}
-
-#header-expand-toggle.active .material-symbols-outlined {
-    transform: rotate(180deg);
-    color: var(--color-special);
-}
-
-.header-expanded-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease-out, padding 0.3s ease-out;
-    display: flex;
-    justify-content: center;
-    padding-left: 1rem;
-    padding-right: 1rem;
-}
-
-.header-expanded-content:not(.hidden) {
-    max-height: 80px; /* Ample height for the hope meter */
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    border-top: 1px solid var(--color-border);
-    margin: 0 0.5rem;
-}
-
 /* --- 8. PLAYER HEALTH, TURN & STATS --- */
 .turn-counter { font-weight: bold; font-size: 1rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem; background-color: var(--color-surface); padding: 0.25rem 0.75rem; border-radius: 20px; border: 1px solid var(--color-border); }
 .turn-indicator-font { font-family: var(--font-title); font-size: 1.5rem; color: var(--color-text-primary); }
 .player-list { list-style-type: none; }
-.player-list-item { padding: 1rem; border-bottom: 1px solid var(--color-border); transition: all 0.3s; display: flex; justify-content: space-between; align-items: center; }
+.player-list-item { padding: 1rem; border-bottom: 1px solid var(--color-border); transition: all 0.3s; }
 .player-list-item.active { background-color: var(--color-surface-light); border-left: 4px solid var(--color-special); font-weight: bold; }
 .player-list-item.downed { opacity: 0.6; background-color: rgba(220, 53, 69, 0.1); }
 .downed-text { color: var(--color-danger); } .disconnected-text { color: var(--color-text-secondary); font-style: italic; }
@@ -256,29 +213,24 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .card-container-row { display: flex; gap: 1rem; padding: 1rem; overflow-x: auto; flex-grow: 1; }
 .empty-pool-text { padding: 1rem; color: var(--color-text-secondary); text-align: center; width: 100%; font-family: var(--font-title); }
 .card { width: 175px; min-width: 175px; height: 245px; background-color: var(--color-surface-light); border: 2px solid var(--color-border); border-radius: 8px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; position: relative; transition: all 0.2s; overflow: hidden; background-image: var(--panel-texture); }
-.card:not(.targetable):not(.attackable-weapon) { cursor: default; }
 .card:hover { transform: translateY(-5px) scale(1.02); box-shadow: var(--shadow-lg); }
 .card.targetable { cursor: crosshair; border-color: var(--color-danger); }
 .card.targetable:hover { box-shadow: 0 0 10px var(--color-danger); }
 .attackable-weapon { cursor: pointer; } .attackable-weapon:hover { border-color: var(--color-primary); }
 .attackable-weapon.selected-weapon { border-color: var(--color-special); transform: translateY(-5px) scale(1.02); box-shadow: 0 0 10px var(--color-special), var(--shadow-lg); }
-.card-action-buttons { position: absolute; bottom: 0.5rem; left: 0; width: 100%; z-index: 2; display: flex; justify-content: center; align-items: center; gap: 0.5rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+.card-action-buttons { position: absolute; bottom: 0.5rem; left: 0; width: 100%; z-index: 2; display: flex; justify-content: center; gap: 0.5rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
 .card:hover .card-action-buttons { opacity: 1; pointer-events: auto; }
 .card-header { padding: 0.75rem; } .card-content { padding: 0 .75rem; flex-grow: 1; } .card-footer { padding: 0.75rem; background-color: rgba(0,0,0,0.2); border-top: 1px solid var(--color-border); }
 .card-title { font-family: var(--font-title); font-size: 1.1rem; color: var(--color-text-primary); }
-.card-effect {
-    font-size: 0.8rem;
+.card-effect { 
+    font-size: 0.8rem; 
     color: var(--color-text-secondary);
-    /* Text truncation for long descriptions */
+    /* Multi-line truncation to guarantee stats are visible */
     overflow: hidden;
+    text-overflow: ellipsis;
     display: -webkit-box;
+    -webkit-line-clamp: 2; /* number of lines to show */
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 4; /* Adjust this number to control visible lines */
-}
-.card.detailed-view .card-effect {
-    -webkit-line-clamp: unset; /* Show all lines in detail view */
-    max-height: none;
-    overflow-y: auto;
 }
 .card-type { font-size: 0.8rem; font-weight: bold; text-align: right; color: var(--color-special); font-family: var(--font-title); }
 .card.rarity-uncommon { border-color: var(--rarity-uncommon); }
@@ -293,17 +245,6 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .icon-str { color: var(--stat-color-str); } .icon-dex { color: var(--stat-color-dex); } .icon-con { color: var(--stat-color-con); }
 .card.shake { animation: shake 0.82s cubic-bezier(.36,.07,.19,.97) both; }
 @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
-
-.card-action-buttons .btn-icon {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    line-height: 1;
-}
-.card-action-buttons .btn-icon .material-symbols-outlined {
-    font-size: 18px;
-    vertical-align: middle;
-}
 
 /* --- 10. INFO PANEL, ACTION BAR, CHAT --- */
 .info-tabs-panel { display: flex; flex-direction: column; }
@@ -359,133 +300,143 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     border-radius: 4px;
     color: var(--color-text-primary);
     background: var(--color-surface-light);
-    border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-md);
+    border: 2px solid var(--color-border);
+    box-shadow: var(--shadow-lg);
+    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    transform: translateX(120%);
     opacity: 0;
-    transform: translateX(100%);
-    transition: all 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
 }
-.toast.visible { opacity: 1; transform: translateX(0); }
-.toast.toast-error { background-color: var(--color-danger); color: white; }
-.toast.toast-success { background-color: var(--color-success); color: white; }
-.toast.toast-special { background-color: var(--color-special); color: var(--color-bg-dark); }
-.toast.toast-secondary { background-color: var(--color-secondary); }
-.toast.toast-action { background-color: var(--color-surface); border-color: var(--color-special); }
+.toast.visible { transform: translateX(0); opacity: 1; }
+.toast-info { border-left: 5px solid var(--color-special); }
+.toast-error { border-left: 5px solid var(--color-danger); color: var(--color-danger); }
+.toast-hit { border-left: 5px solid var(--color-success); }
+.toast-miss { border-left: 5px solid var(--color-secondary); }
 
-.your-turn-popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: var(--color-special); color: var(--color-border); font-family: var(--font-title); font-size: 3rem; padding: 1rem 3rem; border-radius: 8px; box-shadow: var(--shadow-lg); z-index: 2500; animation: turn-popup-anim 2.5s ease-in-out forwards; }
-@keyframes turn-popup-anim { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); } 10% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 90% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2); } }
+.your-turn-popup { position: fixed; top: 50%; left: 50%; background-color: var(--color-special); color: var(--color-border); font-family: var(--font-title); font-size: 5rem; padding: 1rem 3rem; border: 3px solid var(--color-border); border-radius: 4px; box-shadow: var(--shadow-lg); z-index: 2500; animation: turn-popup-anim 2.5s forwards; pointer-events: none; }
+@keyframes turn-popup-anim { 0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; } 20% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; } 80% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; } }
 
-/* Dice Roll Modal Styles */
-.dice-roll-content { text-align: center; }
-#dice-display-container { margin: 1rem 0; display: flex; justify-content: center; }
-.die-svg { width: 120px; height: 120px; }
-.die-shape { fill: var(--color-secondary); stroke: var(--color-border); stroke-width: 4px; }
-.die-text { font-family: var(--font-title); font-size: 50px; fill: var(--color-text-primary); }
-.die-sides-text { font-size: 20px; fill: var(--color-text-secondary); }
-.die-svg.rolling { animation: roll-anim 0.15s linear infinite; }
-@keyframes roll-anim { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.result-line { font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem; }
-.result-line.success { color: var(--color-success); } .result-line.failure, .result-line.miss { color: var(--color-danger); }
-.result-line.damage { color: var(--color-special); font-size: 1.8rem; }
-.roll-details { color: var(--color-text-secondary); }
-.die-svg.result-glow { animation: result-glow-anim 1.5s ease-out; }
-@keyframes result-glow-anim { 0% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 15px var(--color-glow)); } 100% { filter: drop-shadow(0 0 0 transparent); } }
+/* --- 13. DICE ROLL MODAL --- */
+#dice-display-container { width: 150px; height: 150px; margin: 1rem auto; }
+.die-svg { width: 100%; height: 100%; transition: transform 0.5s; }
+.die-svg.rolling { animation: spin 1s ease-in-out forwards; }
+.die-shape { fill: var(--color-surface-light); stroke: var(--color-border); stroke-width: 4; transition: fill 0.2s; }
+.die-text { font-family: var(--font-body); font-size: 40px; font-weight: bold; fill: var(--color-text-primary); user-select: none; }
+.die-sides-text { font-size: 14px; fill: var(--color-text-secondary); user-select: none; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.result-line { text-align: center; font-size: 2rem; font-weight: bold; font-family: var(--font-title); }
+.result-line.hit { color: var(--color-success); } .result-line.miss { color: var(--color-danger); }
+.result-line.damage { color: var(--color-special); font-size: 1.5rem; margin-top: 0.5rem; }
+.roll-details { text-align: center; color: var(--color-text-secondary); }
+.die-svg.result-glow .die-shape { animation: result-glow-anim 1s ease-out; }
+@keyframes result-glow-anim {
+  0% { filter: drop-shadow(0 0 0 var(--color-glow)); }
+  50% { filter: drop-shadow(0 0 15px var(--color-glow)); }
+  100% { filter: drop-shadow(0 0 0 var(--color-glow)); }
+}
 
-/* Class Selection Modal */
+/* --- 13.5. DISCOVERY & DISCARD MODALS (SCROLL FIX) --- */
+.modal-header-fixed { flex-shrink: 0; }
+.modal-footer-fixed { flex-shrink: 0; }
+.discovery-scroll-container { flex-grow: 1; overflow-y: auto; padding: 0 1rem; min-height: 0; }
+
+.discovery-choice-container, .discard-choice-container { display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1rem; }
+.discovery-choice-section, .discard-choice-section { background: rgba(0,0,0,0.2); border: 1px solid var(--color-border); border-radius: 4px; }
+.discovery-choice-section h3, .discard-choice-section h3 { font-family: var(--font-title); padding: 0.5rem 1rem; border-bottom: 1px solid var(--color-border); }
+.discovery-choice-section .card-container-row { min-height: 270px; display: flex; justify-content: center; }
+.discard-choice-section .card, .discovery-choice-section .card { cursor: pointer; }
+.discard-choice-section .card:hover, .discovery-choice-section .card:hover { border-color: var(--color-special); }
+.card.selected-for-discard {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 15px var(--color-primary);
+    transform: translateY(-5px) scale(1.05);
+}
+
+/* --- 14. CLASS SELECTION STYLES --- */
 .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); z-index: 1500; display: flex; align-items: center; justify-content: center; }
-#desktop-class-card-display { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1rem 0; }
-.class-card { background: var(--color-surface-light); border: 2px solid var(--color-border); padding: 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; }
-.class-card:hover { border-color: var(--color-special); }
-.class-card.selected-item { border-color: var(--color-special); box-shadow: 0 0 10px var(--color-special); }
-.class-card h3 { font-family: var(--font-title); color: var(--color-special); border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; margin-bottom: 0.5rem; }
-.class-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.9rem; }
-.class-stat-item .material-symbols-outlined { font-size: 1rem; vertical-align: bottom; }
-.class-ability { margin-top: 1rem; font-size: 0.9rem; }
-.ability-desc { color: var(--color-text-secondary); }
+#class-selection-modal .modal-content { max-width: 90vw; width: 1200px; height: 90vh; }
+#desktop-class-card-display { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; padding: 1rem; overflow-y: auto; flex-grow: 1; }
+.class-card { background: var(--color-surface-light); border: 2px solid var(--color-border); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; cursor: pointer; transition: all 0.2s ease-in-out; }
+.class-card:hover { transform: translateY(-5px); border-color: var(--color-special); }
+.class-card.selected-item { border-color: var(--color-primary); box-shadow: 0 0 15px var(--color-primary); transform: scale(1.03); }
+.class-card-header h3 { font-family: var(--font-title); font-size: 2rem; color: var(--color-special); text-align: center; }
+.class-card-body { flex-grow: 1; display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem; }
+.class-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; border-bottom: 1px solid var(--color-border); padding-bottom: 1rem; }
+.class-stat-item { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; }
+.class-stat-item .material-symbols-outlined { font-size: 1.5rem; }
+.class-ability { background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; }
+.class-ability strong { font-family: var(--font-title); font-size: 1.1rem; }
+.class-ability .ability-desc { font-size: 0.9rem; color: var(--color-text-secondary); margin-top: 0.5rem; }
+.class-card-footer { margin-top: auto; padding-top: 1rem; text-align: center; }
 
-/* --- 13. SPECIALIZED MODALS (Discovery, Discard, Help) --- */
-.discard-choice-container, .discovery-choice-container { display: flex; gap: 1rem; justify-content: space-around; }
-.discard-choice-section, .discovery-choice-section { flex: 1; border: 1px dashed var(--color-border); padding: 1rem; border-radius: 4px; }
-.discard-choice-section h3, .discovery-choice-section h3 { text-align: center; margin-bottom: 1rem; font-family: var(--font-title); color: var(--color-text-secondary); }
-#hand-cards-to-discard-container { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
-#hand-cards-to-discard-container .card { width: 100px; height: 140px; }
-#new-card-to-discard-container, #discovery-new-item-container, #discovery-equipped-container { display: flex; justify-content: center; }
-.card.selected-for-discard { border-color: var(--color-special); box-shadow: 0 0 10px var(--color-special); }
-.modal-header-fixed { padding: 1rem; border-bottom: 2px solid var(--color-border); background-color: var(--color-surface); }
-.modal-footer-fixed { border-top: 2px solid var(--color-border); background-color: var(--color-surface); }
-.discovery-scroll-container { flex-grow: 1; overflow-y: auto; padding: 1rem; }
-.help-modal-content { max-width: 700px; }
-.help-header { display: flex; justify-content: space-between; align-items: center; }
-.help-content { margin: 1rem 0; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 4px; flex-grow: 1; overflow-y: auto; }
-.help-content h3 { color: var(--color-special); margin-bottom: 1rem; }
-.help-content p, .help-content li { margin-bottom: 0.75rem; line-height: 1.6; }
-.help-content ul, .help-content ol { padding-left: 20px; }
-.help-navigation { display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid var(--color-border); }
+/* --- 15. HELP MODAL STYLES --- */
+.help-modal-content { max-width: 600px; }
+.help-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--color-border); }
+.help-header .panel-header { border-bottom: none; padding: 0; margin: 0; }
+.help-content { flex-grow: 1; overflow-y: auto; line-height: 1.6; }
+.help-content h3 { font-family: var(--font-title); color: var(--color-special); margin-bottom: 1rem; }
+.help-content p { margin-bottom: 1rem; }
+.help-content ul, .help-content ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+.help-content li { margin-bottom: 0.5rem; }
+.help-content b { color: var(--color-text-primary); font-weight: 700; }
+.help-navigation { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1rem; }
+#help-page-indicator { color: var(--color-text-secondary); font-weight: bold; }
 
-/* Card Details Modal */
-.card-details-content { max-width: 400px; }
-#card-details-container .card {
-    width: 320px;
-    height: 448px;
-    margin: 0 auto;
-}
-#card-details-container .card-title { font-size: 1.5rem; }
-#card-details-container .card-effect { font-size: 1rem; }
-
-/* --- 14. MOBILE SPECIFIC STYLES --- */
+/* --- 16. RESPONSIVE STYLES (MOBILE) --- */
 @media (max-width: 1023px) {
     .game-area-desktop { display: none; }
-    .game-area-mobile { display: flex; flex-direction: column; width: 100%; height: 100%; }
-    .game-area { padding: 0.5rem; }
-    
-    .mobile-header { display: flex; flex-direction: column; gap: 0.5rem; padding-bottom: 0.5rem; }
-    .mobile-header-top, .mobile-header-bottom { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .game-area { padding: 0; }
+    .game-area-mobile { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+    .mobile-header { flex-shrink: 0; position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; background: var(--color-surface); padding: 0.5rem; border-bottom: 1px solid var(--color-border); }
+    .mobile-header .turn-indicator-font { font-size: 1.2rem; flex-shrink: 0; }
+    .mobile-resources { display: flex; align-items: center; gap: 0.5rem; flex-grow: 1; justify-content: center; min-width: 0; }
+    .mobile-header .player-health-bar-container.mobile { background-color: transparent; padding: 0; border: none; max-width: 100px; width: 100%; }
+    .mobile-header .progress-bar { height: 12px; }
+    .mobile-header .progress-bar-text { font-size: 0.65rem; }
+    .mobile-header .ap-counter { font-size: 0.9rem; padding: 0.1rem 0.5rem; width: auto; }
+    .mobile-header .player-resources-container.mobile { flex-direction: column; gap: 0.1rem; align-items: stretch; }
+    .mobile-header .party-hope-meter-container { display: flex; align-items: center; gap: 0.5rem; }
+    .mobile-header .party-hope-label { display: none; }
+    .mobile-header .party-hope-meter.mobile { gap: 0.25rem; }
+    .mobile-header .party-hope-meter.mobile .material-symbols-outlined { font-size: 1.25rem; }
+    .mobile-header .party-hope-meter.mobile span { font-size: 0.9rem; font-weight: bold; }
     .mobile-header-controls { display: flex; align-items: center; gap: 0.5rem; }
+    .mobile-header .room-code-display { padding: 0.1rem 0.5rem; }
+    .mobile-header .room-code-display span { font-size: 0.6rem; }
     .mobile-header .room-code-display p { font-size: 1rem; }
-    .mobile-header .player-health-bar-container { width: 120px; }
-    .mobile-header .ap-counter { width: auto; font-size: 0.9rem; padding: 0.1rem 0.5rem; }
-    .mobile-header .party-hope-meter { width: auto; }
-    .mobile-header .party-hope-meter .progress-bar-wrapper { display: none; }
-    .mobile-main { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .mobile-screen { display: none; flex-grow: 1; flex-direction: column; gap: 0.5rem; overflow-y: auto; }
-    .mobile-screen.active { display: flex; }
-    .mobile-panel { flex-shrink: 0; }
-    
-    .mobile-bottom-chrome { flex-shrink: 0; }
-    .mobile-action-bar {
-        display: flex;
-        justify-content: flex-start; /* Align to the start for scrolling */
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem;
-        background-color: var(--color-surface);
-        border-top: 1px solid var(--color-border);
-        overflow-x: auto; /* Enable horizontal scrolling */
-        white-space: nowrap; /* Prevent buttons from wrapping */
-        flex-wrap: nowrap;
-    }
-    .mobile-action-bar .btn {
-        flex-shrink: 0; /* Prevent buttons from shrinking */
-    }
 
-    .mobile-bottom-nav { display: flex; justify-content: space-around; background-color: var(--color-surface); padding: 0.5rem 0; border-top: 1px solid var(--color-border); }
-    .nav-btn { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; font-size: 0.8rem; }
-    .nav-btn.active { color: var(--color-special); }
-    .panel-header { font-size: 1.25rem; }
-    .card-container-row { padding: 0.5rem; }
-    .card { width: 140px; min-width: 140px; height: 196px; } .card-title { font-size: 1rem; } .card-effect { font-size: 0.75rem; -webkit-line-clamp: 3; }
-    .class-card { flex-direction: column; } .class-card-footer { margin-top: auto; }
-    .class-grid { display: flex; flex-direction: column; gap: 1rem; }
-    .chat-form { display: flex; gap: 0.5rem; }
+    .mobile-main { flex-grow: 1; overflow-y: auto; padding: 0.5rem; padding-bottom: 100px; /* Space for bottom chrome */ }
+    .mobile-screen { display: none; } .mobile-screen.active { display: flex; flex-direction: column; gap: 1rem; }
+    .mobile-panel { margin-bottom: 0; }
     
-    /* Toast and Your Turn Popup adjustments */
-    #toast-container { right: 0.5rem; top: 0.5rem; }
-    .your-turn-popup { font-size: 2rem; }
-    .card-details-content { max-width: 90vw; }
-    #card-details-container .card { width: 280px; height: 392px; }
+    #mobile-bottom-chrome { position: fixed; bottom: 0; left: 0; right: 0; z-index: 10; }
+    .mobile-action-bar { display: flex; justify-content: flex-start; padding: 0.5rem; background: var(--color-surface); border-top: 1px solid var(--color-border); flex-wrap: nowrap; gap: 0.5rem; overflow-x: auto; white-space: nowrap; }
+    .mobile-action-bar .btn { flex-shrink: 0; flex: 0 0 auto; /* Make buttons not grow or shrink, but take their content size */ padding: 0.5rem; font-size: 0.8rem; }
+    .mobile-bottom-nav { flex-shrink: 0; display: flex; justify-content: space-around; background: var(--color-surface); border-top: 1px solid var(--color-border); box-shadow: 0 -2px 5px rgba(0,0,0,0.3); }
+    .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 0.5rem 0; background: none; border: none; color: var(--color-text-secondary); font-size: 0.8rem; }
+    .nav-btn.active { color: var(--color-primary); }
+    .nav-btn .material-symbols-outlined { font-size: 1.5rem; }
+    .class-grid { display: flex; flex-direction: column; gap: 1rem; }
+    .class-card { cursor: default; } /* No hover effects on mobile */
+    .class-card:hover { transform: none; }
+    .world-event-banner { font-size: 0.9rem; gap: 0.5rem; padding: 0.5rem 0.75rem; }
 }
 
-@media (max-width: 380px) {
-    .card { width: 120px; min-width: 120px; height: 168px; }
-    .turn-indicator-font { font-size: 1.2rem; }
+@media (min-width: 1024px) {
+    #player-list-display { max-height: 30vh; flex-shrink: 0; display: flex; flex-direction: column; }
+    #player-list-display .player-list { flex-grow: 1; overflow-y: auto; }
+    #character-sheet-block { flex-grow: 1; overflow-y: auto; }
+    #game-board-container { flex-grow: 2; min-height: 280px; }
+    #hand-equipment-container { flex-grow: 1; max-height: 40vh; }
+}
+
+@media (max-width: 1300px) and (min-width: 1024px) {
+    .game-header {
+        justify-content: center;
+    }
+}
+
+
+@media (max-width: 768px) { 
+    #mobile-screen-character .class-grid, #desktop-class-card-display { display: flex; flex-direction: column; align-items: center; width: 100%; padding: 10px 0; }
+    #mobile-screen-character .class-card, #desktop-class-card-display .class-card { margin-bottom: 15px; width: 90%; max-width: 350px; }
 }
