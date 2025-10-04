@@ -70,7 +70,7 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; -moz-osx-smoothing: grayscale; }
 html, body { height: 100%; overflow: hidden; overscroll-behavior: contain; }
-body { font-family: var(--font-body); background-color: var(--color-bg-dark); color: var(--color-text-primary); display: flex; align-items: center; justify-content: center; }
+body { font-family: var(--font-body); background-color: var(--color-bg-dark); color: var(--color-text-primary); }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--color-border); }
 ::-webkit-scrollbar-thumb { background: var(--color-secondary); border-radius: 4px; }
@@ -302,6 +302,15 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     align-items: center; /* Vertically center cards if they don't fill the space */
 }
 
+/* Card Action Button Icon/Text Fix */
+.card-action-buttons .btn .material-symbols-outlined {
+    display: none;
+    vertical-align: middle;
+}
+.card-action-buttons .btn .btn-text {
+    vertical-align: middle;
+}
+
 
 /* --- 10. INFO PANEL, ACTION BAR, CHAT --- */
 .info-tabs-panel { display: flex; flex-direction: column; }
@@ -520,27 +529,27 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     background: none;
     text-align: left;
 }
-#help-close-btn {
-    background: none;
-    border: none;
+.help-header .btn-icon {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     color: var(--color-text-secondary);
-    cursor: pointer;
-    padding: 0;
-    position: relative;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    padding: 0; /* override btn padding */
+    flex-shrink: 0;
 }
-#help-close-btn::before {
-    content: '\e5cd'; /* Material Symbols 'close' icon */
-    font-family: 'Material Symbols Outlined';
-    font-size: 28px;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    transition: color 0.2s;
+.help-header .btn-icon:hover {
+    background-color: var(--color-secondary);
+    color: var(--color-text-primary);
 }
-#help-close-btn:hover::before { color: var(--color-special); }
+.help-header .btn-icon .material-symbols-outlined {
+    font-size: 24px;
+}
 
 .help-content {
     flex-grow: 1;
@@ -658,27 +667,20 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     }
     
     .card-action-buttons .btn {
-        font-size: 0;
         width: 32px;
         height: 32px;
         padding: 0;
         border-radius: 50%;
     }
-    .card-action-buttons .btn .material-symbols-outlined { display: none; } /* Hide if there's an icon in HTML */
 
-    .card-action-buttons .btn::before {
-        font-family: 'Material Symbols Outlined';
-        font-size: 1.25rem;
-        line-height: 1;
+    .card-action-buttons .btn .btn-text {
+        display: none;
+    }
+    .card-action-buttons .btn .material-symbols-outlined {
         display: inline-block;
         font-variation-settings: 'FILL' 1;
+        font-size: 1.25rem;
     }
-    .card-action-buttons .btn[data-action="equip"]::before { content: '\e86a'; } /* checkroom */
-    .card-action-buttons .btn[data-action="useConsumable"]::before { content: '\ea4a'; } /* science */
-    .card-action-buttons .btn[data-action="castSpell"]::before { content: '\e659'; } /* auto_awesome */
-    .card-action-buttons .btn[data-action="claimLoot"]::before { content: '\e8b1'; } /* redeem */
-    .card-action-buttons .btn[data-action="interact"]::before { content: '\e913'; } /* touch_app */
-    .card-action-buttons .btn[data-action="discardCard"]::before { content: '\e872'; } /* delete */
 
     .discard-choice-container, .discovery-choice-container { flex-direction: column; align-items: center; }
 }

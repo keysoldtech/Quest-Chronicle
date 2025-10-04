@@ -168,6 +168,35 @@ function isDesktop() {
 }
 
 /**
+ * Creates a single action button for a card, with separate icon and text elements.
+ * @param {string} action - The action name (e.g., 'equip', 'discardCard').
+ * @param {string} text - The text to display on the button on desktop.
+ * @param {string} btnClass - Additional CSS classes for the button.
+ * @returns {HTMLElement} The button element.
+ */
+function createActionButton(action, text, btnClass) {
+    const actionIconMap = {
+        equip: 'checkroom',
+        useConsumable: 'science',
+        castSpell: 'auto_awesome',
+        claimLoot: 'redeem',
+        interact: 'touch_app',
+        discardCard: 'delete'
+    };
+
+    const btn = document.createElement('button');
+    btn.className = `btn btn-xs ${btnClass}`;
+    btn.dataset.action = action;
+    
+    const iconHTML = `<span class="material-symbols-outlined">${actionIconMap[action] || 'touch_app'}</span>`;
+    const textHTML = `<span class="btn-text">${text}</span>`;
+    
+    btn.innerHTML = iconHTML + textHTML;
+    return btn;
+}
+
+
+/**
  * Creates an HTML element for a game card with interactive options.
  * @param {object} card - The card data object.
  * @param {object} options - Configuration for card interactivity.
@@ -276,54 +305,26 @@ function createCardElement(card, options = {}) {
     actionContainer.className = 'card-action-buttons';
 
     if (isEquippable) {
-        const equipBtn = document.createElement('button');
-        equipBtn.textContent = 'Equip (1AP)';
-        equipBtn.className = 'btn btn-xs btn-success';
-        equipBtn.dataset.action = 'equip';
-        actionContainer.appendChild(equipBtn);
+        actionContainer.appendChild(createActionButton('equip', 'Equip (1AP)', 'btn-success'));
     }
-    
     if (isConsumable) {
-        const useBtn = document.createElement('button');
-        useBtn.textContent = 'Use';
-        useBtn.className = 'btn btn-xs btn-special';
-        useBtn.dataset.action = 'useConsumable';
-        actionContainer.appendChild(useBtn);
+        actionContainer.appendChild(createActionButton('useConsumable', 'Use', 'btn-special'));
     }
-
     if (isCastable) {
-        const castBtn = document.createElement('button');
-        castBtn.textContent = `Cast (${card.apCost}AP)`;
-        castBtn.className = 'btn btn-xs btn-special';
-        castBtn.dataset.action = 'castSpell';
-        actionContainer.appendChild(castBtn);
+        actionContainer.appendChild(createActionButton('castSpell', `Cast (${card.apCost}AP)`, 'btn-special'));
     }
-
     if (isClaimable) {
-        const claimBtn = document.createElement('button');
-        claimBtn.textContent = 'Claim';
-        claimBtn.className = 'btn btn-xs btn-primary';
-        claimBtn.dataset.action = 'claimLoot';
-        actionContainer.appendChild(claimBtn);
+        actionContainer.appendChild(createActionButton('claimLoot', 'Claim', 'btn-primary'));
     }
-
     if (isInteractable && card.skillInteractions) {
         card.skillInteractions.forEach(interaction => {
-            const interactBtn = document.createElement('button');
-            interactBtn.textContent = `${interaction.name} (${interaction.apCost} AP)`;
-            interactBtn.className = 'btn btn-xs btn-interaction';
-            interactBtn.dataset.action = 'interact';
-            interactBtn.dataset.interactionName = interaction.name;
-            actionContainer.appendChild(interactBtn);
+            const btn = createActionButton('interact', `${interaction.name} (${interaction.apCost} AP)`, 'btn-interaction');
+            btn.dataset.interactionName = interaction.name;
+            actionContainer.appendChild(btn);
         });
     }
-
     if (isDiscardable) {
-        const discardBtn = document.createElement('button');
-        discardBtn.textContent = 'Discard';
-        discardBtn.className = 'btn btn-xs btn-danger';
-        discardBtn.dataset.action = 'discardCard';
-        actionContainer.appendChild(discardBtn);
+        actionContainer.appendChild(createActionButton('discardCard', 'Discard', 'btn-danger'));
     }
 
     if (actionContainer.hasChildNodes()) {
