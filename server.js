@@ -1321,7 +1321,7 @@ class GameManager {
         const bonus = player.stats[interaction.skill] || 0;
         socket.emit('promptSkillCheckRoll', {
             title: interactionName,
-            description: `Attempting to ${interactionName} the ${sourceCard.name}.`,
+            description: `Attempting to ${interactionName} the ${sourceCard.name}. + ${bonus} vs Target AC of ${interaction.dc}`,
             dice: '1d20',
             bonus,
             targetAC: interaction.dc,
@@ -1363,61 +1363,76 @@ class GameManager {
     }
 
     resolveSkillCheckRoll(room, player, payload, socket) {
-        const challenge = room.gameState.skillChallenge.details;
-        if (!challenge) return;
+        try {
+            const challenge = room.gameState.skillChallenge.details;
+            let roll;
+            const advantageText = '';
+            
+            if (payload.hasAdvantage) {
+                const [roll1, roll2] = [this.rollDice('1d20'), this.rollDice('1d20')];
+                roll = Math.max(roll1, roll2);
+                room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage! (Rolled ${roll1}, ${roll2})`, timestamp: Date.now() });
+            } else {
+                roll = this.rollDice('1d20');
+            }
+            
+            const isInteraction = payload.interactionData;
+            const sourceCardId = isInteraction ? payload.interactionData.cardId : room.gameState.skillChallenge.targetId;
+            const currentStageIndex = room.gameState.skillChallenge.currentStage;
+            let sourceCard = null;
+            if (sourceCardId) {
+                sourceCard = [...room.gameState.board.monsters, ...room.gameState.board.environment].find(c => c.id === sourceCardId);
+            }
 
-        let roll, advantageText = '';
-        if (payload.hasAdvantage) {
-            const [roll1, roll2] = [this.rollDice('1d20'), this.rollDice('1d20')];
-            roll = Math.max(roll1, roll2);
-            room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage! (Rolled ${roll1}, ${roll2})`, timestamp: Date.now() });
-            advantageText = ' w/ Adv';
-        } else {
-            roll = this.rollDice('1d20');
+            let stageDetails = null;
+            if (isInteraction && sourceCard) {
+                stageDetails = sourceCard.skillInteractions?.find(i => i.name === payload.interactionData.interactionName);
+            } else if (challenge) {
+                stageDetails = challenge.eventType === 'multi_stage_skill_challenge' 
+                    ? challenge.stages[currentStageIndex] 
+                    : challenge;
+            }
+            
+            if (!stageDetails) {
+                console.error("Could not find stage details for skill check.", { payload });
+                socket.emit('diceRollError');
+                return;
+            }
+
+            const statBonus = player.stats[stageDetails.skill] || 0;
+            const total = roll + statBonus;
+            const outcome = total >= stageDetails.dc ? 'Success' : 'Failure';
+            
+            const effect = outcome === 'Success' ? stageDetails.success : stageDetails.failure;
+
+            room.chatLog.push({ type: 'system', text: `${player.name} attempts ${challenge?.name || stageDetails.name}... (Roll: ${roll}${advantageText} + ${statBonus} ${stageDetails.skill.toUpperCase()} = ${total} vs DC ${stageDetails.dc}) - ${outcome}!`, timestamp: Date.now() });
+            if (effect.text) room.chatLog.push({ type: outcome === 'Success' ? 'system-good' : 'system-bad', text: effect.text, timestamp: Date.now() });
+
+            // Apply effect
+            this.applySkillCheckEffect(room, player, effect, sourceCardId);
+
+            // Handle multi-stage progression
+            const isMultiStage = challenge && challenge.eventType === 'multi_stage_skill_challenge';
+            if (isMultiStage && outcome === 'Success' && currentStageIndex < challenge.stages.length - 1) {
+                room.gameState.skillChallenge.currentStage++;
+                const nextStage = challenge.stages[room.gameState.skillChallenge.currentStage];
+                room.chatLog.push({ type: 'system', text: `Next stage: ${nextStage.description}`, timestamp: Date.now() });
+                // Re-trigger the check for the next stage automatically
+                this.resolveSkillCheck(room, player, { apCost: 0 }, socket);
+            } else {
+                // End the challenge
+                room.gameState.skillChallenge.isActive = false;
+                room.gameState.skillChallenge.details = null;
+                if (challenge && challenge.type === 'World Event') room.gameState.worldEvents.currentEvent = null;
+            }
+
+            io.to(room.id).emit('skillCheckResolved', { rollerId: player.id, rollerName: player.name, roll, bonus: statBonus, total, targetAC: stageDetails.dc, outcome });
+            this.emitGameState(room.id);
+        } catch (e) {
+            console.error("Critical error in resolveSkillCheckRoll:", e);
+            socket.emit('actionError', 'A server error occurred during a skill check.');
+            socket.emit('diceRollError');
         }
-
-        const isInteraction = payload.interactionData;
-        const sourceCardId = isInteraction ? payload.interactionData.cardId : room.gameState.skillChallenge.targetId;
-        const currentStageIndex = room.gameState.skillChallenge.currentStage;
-
-        const stageDetails = isInteraction 
-            ? gameData.allMonsters[sourceCardId]?.skillInteractions.find(i => i.name === payload.interactionData.interactionName) || 
-              gameData.environmentalCards.find(c => c.id === sourceCardId)?.skillInteractions.find(i => i.name === payload.interactionData.interactionName)
-            : challenge.eventType === 'multi_stage_skill_challenge' 
-            ? challenge.stages[currentStageIndex] 
-            : challenge;
-        
-        if (!stageDetails) { console.error("Could not find stage details for skill check."); return; }
-
-        const statBonus = player.stats[stageDetails.skill] || 0;
-        const total = roll + statBonus;
-        const outcome = total >= stageDetails.dc ? 'Success' : 'Failure';
-        
-        const effect = outcome === 'Success' ? stageDetails.success : stageDetails.failure;
-
-        room.chatLog.push({ type: 'system', text: `${player.name} attempts ${challenge.name}... (Roll: ${roll}${advantageText} + ${statBonus} ${stageDetails.skill.toUpperCase()} = ${total} vs DC ${stageDetails.dc}) - ${outcome}!`, timestamp: Date.now() });
-        if (effect.text) room.chatLog.push({ type: outcome === 'Success' ? 'system-good' : 'system-bad', text: effect.text, timestamp: Date.now() });
-
-        // Apply effect
-        this.applySkillCheckEffect(room, player, effect, sourceCardId);
-
-        // Handle multi-stage progression
-        const isMultiStage = challenge.eventType === 'multi_stage_skill_challenge';
-        if (isMultiStage && outcome === 'Success' && currentStageIndex < challenge.stages.length - 1) {
-            room.gameState.skillChallenge.currentStage++;
-            const nextStage = challenge.stages[room.gameState.skillChallenge.currentStage];
-            room.chatLog.push({ type: 'system', text: `Next stage: ${nextStage.description}`, timestamp: Date.now() });
-            // Re-trigger the check for the next stage automatically
-            this.resolveSkillCheck(room, player, { apCost: 0 }, socket);
-        } else {
-            // End the challenge
-            room.gameState.skillChallenge.isActive = false;
-            room.gameState.skillChallenge.details = null;
-            if (challenge.type === 'World Event') room.gameState.worldEvents.currentEvent = null;
-        }
-
-        io.to(room.id).emit('skillCheckResolved', { rollerId: player.id, rollerName: player.name, roll, bonus: statBonus, total, targetAC: stageDetails.dc, outcome });
-        this.emitGameState(room.id);
     }
     
     applySkillCheckEffect(room, player, effect, sourceCardId) {

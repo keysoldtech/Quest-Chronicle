@@ -1435,7 +1435,7 @@ function handleDiceRoll() {
     clientState.diceAnimationInterval = setInterval(() => {
         const randomValue = Math.floor(Math.random() * sides) + 1;
         svg.querySelector('.die-text').textContent = randomValue;
-    }, 100);
+    }, 80);
     
     // Send appropriate socket event based on roll type
     const payload = { ...clientState.currentRollData };
@@ -1453,6 +1453,41 @@ function handleDiceRoll() {
     if (action) {
         socket.emit('playerAction', { action, ...payload });
     }
+}
+
+/**
+ * Creates a satisfying slowdown animation for the dice roll result.
+ * @param {HTMLElement} container - The element holding the die SVG.
+ * @param {number} sides - The number of sides on the die.
+ * @param {number} finalRoll - The actual result from the server.
+ * @param {function} callback - Function to execute after the animation completes.
+ */
+function animateDiceResult(container, sides, finalRoll, callback) {
+    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+    const svg = container.querySelector('.die-svg');
+    if (!svg) {
+        if (callback) callback();
+        return;
+    }
+
+    const slowdownSteps = [100, 150, 220, 300, 400, 550]; 
+    let currentStep = 0;
+
+    function nextStep() {
+        if (currentStep < slowdownSteps.length) {
+            const randomValue = Math.floor(Math.random() * sides) + 1;
+            svg.querySelector('.die-text').textContent = randomValue;
+            setTimeout(nextStep, slowdownSteps[currentStep]);
+            currentStep++;
+        } else {
+            // Last step: show the final roll
+            svg.classList.remove('rolling');
+            container.innerHTML = createDieSVG(sides, finalRoll);
+            container.querySelector('.die-svg').classList.add('result-glow');
+            if (callback) callback();
+        }
+    }
+    nextStep();
 }
 
 // --- 6. SOCKET EVENT HANDLERS ---
@@ -1504,98 +1539,89 @@ function initializeSocketListeners() {
     socket.on('promptSkillCheckRoll', (data) => showDiceRollModal(data, 'skillcheck'));
     
     socket.on('attackResolved', (result) => {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        
         const container = document.getElementById('dice-display-container');
-        container.querySelector('.die-svg').classList.remove('rolling');
-        container.innerHTML = createDieSVG(20, result.roll);
 
-        const resultLine = document.getElementById('dice-roll-result-line');
-        resultLine.textContent = result.outcome.toUpperCase() + '!';
-        resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
-        
-        document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
-        document.getElementById('dice-roll-result-container').classList.remove('hidden');
+        animateDiceResult(container, 20, result.roll, () => {
+            const resultLine = document.getElementById('dice-roll-result-line');
+            resultLine.textContent = result.outcome.toUpperCase() + '!';
+            resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
+            
+            document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
+            document.getElementById('dice-roll-result-container').classList.remove('hidden');
 
-        if (result.outcome === 'Miss') {
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
-        }
+            if (result.outcome === 'Miss') {
+                document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+                document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+                if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+                clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+            }
+        });
     });
 
     socket.on('damageResolved', (result) => {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         
         const sides = result.damageDice.split('d')[1];
         const container = document.getElementById('dice-display-container');
-        container.querySelector('.die-svg').classList.remove('rolling');
-        container.innerHTML = createDieSVG(sides, result.damageRoll);
-        container.querySelector('.die-svg').classList.add('result-glow');
 
-        document.getElementById('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
-        document.getElementById('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
-        
-        document.getElementById('dice-roll-result-container').classList.remove('hidden');
-        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-        
-        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-        clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+        animateDiceResult(container, sides, result.damageRoll, () => {
+            document.getElementById('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
+            document.getElementById('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
+            
+            document.getElementById('dice-roll-result-container').classList.remove('hidden');
+            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+            
+            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
 
-        const targetCard = document.querySelector(`.card[data-monster-id="${result.targetId}"]`);
-        if (targetCard) {
-            targetCard.classList.add('shake');
-            setTimeout(() => targetCard.classList.remove('shake'), 820);
-        }
+            const targetCard = document.querySelector(`.card[data-monster-id="${result.targetId}"]`);
+            if (targetCard) {
+                targetCard.classList.add('shake');
+                setTimeout(() => targetCard.classList.remove('shake'), 820);
+            }
+        });
     });
     
      socket.on('discoveryRollResolved', (result) => {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         const container = document.getElementById('dice-display-container');
-        container.querySelector('.die-svg').classList.remove('rolling');
-        container.innerHTML = createDieSVG(20, result.roll);
-        container.querySelector('.die-svg').classList.add('result-glow');
 
-        let fortuneText = 'A decent find.';
-        if (result.roll <= 10) fortuneText = 'A common find.';
-        else if (result.roll <= 15) fortuneText = 'An uncommon find!';
-        else if (result.roll <= 19) fortuneText = 'A rare find!';
-        else fortuneText = 'A legendary find!';
+        animateDiceResult(container, 20, result.roll, () => {
+            let fortuneText = 'A decent find.';
+            if (result.roll <= 10) fortuneText = 'A common find.';
+            else if (result.roll <= 15) fortuneText = 'An uncommon find!';
+            else if (result.roll <= 19) fortuneText = 'A rare find!';
+            else fortuneText = 'A legendary find!';
 
-        document.getElementById('dice-roll-result-line').textContent = fortuneText;
-        document.getElementById('dice-roll-details').textContent = `You rolled a ${result.roll}.`;
-        document.getElementById('dice-roll-result-container').classList.remove('hidden');
-        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+            document.getElementById('dice-roll-result-line').textContent = fortuneText;
+            document.getElementById('dice-roll-details').textContent = `You rolled a ${result.roll}.`;
+            document.getElementById('dice-roll-result-container').classList.remove('hidden');
+            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
 
-        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-        // Wait longer before closing to show result, then the next modal will appear.
-        clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 2000);
+            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 2000);
+        });
     });
 
     socket.on('skillCheckResolved', (result) => {
-        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
         const container = document.getElementById('dice-display-container');
-        container.querySelector('.die-svg').classList.remove('rolling');
-        container.innerHTML = createDieSVG(20, result.roll);
-        container.querySelector('.die-svg').classList.add('result-glow');
 
-        const resultLine = document.getElementById('dice-roll-result-line');
-        resultLine.textContent = result.outcome.toUpperCase() + '!';
-        resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
-        document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
-        document.getElementById('dice-roll-result-container').classList.remove('hidden');
-        document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-        document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+        animateDiceResult(container, 20, result.roll, () => {
+            const resultLine = document.getElementById('dice-roll-result-line');
+            resultLine.textContent = result.outcome.toUpperCase() + '!';
+            resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
+            document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
+            document.getElementById('dice-roll-result-container').classList.remove('hidden');
+            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
+            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
 
-        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-        clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+        });
     });
 
     socket.on('promptIndividualDiscovery', (data) => {
