@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.0.20 - Code Refactor</p>
+            <p class="build-number-font-menu">v9.0.21 - Game Flow Fix</p>
         </div>
     </div>
     
@@ -126,7 +126,7 @@
                                     <div class="progress-bar hope">
                                         <div class="progress-bar-fill" data-container="party-hope-bar"></div>
                                     </div>
-                                    <span class="progress-bar-text" data-container="party-hope-text"></span>
+                                    <span class="progress-bar-text" id="party-hope-text-desktop"></span>
                                 </div>
                             </div>
                         </div>
@@ -145,7 +145,7 @@
                          <p class="turn-counter">Round: <span data-container="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v9.0.20 - Code Refactor</p>
+                        <p class="build-number-font">v9.0.21 - Game Flow Fix</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -234,7 +234,7 @@
                                 <span class="party-hope-label">Party Hope</span>
                                 <div class="party-hope-meter mobile">
                                     <span class="material-symbols-outlined">stars</span>
-                                    <span data-container="party-hope-text"></span>
+                                    <span id="party-hope-text-mobile"></span>
                                 </div>
                             </div>
                             <div class="player-resources-container mobile hidden" data-container="player-resources">

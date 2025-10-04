@@ -236,7 +236,10 @@ class GameManager {
     // --- 3.3. Game Lifecycle ---
     startGame(socket) {
         const room = this.findRoomBySocket(socket);
-        if (!room || socket.id !== room.hostId) return;
+        // CRITICAL FIX: Add guard to prevent function from running more than once.
+        if (!room || socket.id !== room.hostId || room.gameState.phase === 'started') {
+            return;
+        }
 
         const humanPlayers = Object.values(room.players).filter(p => !p.isNpc);
         if (!humanPlayers.every(p => p.class)) {
@@ -245,28 +248,24 @@ class GameManager {
 
         this.initializeDecks(room);
 
-        // Deal starting cards to all explorers (human and NPC)
-        Object.values(room.players).filter(p => p.role === 'Explorer').forEach(p => {
-            this.dealStartingLoadout(room, p);
-        });
-        
-        // Finalize stats and set initial health/AP for everyone
+        // REFACTORED LOOP: Initialize each player fully in a single pass.
         Object.values(room.players).forEach(p => {
+            // Explorers get a starting loadout.
+            if (p.role === 'Explorer') {
+                this.dealStartingLoadout(room, p);
+            }
+            // Everyone (including the DM) gets their stats finalized.
             p.stats = this.calculatePlayerStats(p, room.gameState.partyHope);
             p.stats.currentHp = p.stats.maxHp;
-            p.currentAp = p.stats.ap;
+            p.currentAp = p.stats.maxAP;
         });
 
-        // --- Correct Turn Order Logic ---
+        // --- Turn Order Logic ---
         const dmId = 'npc-dm';
         const hostId = room.hostId;
-        
-        // Filter out the host from the list of explorers to be shuffled.
         const otherExplorerIds = Object.keys(room.players).filter(id => 
             room.players[id].role === 'Explorer' && id !== hostId
         );
-        
-        // The final turn order is DM -> Host -> Randomized Other Explorers.
         room.gameState.turnOrder = [dmId, hostId, ...shuffle(otherExplorerIds)];
         
         room.gameState.currentPlayerIndex = -1;
@@ -1141,7 +1140,7 @@ class GameManager {
                 } else if (targetMonster) {
                     targetMonster.currentHp -= damage;
                     this._logSpellCast(room, player, card, targetMonster, `dealing ${damage} damage`);
-                    if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, targetMonster.id, player.id);
+                    if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, monster.id, player.id);
                 }
                 break;
             case 'buff':
