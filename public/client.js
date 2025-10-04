@@ -22,6 +22,7 @@ const clientState = {
     helpModalPage: 0,
     isFirstTurnTutorialActive: false,
     hasSeenSkillChallengePrompt: false, // Prevents re-opening the modal
+    lastLogLength: 0, // For tracking new log entries for toasts
 };
 
 // --- HELPERS ---
@@ -219,6 +220,10 @@ function createCardElement(card, options = {}) {
         cardDiv.classList.add(`rarity-${card.rarity.toLowerCase()}`);
     }
 
+    if (card.type === 'Spell' && card.level) {
+        cardDiv.classList.add(`spell-level-${card.level}`);
+    }
+
     if (card.type === 'Monster') {
         cardDiv.dataset.monsterId = card.id;
         if (isTargetable) cardDiv.classList.add('targetable');
@@ -352,6 +357,18 @@ function renderUI() {
 
     const { players, gameState, chatLog, hostId } = currentRoomState;
     const { phase, isPaused, pauseReason } = gameState;
+    
+    // --- Toasts for new actions ---
+    const newLogEntries = chatLog.slice(clientState.lastLogLength);
+    newLogEntries.forEach(entry => {
+        const isMyAction = entry.playerId === myId || entry.rollerId === myId;
+        const isToastable = !['chat', 'narrative', 'system'].includes(entry.type);
+        if (isToastable && !isMyAction) {
+            showToast(entry.text, 'info');
+        }
+    });
+    clientState.lastLogLength = chatLog.length;
+
 
     // Game Paused Overlay
     const pauseModal = get('game-paused-modal');
@@ -708,7 +725,8 @@ function renderHandAndEquipment(player, isMyTurn) {
 
     player.hand.forEach(card => {
         const isEquippable = (card.type === 'Weapon' || card.type === 'Armor') && isMyTurn;
-        const isConsumable = (card.type === 'Consumable' || card.category === 'Consumable') && isMyTurn;
+        // BUG FIX: Broaden the check for usable items to include more types.
+        const isConsumable = (card.type === 'Consumable' || card.type === 'Potion' || card.type === 'Scroll') && card.apCost > 0 && isMyTurn;
         const isCastable = card.type === 'Spell' && isMyTurn;
         const cardEl = createCardElement(card, { isEquippable, isConsumable, isCastable, isDiscardable: isMyTurn });
         
@@ -1580,6 +1598,7 @@ function showDiceRollModal({ title, description, dice, bonus, targetAC, hasAdvan
     get('dice-roll-description').textContent = description || '';
     
     get('dice-roll-result-container').classList.add('hidden');
+    get('dice-roll-damage-line').textContent = ''; // Clear previous damage line
     get('dice-roll-confirm-btn').classList.remove('hidden');
     get('dice-roll-close-btn').classList.add('hidden');
     
@@ -1588,236 +1607,257 @@ function showDiceRollModal({ title, description, dice, bonus, targetAC, hasAdvan
     diceDisplay.innerHTML = `
         <svg class="die-svg" viewBox="0 0 100 100">
             <rect class="die-shape" x="10" y="10" width="80" height="80" rx="10"/>
-            <text x="50" y="55" text-anchor="middle" class="die-text">?</text>
+            <text x="50" y="55" text-anchor="middle" class="die-text">?_</text>
             <text x="50" y="80" text-anchor="middle" class="die-sides-text">d${sides}</text>
         </svg>
     `;
-
+    
     get('dice-roll-modal').classList.remove('hidden');
 
     clientState.rollResponseTimeout = setTimeout(() => {
         if (!get('dice-roll-modal').classList.contains('hidden')) {
-            showToast('Dice roll timed out, closing.', 'error');
-            get('dice-roll-modal').classList.add('hidden');
+            handleDiceRoll(); // Auto-roll if the user doesn't click
         }
-    }, 15000); // 15 second timeout to prevent stalled games
+    }, 10000); // 10 seconds
 }
 
 function handleDiceRoll() {
-    if (!clientState.currentRollData) return;
-
-    const { onConfirm } = clientState.currentRollData;
-    onConfirm(); // This sends the socket event to the server to get the official result
-
-    get('dice-roll-confirm-btn').disabled = true;
-    const dieSvg = document.querySelector('.die-svg');
-    const dieText = document.querySelector('.die-text');
+    if(clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
     
-    dieSvg.classList.add('rolling');
+    const { onConfirm } = clientState.currentRollData;
+    onConfirm(); // This will emit the event to the server to do the actual roll.
+
+    const confirmBtn = get('dice-roll-confirm-btn');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Rolling...";
+
+    const dieSVG = document.querySelector('#dice-display-container .die-svg');
+    const dieText = document.querySelector('#dice-display-container .die-text');
+    dieSVG.classList.add('rolling');
+
     if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
     clientState.diceAnimationInterval = setInterval(() => {
-        dieText.textContent = Math.floor(Math.random() * 20) + 1;
+        dieText.textContent = Math.ceil(Math.random() * 20);
     }, 50);
 }
 
-function displayDiceRollResult({ rollerName, roll, bonus, total, targetAC, outcome, type, wasDefeated = false }) {
+function displayDiceRollResult(payload) {
+    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
     if(clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    if(clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
 
-    const dieSvg = document.querySelector('.die-svg');
-    const dieText = document.querySelector('.die-text');
-    if(dieSvg) dieSvg.classList.remove('rolling');
-    if(dieText) dieText.textContent = roll;
+    const dieSVG = document.querySelector('#dice-display-container .die-svg');
+    const dieText = document.querySelector('#dice-display-container .die-text');
     
+    dieSVG.classList.remove('rolling');
+    dieSVG.classList.add('result-glow');
+    dieText.textContent = payload.roll;
+
+    const resultContainer = get('dice-roll-result-container');
     const resultLine = get('dice-roll-result-line');
-    const detailsLine = get('dice-roll-details');
+    const resultDetails = get('dice-roll-details');
     
-    resultLine.textContent = outcome;
-    resultLine.className = `result-line ${outcome.toLowerCase()}`;
-    detailsLine.textContent = `${rollerName} rolled ${roll} + ${bonus} = ${total} (vs Target ${targetAC})`;
-
-    get('dice-roll-result-container').classList.remove('hidden');
+    resultLine.textContent = payload.outcome;
+    resultLine.className = `result-line ${payload.outcome.toLowerCase()}`;
+    resultDetails.textContent = `(Roll: ${payload.roll} + Bonus: ${payload.bonus} = ${payload.total} vs Target: ${payload.targetAC})`;
+    
+    get('dice-roll-damage-line').textContent = ''; // Clear the old damage line
+    resultContainer.classList.remove('hidden');
     get('dice-roll-confirm-btn').classList.add('hidden');
-    get('dice-roll-confirm-btn').disabled = false;
     get('dice-roll-close-btn').classList.remove('hidden');
-    
-    if (dieSvg) dieSvg.classList.add('result-glow');
-    setTimeout(() => dieSvg?.classList.remove('result-glow'), 1000);
 
-    const isAttack = type === 'attack';
-    // Don't auto-close for successful attacks, wait for the damage roll prompt.
-    if (!isAttack || outcome.toLowerCase() !== 'hit') {
-         clientState.rollModalCloseTimeout = setTimeout(() => {
-             get('dice-roll-modal').classList.add('hidden');
-        }, wasDefeated ? 3000 : 2000); // Longer delay if monster was defeated
-    }
+    if (clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+    clientState.rollModalCloseTimeout = setTimeout(() => {
+        get('dice-roll-modal').classList.add('hidden');
+    }, 5000); // Increased timeout for better pacing
 }
 
-function displayDamageRollResult({ rollerName, totalDamage }) {
+// NEW: A dedicated function to display the result of a damage roll.
+function displayDamageResult(payload) {
+    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
     if(clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-    const damageLine = get('dice-roll-damage-line');
-    damageLine.textContent = `${rollerName} dealt ${totalDamage} damage!`;
+
+    const dieSVG = document.querySelector('#dice-display-container .die-svg');
+    const dieText = document.querySelector('#dice-display-container .die-text');
+    
+    dieSVG.classList.remove('rolling');
+    dieSVG.classList.add('result-glow');
+    dieText.textContent = payload.damageRoll;
+
+    const resultContainer = get('dice-roll-result-container');
+    const resultLine = get('dice-roll-result-line');
+    const resultDetails = get('dice-roll-details');
+    
+    resultLine.textContent = `Dealt ${payload.totalDamage} Damage!`;
+    resultLine.className = `result-line damage`;
+    resultDetails.textContent = `(Roll: ${payload.damageRoll} + Bonus: ${payload.damageBonus} = ${payload.totalDamage})${payload.wasDefeated ? ' - Target Defeated!' : ''}`;
+    
+    get('dice-roll-damage-line').textContent = ''; 
+
+    resultContainer.classList.remove('hidden');
+    get('dice-roll-confirm-btn').classList.add('hidden');
+    get('dice-roll-close-btn').classList.remove('hidden');
+
+    if (clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+    clientState.rollModalCloseTimeout = setTimeout(() => {
+        get('dice-roll-modal').classList.add('hidden');
+    }, 5000);
 }
 
 
 // --- 6. SOCKET.IO EVENT HANDLERS ---
-function setupSocketListeners() {
-    socket.on('gameStateUpdate', (newState) => {
-        currentRoomState = newState;
-        renderUI();
-    });
+socket.on('connect', () => {
+    console.log('Connected to server with ID:', socket.id);
+});
 
-    socket.on('playerIdentity', ({ playerId, roomId }) => {
-        myId = socket.id;
-        sessionStorage.setItem('qc_roomId', roomId);
-        sessionStorage.setItem('qc_playerId', playerId);
-    });
+socket.on('gameStateUpdate', (newState) => {
+    currentRoomState = newState;
+    renderUI();
+});
 
-    socket.on('actionError', (message) => showToast(message, 'error'));
+socket.on('playerIdentity', ({ playerId, roomId }) => {
+    myId = socket.id;
+    sessionStorage.setItem('qc_roomId', roomId);
+    sessionStorage.setItem('qc_playerId', playerId);
+});
 
-    socket.on('turnStarted', ({ playerId }) => {
-        if (playerId === myId) {
-            showYourTurnPopup();
-            // Reset state that should clear at the start of a turn
-            clientState.hasSeenSkillChallengePrompt = false; 
-            
-            const myPlayer = currentRoomState.players[myId];
-            if (myPlayer && !myPlayer.hasTakenFirstTurn) {
-                clientState.isFirstTurnTutorialActive = true;
-                setTimeout(() => showToast("It's your first turn! Click an equipped weapon to select it.", "info", 5000), 1000);
-            }
-        }
-    });
-
-    socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
-        showChooseToDiscardModal({ newCard, currentHand });
-    });
-    
-    socket.on('promptAttackRoll', ({ title, dice, bonus, targetAC, weaponId, targetId }) => {
-        showDiceRollModal({
-            title,
-            description: `You need to roll ${targetAC} or higher to hit.`,
-            dice,
-            bonus,
-            targetAC,
-            onConfirm: () => socket.emit('playerAction', { action: 'resolveAttackRoll', weaponId, targetId })
-        });
-    });
-
-    socket.on('attackResolved', (payload) => {
-        displayDiceRollResult({ ...payload, type: 'attack' });
+socket.on('turnStarted', ({ playerId }) => {
+    if (playerId === myId) {
+        showYourTurnPopup();
+        clientState.hasSeenSkillChallengePrompt = false;
         
-        // If the roll was a hit and it's my roll, the server included data for the next step.
-        if (payload.rollerId === myId && payload.damageRollData) {
-            const damageModalData = {
-                ...payload.damageRollData,
-                onConfirm: () => socket.emit('playerAction', { 
-                    action: 'resolveDamageRoll', 
-                    weaponId: payload.damageRollData.weaponId, 
-                    targetId: payload.damageRollData.targetId 
-                })
-            };
-            // Set a timeout to transition from the attack roll result to the damage roll prompt.
-            clientState.rollModalCloseTimeout = setTimeout(() => {
-                get('dice-roll-modal').classList.add('hidden');
-                // Use another short timeout to ensure the old modal is gone before the new one appears.
-                setTimeout(() => showDiceRollModal(damageModalData), 200);
-            }, 1500);
+        const myPlayer = currentRoomState.players[myId];
+        if (myPlayer && !myPlayer.hasTakenFirstTurn) {
+            clientState.isFirstTurnTutorialActive = true;
+            showToast("It's your first turn! Click on a weapon (like 'Unarmed Strike') to select it for an attack.", "info", 5000);
         }
-    });
-    
-    socket.on('damageResolved', (payload) => {
-        displayDamageRollResult(payload);
-    });
-    
-    socket.on('promptDiscoveryRoll', ({ title, dice }) => {
-        showDiceRollModal({
-            title,
-            description: "A high roll could lead to a rare discovery!",
-            dice,
-            bonus: 0,
-            targetAC: 'N/A',
-            onConfirm: () => socket.emit('playerAction', { action: 'resolveDiscoveryRoll' })
-        });
-    });
-
-    socket.on('discoveryRollResolved', ({ rollerName, roll }) => {
-        displayDiceRollResult({ rollerName, roll, bonus: 0, total: roll, targetAC: 'N/A', outcome: "Fortune Found!", type: 'discovery' });
-    });
-
-    socket.on('promptIndividualDiscovery', ({ newCard }) => {
-        // Close the dice roll modal before opening the discovery choice
-        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-        get('dice-roll-modal').classList.add('hidden');
-        setTimeout(() => showDiscoveryModal({ newCard }), 300);
-    });
-    
-    socket.on('promptSkillCheckRoll', (payload) => {
-        showDiceRollModal({
-            title: payload.title,
-            description: payload.description,
-            dice: payload.dice,
-            bonus: payload.bonus,
-            targetAC: payload.targetAC,
-            hasAdvantage: payload.hasAdvantage,
-            relevantItemName: payload.relevantItemName,
-            onConfirm: () => socket.emit('playerAction', { 
-                action: 'resolveSkillCheckRoll',
-                hasAdvantage: payload.hasAdvantage,
-                relevantItemName: payload.relevantItemName,
-                interactionData: payload.interactionData,
-             })
-        });
-    });
-    
-    socket.on('skillCheckResolved', (payload) => {
-        displayDiceRollResult({ ...payload, type: 'skill' });
-    });
-    
-    socket.on('diceRollError', () => {
-        showToast('There was an error processing your dice roll.', 'error');
-        get('dice-roll-modal').classList.add('hidden');
-        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-    });
-    
-    socket.on('game_over', ({ winner }) => {
-        showGameOverModal(winner);
-    });
-
-    socket.on('roomClosed', ({ message }) => {
-        showToast(message, 'error', 5000);
-        setTimeout(() => {
-            sessionStorage.removeItem('qc_roomId');
-            sessionStorage.removeItem('qc_playerId');
-            window.location.reload();
-        }, 5000);
-    });
-
-    // WebRTC Listeners
-    socket.on('existing-voice-chatters', (chatterIds) => {
-        chatterIds.forEach(id => voiceChatManager.addPeer(id, true));
-    });
-    socket.on('new-voice-chatter', (chatterId) => {
-        voiceChatManager.addPeer(chatterId, false);
-    });
-    socket.on('voice-chatter-left', (chatterId) => {
-        voiceChatManager.removePeer(chatterId);
-    });
-    socket.on('webrtc-signal', (payload) => {
-        voiceChatManager.handleSignal(payload);
-    });
-}
-
-
-// --- 7. APP INITIALIZATION ---
-window.addEventListener('DOMContentLoaded', () => {
-    initializeUI();
-    setupSocketListeners();
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').then(reg => {
-            console.log('Service Worker registered successfully:', reg.scope);
-        }).catch(err => {
-            console.error('Service Worker registration failed:', err);
-        });
     }
 });
+
+socket.on('actionError', (message) => {
+    showToast(message, 'error');
+});
+
+socket.on('roomClosed', ({ message }) => {
+    showToast(message, 'error', 5000);
+    setTimeout(() => {
+        sessionStorage.removeItem('qc_roomId');
+        sessionStorage.removeItem('qc_playerId');
+        window.location.reload();
+    }, 5000);
+});
+
+socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
+    showChooseToDiscardModal({ newCard, currentHand });
+});
+
+socket.on('promptIndividualDiscovery', ({ newCard }) => {
+    showDiscoveryModal({ newCard });
+});
+
+socket.on('promptAttackRoll', (data) => {
+    showDiceRollModal({
+        title: data.title,
+        dice: data.dice,
+        bonus: data.bonus,
+        targetAC: data.targetAC,
+        onConfirm: () => socket.emit('playerAction', { action: 'resolveAttackRoll' })
+    });
+});
+
+socket.on('promptDiscoveryRoll', (data) => {
+     showDiceRollModal({
+        title: data.title,
+        dice: data.dice,
+        bonus: 0,
+        targetAC: 'N/A',
+        onConfirm: () => socket.emit('playerAction', { action: 'resolveDiscoveryRoll' })
+    });
+});
+socket.on('discoveryRollResolved', (payload) => {
+    if (get('dice-roll-modal').classList.contains('hidden')) return; // Modal was closed
+    payload.outcome = `You rolled a ${payload.roll}!`;
+    payload.targetAC = 'N/A';
+    payload.bonus = 0;
+    payload.total = payload.roll;
+    displayDiceRollResult(payload);
+});
+
+
+socket.on('promptSkillCheckRoll', (data) => {
+    showDiceRollModal({
+        title: data.title,
+        description: data.description,
+        dice: data.dice,
+        bonus: data.bonus,
+        targetAC: data.targetAC,
+        hasAdvantage: data.hasAdvantage,
+        relevantItemName: data.relevantItemName,
+        onConfirm: () => socket.emit('playerAction', {
+            action: 'resolveSkillCheckRoll',
+            hasAdvantage: data.hasAdvantage,
+            relevantItemName: data.relevantItemName,
+            interactionData: data.interactionData
+        })
+    });
+});
+
+socket.on('attackResolved', (payload) => {
+    // REFACTORED: This handler's only job is to display the attack roll result.
+    // The server will send a separate 'promptDamageRoll' event if it was a hit.
+    if (payload.rollerId === myId && !get('dice-roll-modal').classList.contains('hidden')) {
+        displayDiceRollResult(payload);
+    }
+});
+
+// NEW ROBUST HANDLER: The server explicitly tells us when to roll for damage.
+socket.on('promptDamageRoll', (data) => {
+    // We add a delay to allow the player to see the "Hit!" result from the attack roll modal.
+    setTimeout(() => {
+        showDiceRollModal({
+            title: data.title,
+            dice: data.dice,
+            bonus: data.bonus,
+            targetAC: 'N/A', // Target AC is not relevant for damage
+            onConfirm: () => socket.emit('playerAction', { action: 'resolveDamageRoll' })
+        });
+    }, 1500); // 1.5 second delay for better pacing
+});
+
+socket.on('damageResolved', (payload) => {
+    // REFACTORED: Use the new, clean function for displaying damage results.
+    if (payload.rollerId === myId && !get('dice-roll-modal').classList.contains('hidden')) {
+        displayDamageResult(payload);
+    }
+});
+
+socket.on('skillCheckResolved', (payload) => {
+     if (payload.rollerId === myId && !get('dice-roll-modal').classList.contains('hidden')) {
+        displayDiceRollResult(payload);
+    }
+});
+
+socket.on('diceRollError', () => {
+    showToast("There was an error processing your roll. Please try again.", "error");
+    if(!get('dice-roll-modal').classList.contains('hidden')){
+        get('dice-roll-modal').classList.add('hidden');
+    }
+});
+
+// Voice Chat Signaling
+socket.on('existing-voice-chatters', (chatterIds) => {
+    chatterIds.forEach(id => voiceChatManager.addPeer(id, true));
+});
+socket.on('new-voice-chatter', (chatterId) => {
+    voiceChatManager.addPeer(chatterId, false);
+});
+socket.on('voice-chatter-left', (chatterId) => {
+    voiceChatManager.removePeer(chatterId);
+});
+socket.on('webrtc-signal', (payload) => {
+    voiceChatManager.handleSignal(payload);
+});
+
+
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', initializeUI);
+window.addEventListener('resize', renderUI);

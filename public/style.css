@@ -308,12 +308,30 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     color: var(--color-text-secondary);
 }
 .card-type { font-size: 0.8rem; font-weight: bold; text-align: right; color: var(--color-special); font-family: var(--font-title); }
+
+/* Rarity & Spell Level Styling */
 .card.rarity-uncommon { border-color: var(--rarity-uncommon); }
 .card.rarity-rare { border-color: var(--rarity-rare); }
 .card.rarity-legendary { border-color: var(--rarity-legendary); }
-.card.rarity-uncommon:hover, .card.rarity-uncommon.is-selected { box-shadow: 0 0 12px var(--rarity-uncommon); }
-.card.rarity-rare:hover, .card.rarity-rare.is-selected { box-shadow: 0 0 12px var(--rarity-rare); }
-.card.rarity-legendary:hover, .card.rarity-legendary.is-selected { box-shadow: 0 0 12px var(--rarity-legendary); }
+.card.rarity-rare .card-title { color: #8ab4f8; }
+.card.rarity-legendary .card-title { color: #c58af9; }
+.card.rarity-uncommon:hover, .card.rarity-uncommon.is-selected { box-shadow: 0 0 12px var(--rarity-uncommon); transform: translateY(-5px) scale(1.02); }
+.card.rarity-rare:hover, .card.rarity-rare.is-selected { box-shadow: 0 0 15px var(--rarity-rare); transform: translateY(-5px) scale(1.02); }
+.card.rarity-legendary { animation: legendary-glow 2.5s infinite ease-in-out; }
+.card.rarity-legendary:hover, .card.rarity-legendary.is-selected { animation-play-state: paused; box-shadow: 0 0 20px var(--rarity-legendary), 0 0 8px #fcf5ff; transform: translateY(-5px) scale(1.02); }
+
+@keyframes legendary-glow {
+    0%, 100% { box-shadow: 0 0 8px var(--rarity-legendary), inset 0 0 4px rgba(138, 74, 158, 0.3); }
+    50% { box-shadow: 0 0 16px var(--rarity-legendary), inset 0 0 8px rgba(138, 74, 158, 0.6); }
+}
+
+.card.spell-level-1 .card-header { background-color: rgba(0,0,0,0.25); }
+.card.spell-level-2 { box-shadow: inset 0 0 8px rgba(92, 153, 214, 0.4); }
+.card.spell-level-2 .card-title { color: #a3c5e3; }
+.card.spell-level-3 { position: relative; box-shadow: inset 0 0 12px rgba(240, 180, 41, 0.5); border-color: var(--color-special-dark); }
+.card.spell-level-3::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: inherit; background-image: linear-gradient(30deg, rgba(255, 255, 255, 0.05) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.05) 87.5%, rgba(255, 255, 255, 0.05)), linear-gradient(150deg, rgba(255, 255, 255, 0.05) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.05) 87.5%, rgba(255, 255, 255, 0.05)); background-size: 30px 50px; background-repeat: repeat; opacity: 0.5; pointer-events: none; z-index: 0; }
+.card.spell-level-3 .card-title { color: var(--color-special); text-shadow: 0 0 5px var(--color-glow); }
+
 .card-bonuses-grid { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; min-height: 20px; }
 .card-bonus .material-symbols-outlined { font-size: 1rem; vertical-align: bottom; margin-right: 0.2rem; }
 .icon-damage { color: var(--stat-color-damage); } .icon-shield { color: var(--stat-color-shield); } .icon-ap { color: var(--stat-color-ap); } .icon-hp { color: var(--stat-color-hp); }
@@ -376,7 +394,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .chat-preview-sender { font-weight: bold; color: var(--color-special); }
 
 /* --- 11. WORLD EVENTS & TURN POPUP --- */
-.world-event-banner { display: flex; align-items: center; gap: 1rem; background-color: var(--color-dm); color: white; padding: 0.5rem 1rem; border-radius: 4px; border: 1px solid #6a347d; flex-shrink: 0; }
+.world-event-banner { position: relative; z-index: 5; display: flex; align-items: center; gap: 1rem; background-color: var(--color-dm); color: white; padding: 0.5rem 1rem; border-radius: 4px; border: 1px solid #6a347d; flex-shrink: 0; }
 .world-event-text strong { display: block; font-family: var(--font-title); }
 .world-event-duration { margin-left: auto; font-weight: bold; }
 .your-turn-popup { position: fixed; top: 15%; left: 50%; transform: translate(-50%, -50%); background-color: var(--color-special); color: var(--color-border); padding: 1rem 3rem; font-family: var(--font-title); font-size: 3rem; border-radius: 8px; z-index: 2000; box-shadow: var(--shadow-lg); animation: turn-popup-anim 2.5s ease-out forwards; }
@@ -685,7 +703,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 /* --- 16. RESPONSIVE & MOBILE STYLES --- */
 @media (max-width: 1023px) {
     .game-area-desktop { display: none; }
-    .game-area-mobile { display: flex; flex-direction: column; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; position: relative; }
+    .game-area-mobile { display: flex; flex-direction: column; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; position: relative; }
     .game-area { padding: 0; }
     
     .mobile-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 2px solid var(--color-border); flex-shrink: 0; background-color: var(--color-bg-dark); position: relative; z-index: 10; }

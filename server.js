@@ -153,6 +153,7 @@ class GameManager {
             usedAbilityThisTurn: false,
             isResolvingDiscovery: false,
             discoveryItem: null,
+            pendingAttack: null, // ROBUSTNESS: Store attack context
         };
     }
 
@@ -926,6 +927,10 @@ class GameManager {
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
         if (!target) return;
         
+        // ROBUSTNESS: Store the context of the attack on the player object
+        // This prevents issues if the client state is lost between roll prompts.
+        player.pendingAttack = { weaponId: cardId, targetId: targetId };
+        
         const bonus = player.stats.hitBonus || 0;
         
         socket.emit('promptAttackRoll', {
@@ -933,8 +938,6 @@ class GameManager {
             dice: '1d20',
             bonus,
             targetAC: target.requiredRollToHit,
-            weaponId: cardId,
-            targetId: targetId
         });
         
         this.emitGameState(room.id);
@@ -945,7 +948,9 @@ class GameManager {
      * @returns {{weapon: object, target: object}|null}
      */
     _getAttackContext(room, player, payload) {
-        const { weaponId, targetId } = payload;
+        // ROBUSTNESS: Prioritize server-side pending attack data over client payload
+        const { weaponId, targetId } = player.pendingAttack || payload;
+        
         const target = room.gameState.board.monsters.find(m => m.id === targetId);
         const weapon = weaponId === 'unarmed' 
             ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
@@ -967,7 +972,7 @@ class GameManager {
                 return;
             }
             const { weapon, target } = context;
-
+    
             const hitBonus = player.stats.hitBonus || 0;
             const hitRoll = this.rollDice('1d20');
             const totalRoll = hitRoll + hitBonus;
@@ -976,29 +981,34 @@ class GameManager {
                 room.gameState.partyHope = Math.min(10, room.gameState.partyHope + 1);
                 room.chatLog.push({ type: 'system-good', text: `${player.name} landed a CRITICAL HIT! Party Hope increases!`, timestamp: Date.now() });
             }
-
+    
             const outcome = totalRoll >= target.requiredRollToHit ? 'Hit' : 'Miss';
             
+            // REFACTORED: This payload is now just for the attack outcome.
             const resultPayload = {
                 rollerId: player.id, rollerName: player.name, targetName: target.name,
                 weaponName: weapon.name,
                 roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
                 outcome,
-                damageRollData: null, // To be populated on hit
             };
             
+            // Inform the entire room about the result of the attack roll.
+            io.to(room.id).emit('attackResolved', resultPayload);
+    
             if (outcome === 'Hit') {
-                resultPayload.damageRollData = {
+                // If it's a hit, directly command the attacker's client to prompt for a damage roll.
+                // This is more robust than relying on client-side timeouts.
+                const damageRollData = {
                     title: `Damage Roll vs ${target.name}`,
                     dice: weapon.effect.dice,
                     bonus: player.stats.damageBonus || 0,
-                    weaponId: payload.weaponId,
-                    targetId: payload.targetId
                 };
+                socket.emit('promptDamageRoll', damageRollData);
+            } else {
+                // If it's a miss, the attack sequence is over. Clean up the pending state.
+                delete player.pendingAttack; 
             }
-
-            io.to(room.id).emit('attackResolved', resultPayload);
-
+    
             this.emitGameState(room.id);
         } catch (e) {
             console.error("Critical error in resolveAttackRoll:", e);
@@ -1041,6 +1051,7 @@ class GameManager {
             };
 
             io.to(room.id).emit('damageResolved', damagePayload);
+            delete player.pendingAttack; // ROBUSTNESS: Clear pending attack after damage is resolved.
             this.emitGameState(room.id);
         } catch (e) {
             console.error("Critical error in resolveDamageRoll:", e);
