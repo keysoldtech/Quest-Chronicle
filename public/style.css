@@ -241,8 +241,66 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .attackable-weapon { cursor: pointer; border-color: var(--color-primary-hover); } 
 .attackable-weapon:hover { border-color: var(--color-primary); }
 .attackable-weapon.selected-weapon { border-color: var(--color-special); transform: translateY(-5px) scale(1.02); box-shadow: 0 0 10px var(--color-special), var(--shadow-lg); }
-.card-action-buttons { position: absolute; bottom: 0; left: 0; width: 100%; z-index: 2; display: flex; justify-content: center; gap: 0.5rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; padding-bottom: 0.5rem; }
-.card:hover .card-action-buttons { opacity: 1; pointer-events: auto; }
+
+.card.is-selected {
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 0 10px var(--color-special), var(--shadow-lg);
+    border-color: var(--color-special);
+}
+
+/* Card Action Buttons - Redesigned */
+.card-action-buttons {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    pointer-events: none;
+    padding-bottom: 0.5rem;
+    background: linear-gradient(to top, rgba(40, 32, 26, 0.9) 0%, rgba(0, 0, 0, 0) 100%);
+    padding-top: 2rem;
+}
+
+/* Visibility Rule */
+.card:hover .card-action-buttons,
+.card.is-selected .card-action-buttons {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.card-action-buttons .btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    background-color: var(--color-surface);
+    border: 2px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+    color: var(--color-text-secondary);
+}
+.card-action-buttons .btn:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-special);
+    background-color: var(--color-surface-light);
+}
+
+.card-action-buttons .btn .btn-text {
+    display: none; /* Hide text, icon only */
+}
+
+.card-action-buttons .btn .material-symbols-outlined {
+    display: inline-block;
+    font-variation-settings: 'FILL' 1;
+    font-size: 1.25rem;
+    vertical-align: middle;
+}
+
+
 .card-header { padding: 0.75rem; } .card-content { padding: 0 .75rem; flex-grow: 1; overflow-y: auto; } .card-footer { padding: 0.75rem; background-color: rgba(0,0,0,0.2); border-top: 1px solid var(--color-border); }
 .card-title { font-family: var(--font-title); font-size: 1.1rem; color: var(--color-text-primary); }
 .card-effect { 
@@ -253,9 +311,9 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .card.rarity-uncommon { border-color: var(--rarity-uncommon); }
 .card.rarity-rare { border-color: var(--rarity-rare); }
 .card.rarity-legendary { border-color: var(--rarity-legendary); }
-.card.rarity-uncommon:hover { box-shadow: 0 0 12px var(--rarity-uncommon); }
-.card.rarity-rare:hover { box-shadow: 0 0 12px var(--rarity-rare); }
-.card.rarity-legendary:hover { box-shadow: 0 0 12px var(--rarity-legendary); }
+.card.rarity-uncommon:hover, .card.rarity-uncommon.is-selected { box-shadow: 0 0 12px var(--rarity-uncommon); }
+.card.rarity-rare:hover, .card.rarity-rare.is-selected { box-shadow: 0 0 12px var(--rarity-rare); }
+.card.rarity-legendary:hover, .card.rarity-legendary.is-selected { box-shadow: 0 0 12px var(--rarity-legendary); }
 .card-bonuses-grid { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; min-height: 20px; }
 .card-bonus .material-symbols-outlined { font-size: 1rem; vertical-align: bottom; margin-right: 0.2rem; }
 .icon-damage { color: var(--stat-color-damage); } .icon-shield { color: var(--stat-color-shield); } .icon-ap { color: var(--stat-color-ap); } .icon-hp { color: var(--stat-color-hp); }
@@ -300,15 +358,6 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 #hand-equipment-container .equipped-items-container .card-container-row,
 #hand-equipment-container .player-hand-container {
     align-items: center; /* Vertically center cards if they don't fill the space */
-}
-
-/* Card Action Button Icon/Text Fix */
-.card-action-buttons .btn .material-symbols-outlined {
-    display: none;
-    vertical-align: middle;
-}
-.card-action-buttons .btn .btn-text {
-    vertical-align: middle;
 }
 
 
@@ -436,9 +485,31 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 }
 .card-inspector-content {
     animation: modal-fade-in 0.3s ease-out forwards;
+    position: relative; /* Needed for absolute positioning of close button */
 }
 .card-inspector-content .card-effect {
     -webkit-line-clamp: 10; /* Allow more lines in inspector */
+}
+.card-inspector-close-btn {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background-color: var(--color-bg-dark);
+    border: 2px solid var(--color-border);
+    color: var(--color-text-secondary);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+}
+.card-inspector-close-btn:hover {
+    background-color: var(--color-secondary);
+    color: var(--color-text-primary);
 }
 
 
@@ -657,30 +728,6 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     .card { width: 140px; min-width: 140px; height: 196px; }
     .card:hover { transform: none; box-shadow: var(--shadow-sm); }
     .card-title { font-size: 0.9rem; } .card-effect { font-size: 0.7rem; } .card-type { font-size: 0.7rem; }
-
-    .card .card-action-buttons {
-        opacity: 1;
-        pointer-events: auto;
-        background: linear-gradient(to top, rgba(40,32,26,0.9) 0%, rgba(0,0,0,0) 100%);
-        padding-top: 2rem;
-        bottom: 0;
-    }
-    
-    .card-action-buttons .btn {
-        width: 32px;
-        height: 32px;
-        padding: 0;
-        border-radius: 50%;
-    }
-
-    .card-action-buttons .btn .btn-text {
-        display: none;
-    }
-    .card-action-buttons .btn .material-symbols-outlined {
-        display: inline-block;
-        font-variation-settings: 'FILL' 1;
-        font-size: 1.25rem;
-    }
 
     .discard-choice-container, .discovery-choice-container { flex-direction: column; align-items: center; }
 }

@@ -1181,7 +1181,16 @@ class GameManager {
                  }
                  break;
             case 'utility':
-                 this._logSpellCast(room, player, card, null, 'creating a utility effect');
+                 // NEW: Generate descriptive log message for utility spells
+                 let utilityEffectText = 'creating a utility effect';
+                 if (effect.utilityType === 'field_effect') {
+                     utilityEffectText = `creates a ${card.name.toLowerCase()}`;
+                 } else if (effect.utilityType === 'repair') {
+                     utilityEffectText = `repairs a nearby object`;
+                 } else if (effect.utilityType === 'light') {
+                     utilityEffectText = `creates a source of light`;
+                 }
+                 this._logSpellCast(room, player, card, null, utilityEffectText);
                  break;
             default:
                 this._logSpellCast(room, player, card, (targetPlayer || targetMonster), 'with an unknown effect');
