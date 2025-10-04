@@ -18,6 +18,7 @@ const clientState = {
     diceAnimationInterval: null,
     rollModalCloseTimeout: null,
     rollResponseTimeout: null,
+    pendingDamageRoll: null, // Stores data for damage roll to prevent race conditions
     helpModalPage: 0,
     isFirstTurnTutorialActive: false,
     hasSeenSkillChallengePrompt: false, // Prevents re-opening the modal
@@ -727,35 +728,70 @@ function renderHandAndEquipment(player, isMyTurn) {
 function renderGameLog(log, gameStarted) {
     const logContainers = queryAll('[data-container="game-log"]');
     logContainers.forEach(container => {
-        if(!container) return;
-        
+        if (!container) return;
+
         const shouldScroll = Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) < 5;
+
         const logHTML = log.map(entry => {
-            let content = '';
             const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const timeSpan = gameStarted ? `<span class="chat-timestamp">${time}</span>` : '';
+            const timeSpan = gameStarted ? `<span class="log-timestamp">${time}</span>` : '';
+            
+            let icon = 'info';
+            let contentHTML = '';
+            let attributedTo = entry.playerName || entry.rollerName || '';
+
             switch (entry.type) {
                 case 'chat':
+                    icon = 'chat';
                     const senderClass = entry.playerId === myId ? 'self' : '';
-                    const channelClass = entry.channel.toLowerCase();
-                    content = `${timeSpan} <span class="channel ${channelClass}">[${entry.channel}]</span> <span class="sender ${senderClass}">${entry.playerName}:</span> ${entry.text}`;
+                    contentHTML = `<div class="log-sender ${senderClass}">${entry.playerName}:</div> <div class="log-text">${entry.text}</div>`;
                     if (entry.channel === 'party' && entry.playerId !== myId) {
                         showChatPreview(entry.playerName, entry.text);
                     }
                     break;
                 case 'narrative':
-                     content = `<span class="narrative-text">"${entry.text}"</span> - <span class="narrative-sender">${entry.playerName}</span>`;
-                     break;
-                default:
-                    content = entry.text || '';
+                    icon = 'auto_stories';
+                    contentHTML = `<div class="log-text narrative">"${entry.text}"</div>`;
+                    break;
+                case 'combat':
+                case 'combat-hit':
+                    icon = 'swords';
+                    contentHTML = `<div class="log-text">${entry.text}</div>`;
+                    break;
+                case 'system-good':
+                case 'action-good':
+                    icon = 'star';
+                    contentHTML = `<div class="log-text">${entry.text}</div>`;
+                    break;
+                 case 'system-bad':
+                    icon = 'warning';
+                    contentHTML = `<div class="log-text">${entry.text}</div>`;
+                    break;
+                default: // system, dm, action
+                    icon = 'info';
+                    contentHTML = `<div class="log-text">${entry.text}</div>`;
+                    break;
             }
-            return `<div class="chat-message ${entry.type}">${content}</div>`;
+
+            const attributionSpan = attributedTo ? `<span class="log-attribution">${attributedTo}</span>` : '';
+            
+            return `<div class="log-entry ${entry.type}">
+                        <div class="log-meta">
+                            ${timeSpan}
+                            ${attributionSpan}
+                        </div>
+                        <div class="log-content">
+                            <span class="material-symbols-outlined log-icon">${icon}</span>
+                            ${contentHTML}
+                        </div>
+                    </div>`;
         }).join('');
-        
+
         container.innerHTML = logHTML;
         if (shouldScroll) container.scrollTop = container.scrollHeight;
     });
 }
+
 
 // --- 3. UI INITIALIZATION & EVENT LISTENERS ---
 function initializeUI() {
@@ -1427,13 +1463,16 @@ function handleDiceRoll() {
     const container = get('dice-display-container');
     const svg = container.querySelector('.die-svg');
     svg.classList.add('rolling');
-
-    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+    
     const [, sides] = clientState.currentRollData.dice.split('d').map(Number);
+    
+    // Start visual animation immediately
+    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
     clientState.diceAnimationInterval = setInterval(() => {
         svg.querySelector('.die-text').textContent = Math.floor(Math.random() * sides) + 1;
     }, 80);
     
+    // Send request to server
     const payload = { ...clientState.currentRollData };
     delete payload.type; delete payload.title; delete payload.description;
 
@@ -1442,27 +1481,38 @@ function handleDiceRoll() {
     if (action) socket.emit('playerAction', { action, ...payload });
 }
 
-function animateDiceResult(container, sides, finalRoll, callback) {
-    if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-    const svg = container.querySelector('.die-svg');
-    if (!svg) { if (callback) callback(); return; }
-
-    const slowdownSteps = [80, 100, 120, 150, 200, 280, 380, 500, 650]; 
-    let currentStep = 0;
-    function nextStep() {
-        if (currentStep < slowdownSteps.length) {
-            svg.querySelector('.die-text').textContent = Math.floor(Math.random() * sides) + 1;
-            setTimeout(nextStep, slowdownSteps[currentStep]);
-            currentStep++;
-        } else {
-            svg.classList.remove('rolling');
-            container.innerHTML = createDieSVG(sides, finalRoll);
-            container.querySelector('.die-svg').classList.add('result-glow');
-            if (callback) callback();
+/**
+ * NEW: A promise-based dice animation that visually "lands" on the final number.
+ * @returns {Promise<void>} A promise that resolves when the animation is complete.
+ */
+function animateDiceResult(container, sides, finalRoll) {
+    return new Promise(resolve => {
+        if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
+        const svg = container.querySelector('.die-svg');
+        if (!svg) {
+            resolve();
+            return;
         }
-    }
-    nextStep();
+
+        const slowdownSteps = [80, 100, 120, 150, 200, 280, 380, 500, 650]; 
+        let currentStep = 0;
+
+        function nextStep() {
+            if (currentStep < slowdownSteps.length) {
+                svg.querySelector('.die-text').textContent = Math.floor(Math.random() * sides) + 1;
+                setTimeout(nextStep, slowdownSteps[currentStep]);
+                currentStep++;
+            } else {
+                svg.classList.remove('rolling');
+                container.innerHTML = createDieSVG(sides, finalRoll);
+                container.querySelector('.die-svg').classList.add('result-glow');
+                resolve();
+            }
+        }
+        nextStep();
+    });
 }
+
 
 // --- 6. SOCKET EVENT HANDLERS ---
 function initializeSocketListeners() {
@@ -1506,77 +1556,98 @@ function initializeSocketListeners() {
     });
     
     socket.on('promptAttackRoll', (data) => showDiceRollModal(data, 'attack'));
-    socket.on('promptDamageRoll', (data) => showDiceRollModal(data, 'damage'));
+    
+    // NEW: Store pending damage roll to prevent race conditions.
+    socket.on('promptDamageRoll', (data) => {
+        clientState.pendingDamageRoll = data;
+    });
+    
     socket.on('promptDiscoveryRoll', (data) => showDiceRollModal(data, 'discovery'));
     socket.on('promptSkillCheckRoll', (data) => showDiceRollModal(data, 'skillcheck'));
     
-    socket.on('attackResolved', (result) => {
+    socket.on('attackResolved', async (result) => {
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        animateDiceResult(get('dice-display-container'), 20, result.roll, () => {
-            const resultLine = get('dice-roll-result-line');
-            resultLine.textContent = `${result.outcome.toUpperCase()}!`;
-            resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
-            get('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
-            get('dice-roll-result-container').classList.remove('hidden');
-            if (result.outcome === 'Miss') {
-                get('dice-roll-confirm-btn').classList.add('hidden');
-                get('dice-roll-close-btn').classList.remove('hidden');
-                if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-                clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 3000);
-            }
-        });
-    });
+        
+        await animateDiceResult(get('dice-display-container'), 20, result.roll);
+        
+        const resultLine = get('dice-roll-result-line');
+        resultLine.textContent = `${result.outcome.toUpperCase()}!`;
+        resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
+        get('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
+        get('dice-roll-result-container').classList.remove('hidden');
+        get('dice-roll-confirm-btn').classList.add('hidden');
 
-    socket.on('damageResolved', (result) => {
-        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        const sides = result.damageDice.split('d')[1];
-        animateDiceResult(get('dice-display-container'), sides, result.damageRoll, () => {
-            get('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
-            get('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
-            get('dice-roll-result-container').classList.remove('hidden');
-            get('dice-roll-confirm-btn').classList.add('hidden');
-            get('dice-roll-close-btn').classList.remove('hidden');
-            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 3000);
-            const targetCard = document.querySelector(`.card[data-monster-id="${result.targetId}"]`);
-            if (targetCard) {
-                targetCard.classList.add('shake');
-                setTimeout(() => targetCard.classList.remove('shake'), 820);
-            }
-        });
-    });
-    
-     socket.on('discoveryRollResolved', (result) => {
-        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        animateDiceResult(get('dice-display-container'), 20, result.roll, () => {
-            let fortuneText = 'A decent find.';
-            if (result.roll <= 10) fortuneText = 'A common find.';
-            else if (result.roll <= 15) fortuneText = 'An uncommon find!';
-            else if (result.roll <= 19) fortuneText = 'A rare find!';
-            else fortuneText = 'A legendary find!';
-            get('dice-roll-result-line').textContent = fortuneText;
-            get('dice-roll-details').textContent = `You rolled a ${result.roll}.`;
-            get('dice-roll-result-container').classList.remove('hidden');
-            get('dice-roll-confirm-btn').classList.add('hidden');
+        if (result.outcome === 'Miss') {
             get('dice-roll-close-btn').classList.remove('hidden');
             if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
             clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 2000);
-        });
+        } else { // It was a Hit!
+            await new Promise(res => setTimeout(res, 1000)); // Wait for player to see the "Hit!"
+            if (clientState.pendingDamageRoll) {
+                showDiceRollModal(clientState.pendingDamageRoll, 'damage');
+                clientState.pendingDamageRoll = null; // Consume it
+            } else {
+                get('dice-roll-modal').classList.add('hidden'); // Failsafe
+            }
+        }
     });
 
-    socket.on('skillCheckResolved', (result) => {
+    socket.on('damageResolved', async (result) => {
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        animateDiceResult(get('dice-display-container'), 20, result.roll, () => {
-            const resultLine = get('dice-roll-result-line');
-            resultLine.textContent = `${result.outcome.toUpperCase()}!`;
-            resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
-            get('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
-            get('dice-roll-result-container').classList.remove('hidden');
-            get('dice-roll-confirm-btn').classList.add('hidden');
-            get('dice-roll-close-btn').classList.remove('hidden');
-            if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 3000);
-        });
+        const sides = result.damageDice.split('d')[1];
+        
+        await animateDiceResult(get('dice-display-container'), sides, result.damageRoll);
+        
+        get('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
+        get('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
+        get('dice-roll-result-container').classList.remove('hidden');
+        get('dice-roll-confirm-btn').classList.add('hidden');
+        get('dice-roll-close-btn').classList.remove('hidden');
+        
+        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+        clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 2500);
+
+        const targetCard = document.querySelector(`.card[data-monster-id="${result.targetId}"]`);
+        if (targetCard) {
+            targetCard.classList.add('shake');
+            setTimeout(() => targetCard.classList.remove('shake'), 820);
+        }
+    });
+    
+     socket.on('discoveryRollResolved', async (result) => {
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        await animateDiceResult(get('dice-display-container'), 20, result.roll);
+        
+        let fortuneText = 'A decent find.';
+        if (result.roll <= 10) fortuneText = 'A common find.';
+        else if (result.roll <= 15) fortuneText = 'An uncommon find!';
+        else if (result.roll <= 19) fortuneText = 'A rare find!';
+        else fortuneText = 'A legendary find!';
+        
+        get('dice-roll-result-line').textContent = fortuneText;
+        get('dice-roll-details').textContent = `You rolled a ${result.roll}.`;
+        get('dice-roll-result-container').classList.remove('hidden');
+        get('dice-roll-confirm-btn').classList.add('hidden');
+        get('dice-roll-close-btn').classList.remove('hidden');
+        
+        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+        clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 2000);
+    });
+
+    socket.on('skillCheckResolved', async (result) => {
+        if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
+        await animateDiceResult(get('dice-display-container'), 20, result.roll);
+        
+        const resultLine = get('dice-roll-result-line');
+        resultLine.textContent = `${result.outcome.toUpperCase()}!`;
+        resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
+        get('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
+        get('dice-roll-result-container').classList.remove('hidden');
+        get('dice-roll-confirm-btn').classList.add('hidden');
+        get('dice-roll-close-btn').classList.remove('hidden');
+        
+        if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
+        clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 2500);
     });
 
     socket.on('promptIndividualDiscovery', (data) => showDiscoveryModal(data));
