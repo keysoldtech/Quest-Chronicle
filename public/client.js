@@ -19,7 +19,6 @@ const clientState = {
     diceAnimationInterval: null,
     rollModalCloseTimeout: null,
     rollResponseTimeout: null,
-    pendingDamageRoll: null, // Stores data for damage roll to prevent race conditions
     helpModalPage: 0,
     isFirstTurnTutorialActive: false,
     hasSeenSkillChallengePrompt: false, // Prevents re-opening the modal
@@ -708,8 +707,8 @@ function renderHandAndEquipment(player, isMyTurn) {
     equippedContainers.forEach(c => c.innerHTML = '');
 
     player.hand.forEach(card => {
-        const isEquippable = (card.type === 'Weapon' || card.type === 'Armor');
-        const isConsumable = card.type === 'Consumable';
+        const isEquippable = (card.type === 'Weapon' || card.type === 'Armor') && isMyTurn;
+        const isConsumable = (card.type === 'Consumable' || card.category === 'Consumable') && isMyTurn;
         const isCastable = card.type === 'Spell' && isMyTurn;
         const cardEl = createCardElement(card, { isEquippable, isConsumable, isCastable, isDiscardable: isMyTurn });
         
@@ -1645,15 +1644,10 @@ function displayDiceRollResult({ rollerName, roll, bonus, total, targetAC, outco
     if (dieSvg) dieSvg.classList.add('result-glow');
     setTimeout(() => dieSvg?.classList.remove('result-glow'), 1000);
 
-    // If the attack hits AND a damage roll is pending, automatically trigger it.
-    if (outcome.toLowerCase() === 'hit' && clientState.pendingDamageRoll) {
-        clientState.rollModalCloseTimeout = setTimeout(() => {
-            get('dice-roll-modal').classList.add('hidden');
-            showDiceRollModal(clientState.pendingDamageRoll);
-            clientState.pendingDamageRoll = null;
-        }, 1500);
-    } else {
-        clientState.rollModalCloseTimeout = setTimeout(() => {
+    const isAttack = type === 'attack';
+    // Don't auto-close for successful attacks, wait for the damage roll prompt.
+    if (!isAttack || outcome.toLowerCase() !== 'hit') {
+         clientState.rollModalCloseTimeout = setTimeout(() => {
              get('dice-roll-modal').classList.add('hidden');
         }, wasDefeated ? 3000 : 2000); // Longer delay if monster was defeated
     }
@@ -1712,22 +1706,23 @@ function setupSocketListeners() {
 
     socket.on('attackResolved', (payload) => {
         displayDiceRollResult({ ...payload, type: 'attack' });
-    });
-
-    socket.on('promptDamageRoll', ({ title, dice, bonus, weaponId, targetId }) => {
-        const damageRollData = {
-            title,
-            description: 'Roll to see how much damage you deal!',
-            dice,
-            bonus,
-            targetAC: 'N/A', // No target for damage roll
-            onConfirm: () => socket.emit('playerAction', { action: 'resolveDamageRoll', weaponId, targetId })
-        };
-        // If the attack roll modal is still open, queue the damage roll. Otherwise, show it immediately.
-        if (!get('dice-roll-modal').classList.contains('hidden')) {
-            clientState.pendingDamageRoll = damageRollData;
-        } else {
-            showDiceRollModal(damageRollData);
+        
+        // If the roll was a hit and it's my roll, the server included data for the next step.
+        if (payload.rollerId === myId && payload.damageRollData) {
+            const damageModalData = {
+                ...payload.damageRollData,
+                onConfirm: () => socket.emit('playerAction', { 
+                    action: 'resolveDamageRoll', 
+                    weaponId: payload.damageRollData.weaponId, 
+                    targetId: payload.damageRollData.targetId 
+                })
+            };
+            // Set a timeout to transition from the attack roll result to the damage roll prompt.
+            clientState.rollModalCloseTimeout = setTimeout(() => {
+                get('dice-roll-modal').classList.add('hidden');
+                // Use another short timeout to ensure the old modal is gone before the new one appears.
+                setTimeout(() => showDiceRollModal(damageModalData), 200);
+            }, 1500);
         }
     });
     

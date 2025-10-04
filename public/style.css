@@ -414,7 +414,8 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 
 /* --- 12. MODAL & OVERLAY STYLES --- */
 .modal-overlay, .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 1001; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
-.modal-content { background-color: var(--color-surface); border: 2px solid var(--color-border); border-radius: 8px; box-shadow: var(--shadow-lg); max-width: 500px; width: 90%; padding: 1.5rem; animation: modal-fade-in 0.3s ease-out forwards; }
+.modal-content { background-color: var(--color-surface); border: 2px solid var(--color-border); border-radius: 8px; box-shadow: var(--shadow-lg); max-width: 500px; width: 90%; padding: 1.5rem; animation: modal-fade-in 0.3s ease-out forwards; text-align: center; }
+.modal-content .input-field { width: 100%; margin: 1rem 0; text-align: left; } /* Center text box */
 @keyframes modal-fade-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 .modal-actions { display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem; }
 
@@ -707,11 +708,12 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     #mobile-top-drawer { position: absolute; top: 52px; left: 0; width: 100%; z-index: 9; background-color: var(--color-surface); border-bottom: 2px solid var(--color-border); padding: 1rem; display: flex; justify-content: space-around; align-items: center; gap: 1rem; transform: translateY(-150%); transition: transform 0.3s ease-in-out; }
     #mobile-top-drawer.active { transform: translateY(0); }
 
-    .mobile-main { flex-grow: 1; overflow-y: auto; }
-    .mobile-screen { display: none; padding: 0.5rem; flex-direction: column; gap: 0.5rem; }
+    .mobile-main { flex-grow: 1; overflow: hidden; position: relative; }
+    .mobile-screen { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: none; padding: 0.5rem; flex-direction: column; gap: 0.5rem; overflow-y: auto; }
     .mobile-screen.active { display: flex; }
     .mobile-panel { flex-shrink: 0; }
-
+    
+    #mobile-screen-log { overflow-y: hidden; }
     #mobile-screen-log .panel { flex: 1; display: flex; flex-direction: column; }
     #mobile-screen-log .chat-header { margin-bottom: 0.5rem; flex-shrink: 0; }
     #mobile-screen-log .chat-header .panel-header { margin: 0; border: none; }

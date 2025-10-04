@@ -984,19 +984,20 @@ class GameManager {
                 weaponName: weapon.name,
                 roll: hitRoll, bonus: hitBonus, total: totalRoll, targetAC: target.requiredRollToHit,
                 outcome,
+                damageRollData: null, // To be populated on hit
             };
             
-            io.to(room.id).emit('attackResolved', resultPayload);
-
             if (outcome === 'Hit') {
-                socket.emit('promptDamageRoll', {
+                resultPayload.damageRollData = {
                     title: `Damage Roll vs ${target.name}`,
                     dice: weapon.effect.dice,
                     bonus: player.stats.damageBonus || 0,
                     weaponId: payload.weaponId,
                     targetId: payload.targetId
-                });
+                };
             }
+
+            io.to(room.id).emit('attackResolved', resultPayload);
 
             this.emitGameState(room.id);
         } catch (e) {
@@ -1074,25 +1075,54 @@ class GameManager {
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
         if (cardIndex === -1) return;
         const card = player.hand[cardIndex];
-
+    
         if (player.currentAp < card.apCost) return socket.emit('actionError', "Not enough AP.");
         player.currentAp -= card.apCost;
         
         player.hand.splice(cardIndex, 1);
         room.gameState.discardPile.push(card);
-
+    
         const targetPlayer = room.players[targetId];
         const targetMonster = room.gameState.board.monsters.find(m => m.id === targetId);
-
-        if (card.effect.type === 'heal' && targetPlayer) {
-            const healing = this.rollDice(card.effect.dice);
-            targetPlayer.stats.currentHp = Math.min(targetPlayer.stats.maxHp, targetPlayer.stats.currentHp + healing);
-            room.chatLog.push({ type: 'system-good', text: `${player.name} uses ${card.name} on ${targetPlayer.name}, healing for ${healing} HP.`, timestamp: Date.now() });
-        } else if (card.effect.type === 'damage' && targetMonster) {
-            const damage = this.rollDice(card.effect.dice);
-            targetMonster.currentHp -= damage;
-            room.chatLog.push({ type: 'combat-hit', text: `${player.name} uses ${card.name} on ${targetMonster.name}, dealing ${damage} damage.`, timestamp: Date.now() });
-            if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, targetMonster.id, player.id);
+        const { effect } = card;
+    
+        switch (effect.type) {
+            case 'heal':
+                if (targetPlayer) {
+                    const healing = this.rollDice(effect.dice);
+                    targetPlayer.stats.currentHp = Math.min(targetPlayer.stats.maxHp, targetPlayer.stats.currentHp + healing);
+                    room.chatLog.push({ type: 'system-good', text: `${player.name} uses ${card.name} on ${targetPlayer.name}, healing for ${healing} HP.`, timestamp: Date.now() });
+                }
+                break;
+            case 'damage':
+                if (targetMonster) {
+                    const damage = this.rollDice(effect.dice);
+                    targetMonster.currentHp -= damage;
+                    room.chatLog.push({ type: 'combat-hit', text: `${player.name} uses ${card.name} on ${targetMonster.name}, dealing ${damage} damage.`, timestamp: Date.now() });
+                    if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, targetMonster.id, player.id);
+                }
+                break;
+            case 'buff':
+                if (targetPlayer) {
+                    const newEffect = {
+                        name: card.name,
+                        duration: effect.duration || 2,
+                        bonuses: effect.bonuses || {},
+                        status: effect.status || null,
+                    };
+                    targetPlayer.statusEffects.push(newEffect);
+                    targetPlayer.stats = this.calculatePlayerStats(targetPlayer, room.gameState.partyHope);
+                    room.chatLog.push({ type: 'system-good', text: `${player.name} uses ${card.name} on ${targetPlayer.name}, granting a boon.`, timestamp: Date.now() });
+                }
+                break;
+            case 'utility':
+                if (targetPlayer && effect.status === 'Cure Poison') {
+                    targetPlayer.statusEffects = targetPlayer.statusEffects.filter(e => e.name !== 'Poisoned');
+                    room.chatLog.push({ type: 'system-good', text: `${player.name} uses ${card.name} to cure ${targetPlayer.name}'s poison.`, timestamp: Date.now() });
+                } else {
+                    room.chatLog.push({ type: 'system', text: `${player.name} uses ${card.name}.`, timestamp: Date.now() });
+                }
+                break;
         }
         
         this.emitGameState(room.id);
