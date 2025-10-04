@@ -265,6 +265,16 @@ function createCardElement(card, options = {}) {
         </div>
     `;
 
+    // Add info button to inspect the card
+    const infoBtn = document.createElement('button');
+    infoBtn.className = 'card-info-btn';
+    infoBtn.innerHTML = `<span class="material-symbols-outlined">info</span>`;
+    infoBtn.onclick = (e) => {
+        e.stopPropagation();
+        showCardInspectorModal(card.id);
+    };
+    cardDiv.appendChild(infoBtn);
+
     const actionContainer = document.createElement('div');
     actionContainer.className = 'card-action-buttons';
 
@@ -720,7 +730,8 @@ function renderHandAndEquipment(player, isMyTurn) {
 
     Object.values(player.equipment).forEach(item => {
         if (item) {
-            const isAttackable = item.type === 'Weapon' && isMyTurn;
+            // FIX: Made the check for 'weapon' case-insensitive to fix a bug where weapons couldn't be selected.
+            const isAttackable = item.type.toLowerCase() === 'weapon' && isMyTurn;
             const cardEl = createCardElement(item, { isAttackable });
             if (isAttackable) {
                 cardEl.onclick = () => {
@@ -1001,6 +1012,10 @@ function initializeGameUIListeners() {
     get('skill-challenge-decline-btn').addEventListener('click', () => {
          get('skill-challenge-modal').classList.add('hidden');
      });
+
+    get('card-inspector-modal').addEventListener('click', () => {
+        get('card-inspector-modal').classList.add('hidden');
+    });
 }
 
 // --- 4. MODAL & POPUP LOGIC ---
@@ -1242,6 +1257,27 @@ function showSkillChallengeModal(challenge, title) {
     get('skill-challenge-modal').classList.remove('hidden');
 }
 
+function showCardInspectorModal(cardId) {
+    const allCards = [
+        ...Object.values(currentRoomState.players).flatMap(p => [...p.hand, ...Object.values(p.equipment)]),
+        ...currentRoomState.gameState.board.monsters,
+        ...currentRoomState.gameState.board.environment,
+        ...currentRoomState.gameState.lootPool,
+    ];
+    const cardData = allCards.find(c => c && c.id === cardId);
+
+    if (cardData) {
+        const modal = get('card-inspector-modal');
+        const content = get('card-inspector-content');
+        content.innerHTML = ''; // Clear previous card
+        const largeCard = createCardElement(cardData);
+        largeCard.style.width = '350px';
+        largeCard.style.height = '490px';
+        content.appendChild(largeCard);
+        modal.classList.remove('hidden');
+    }
+}
+
 const helpPages = [
     { title: "Welcome to Quest & Chronicle", content: `<p>This is a cooperative dungeon-crawling adventure. Your goal is to survive the challenges thrown at you by the Dungeon Master (DM) and emerge victorious.</p><h3>Game Flow</h3><ul><li>The game proceeds in rounds, starting with the DM.</li><li>On your turn, you'll use Action Points (AP) to perform actions like attacking, using items, or resting.</li><li>The DM will spawn monsters and trigger world events to challenge the party.</li></ul>` },
     { title: "Your Character Stats", content: `<p>Your character's abilities are defined by several key stats:</p><ul><li><b>HP (Health Points):</b> Your life force. If it reaches 0, you are Downed.</li><li><b>AP (Action Points):</b> The resource you spend each turn to take actions.</li><li><b>Damage Bonus:</b> Added to your damage rolls when you hit with a weapon.</li><li><b>Shield Bonus:</b> Your defense. Monsters must roll higher than 10 + your Shield Bonus to hit you.</li><li><b>Hit Bonus:</b> Added to your d20 roll when you attack. This can be affected by Party Hope.</li><li><b>Core Stats (STR, DEX, etc.):</b> These influence class abilities and may be used for skill checks.</li></ul>` },
@@ -1324,8 +1360,11 @@ function showDiceRollModal(data, type) {
 
     if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
     clientState.rollResponseTimeout = setTimeout(() => {
+        const modal = get('dice-roll-modal');
         if (!modal.classList.contains('hidden')) {
-            console.warn("Dice roll timed out waiting for server response.");
+            showToast('Server did not respond to the roll. Please try again.', 'error');
+            modal.classList.add('hidden');
+            if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         }
     }, 8000);
 }

@@ -216,21 +216,16 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .card:hover { transform: translateY(-5px) scale(1.02); box-shadow: var(--shadow-lg); }
 .card.targetable { cursor: crosshair; border-color: var(--color-danger); }
 .card.targetable:hover { box-shadow: 0 0 10px var(--color-danger); }
-.attackable-weapon { cursor: pointer; } .attackable-weapon:hover { border-color: var(--color-primary); }
+.attackable-weapon { cursor: pointer; border-color: var(--color-primary-hover); } 
+.attackable-weapon:hover { border-color: var(--color-primary); }
 .attackable-weapon.selected-weapon { border-color: var(--color-special); transform: translateY(-5px) scale(1.02); box-shadow: 0 0 10px var(--color-special), var(--shadow-lg); }
 .card-action-buttons { position: absolute; bottom: 0.5rem; left: 0; width: 100%; z-index: 2; display: flex; justify-content: center; gap: 0.5rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
 .card:hover .card-action-buttons { opacity: 1; pointer-events: auto; }
-.card-header { padding: 0.75rem; } .card-content { padding: 0 .75rem; flex-grow: 1; } .card-footer { padding: 0.75rem; background-color: rgba(0,0,0,0.2); border-top: 1px solid var(--color-border); }
+.card-header { padding: 0.75rem; } .card-content { padding: 0 .75rem; flex-grow: 1; overflow-y: auto; } .card-footer { padding: 0.75rem; background-color: rgba(0,0,0,0.2); border-top: 1px solid var(--color-border); }
 .card-title { font-family: var(--font-title); font-size: 1.1rem; color: var(--color-text-primary); }
 .card-effect { 
     font-size: 0.8rem; 
     color: var(--color-text-secondary);
-    /* Multi-line truncation to guarantee stats are visible */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2; /* number of lines to show */
-    -webkit-box-orient: vertical;
 }
 .card-type { font-size: 0.8rem; font-weight: bold; text-align: right; color: var(--color-special); font-family: var(--font-title); }
 .card.rarity-uncommon { border-color: var(--rarity-uncommon); }
@@ -245,6 +240,35 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .icon-str { color: var(--stat-color-str); } .icon-dex { color: var(--stat-color-dex); } .icon-con { color: var(--stat-color-con); }
 .card.shake { animation: shake 0.82s cubic-bezier(.36,.07,.19,.97) both; }
 @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+
+/* Card Info Button */
+.card-info-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0,0,0,0.5);
+    color: var(--color-text-secondary);
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.2s, background-color 0.2s;
+    z-index: 5;
+}
+.card-info-btn:hover {
+    opacity: 1;
+    background: rgba(0,0,0,0.8);
+    color: var(--color-special);
+}
+.card-info-btn .material-symbols-outlined {
+    font-size: 18px;
+}
+
 
 /* --- 10. INFO PANEL, ACTION BAR, CHAT --- */
 .info-tabs-panel { display: flex; flex-direction: column; }
@@ -333,6 +357,18 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 }
 .card.empty { justify-content: center; align-items: center; text-align: center; }
 .empty-slot-text { color: var(--color-text-secondary); }
+
+/* Card Inspector Modal */
+#card-inspector-modal {
+    cursor: pointer;
+}
+.card-inspector-content {
+    animation: modal-fade-in 0.3s ease-out forwards;
+}
+.card-inspector-content .card-effect {
+    -webkit-line-clamp: 10; /* Allow more lines in inspector */
+}
+
 
 /* --- 13. DICE ROLL MODAL --- */
 .dice-roll-content { text-align: center; max-width: 350px; }

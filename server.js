@@ -940,20 +940,33 @@ class GameManager {
         this.emitGameState(room.id);
     }
     
+    /**
+     * Helper to reliably find the weapon and target for an attack.
+     * @returns {{weapon: object, target: object}|null}
+     */
+    _getAttackContext(room, player, payload) {
+        const { weaponId, targetId } = payload;
+        const target = room.gameState.board.monsters.find(m => m.id === targetId);
+        const weapon = weaponId === 'unarmed' 
+            ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
+            : Object.values(player.equipment).find(e => e && e.id === weaponId);
+
+        if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
+            console.error(`Error finding attack context: Invalid target or weapon data.`, { weaponId, targetId });
+            return null;
+        }
+        return { weapon, target };
+    }
+
     resolveAttackRoll(room, player, payload, socket) {
         try {
-            const { weaponId, targetId } = payload;
-            const target = room.gameState.board.monsters.find(m => m.id === targetId);
-            const weapon = weaponId === 'unarmed' 
-                ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-                : Object.values(player.equipment).find(e => e && e.id === weaponId);
-
-            if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
-                console.error(`Error resolving attack roll: Invalid target or weapon data.`, { weaponId, targetId });
+            const context = this._getAttackContext(room, player, payload);
+            if (!context) {
                 socket.emit('actionError', 'A server error occurred with weapon/target data.');
                 socket.emit('diceRollError');
                 return;
             }
+            const { weapon, target } = context;
 
             const hitBonus = player.stats.hitBonus || 0;
             const hitRoll = this.rollDice('1d20');
@@ -980,8 +993,8 @@ class GameManager {
                     title: `Damage Roll vs ${target.name}`,
                     dice: weapon.effect.dice,
                     bonus: player.stats.damageBonus || 0,
-                    weaponId,
-                    targetId
+                    weaponId: payload.weaponId,
+                    targetId: payload.targetId
                 });
             }
 
@@ -995,18 +1008,13 @@ class GameManager {
     
     resolveDamageRoll(room, player, payload, socket) {
         try {
-            const { weaponId, targetId } = payload;
-            const weapon = weaponId === 'unarmed' 
-                ? { id: 'unarmed', name: 'Fists', effect: { dice: '1d4' } }
-                : Object.values(player.equipment).find(e => e && e.id === weaponId);
-            const target = room.gameState.board.monsters.find(m => m.id === targetId);
-
-            if (!target || !weapon || !weapon.effect || !weapon.effect.dice) {
-                console.error(`Error resolving damage roll: Invalid target or weapon data.`, { weaponId, targetId });
+            const context = this._getAttackContext(room, player, payload);
+             if (!context) {
                 socket.emit('actionError', 'A server error occurred with weapon/target data.');
                 socket.emit('diceRollError');
                 return;
             }
+            const { weapon, target } = context;
 
             const damageRoll = this.rollDice(weapon.effect.dice);
             const damageBonus = player.stats.damageBonus || 0;
@@ -1140,7 +1148,7 @@ class GameManager {
                 } else if (targetMonster) {
                     targetMonster.currentHp -= damage;
                     this._logSpellCast(room, player, card, targetMonster, `dealing ${damage} damage`);
-                    if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, monster.id, player.id);
+                    if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, targetMonster.id, player.id);
                 }
                 break;
             case 'buff':
@@ -1507,41 +1515,60 @@ class GameManager {
         this.emitGameState(room.id);
     }
 
+    /**
+     * Helper to find all relevant data for a skill check, regardless of its source.
+     * @returns {{challengeDetails: object, stageDetails: object, sourceCard: object|null}|null}
+     */
+    _getSkillCheckContext(room, payload) {
+        const { interactionData } = payload;
+        const { skillChallenge } = room.gameState;
+
+        let challengeDetails, stageDetails, sourceCard = null;
+
+        if (interactionData) { // Check comes from a card interaction
+            const allBoardCards = [...room.gameState.board.monsters, ...room.gameState.board.environment];
+            sourceCard = allBoardCards.find(c => c.id === interactionData.cardId);
+            if (sourceCard) {
+                stageDetails = sourceCard.skillInteractions?.find(i => i.name === interactionData.interactionName);
+                challengeDetails = stageDetails; // For interactions, the stage and challenge are the same
+            }
+        } else { // Check comes from the global skill challenge (e.g., world event)
+            challengeDetails = skillChallenge.details;
+            if (challengeDetails) {
+                stageDetails = challengeDetails.eventType === 'multi_stage_skill_challenge' 
+                    ? challengeDetails.stages[skillChallenge.currentStage] 
+                    : challengeDetails;
+                if (skillChallenge.targetId) {
+                    sourceCard = [...room.gameState.board.monsters, ...room.gameState.board.environment].find(c => c.id === skillChallenge.targetId);
+                }
+            }
+        }
+        
+        if (!stageDetails) {
+            console.error("Could not find stage details for skill check.", { payload, skillChallengeState: skillChallenge });
+            return null;
+        }
+
+        return { challengeDetails, stageDetails, sourceCard };
+    }
+
     resolveSkillCheckRoll(room, player, payload, socket) {
         try {
-            const challenge = room.gameState.skillChallenge.details;
+            const context = this._getSkillCheckContext(room, payload);
+            if (!context) {
+                socket.emit('actionError', 'A server error occurred during a skill check.');
+                socket.emit('diceRollError');
+                return;
+            }
+            const { challengeDetails, stageDetails, sourceCard } = context;
+
             let roll;
-            const advantageText = '';
-            
             if (payload.hasAdvantage) {
                 const [roll1, roll2] = [this.rollDice('1d20'), this.rollDice('1d20')];
                 roll = Math.max(roll1, roll2);
                 room.chatLog.push({ type: 'system-good', text: `${player.name} uses their ${payload.relevantItemName} to gain advantage! (Rolled ${roll1}, ${roll2})`, timestamp: Date.now() });
             } else {
                 roll = this.rollDice('1d20');
-            }
-            
-            const isInteraction = payload.interactionData;
-            const sourceCardId = isInteraction ? payload.interactionData.cardId : room.gameState.skillChallenge.targetId;
-            const currentStageIndex = room.gameState.skillChallenge.currentStage;
-            let sourceCard = null;
-            if (sourceCardId) {
-                sourceCard = [...room.gameState.board.monsters, ...room.gameState.board.environment].find(c => c.id === sourceCardId);
-            }
-
-            let stageDetails = null;
-            if (isInteraction && sourceCard) {
-                stageDetails = sourceCard.skillInteractions?.find(i => i.name === payload.interactionData.interactionName);
-            } else if (challenge) {
-                stageDetails = challenge.eventType === 'multi_stage_skill_challenge' 
-                    ? challenge.stages[currentStageIndex] 
-                    : challenge;
-            }
-            
-            if (!stageDetails) {
-                console.error("Could not find stage details for skill check.", { payload });
-                socket.emit('diceRollError');
-                return;
             }
 
             const statBonus = player.stats[stageDetails.skill] || 0;
@@ -1550,25 +1577,23 @@ class GameManager {
             
             const effect = outcome === 'Success' ? stageDetails.success : stageDetails.failure;
 
-            room.chatLog.push({ type: 'system', text: `${player.name} attempts ${challenge?.name || stageDetails.name}... (Roll: ${roll}${advantageText} + ${statBonus} ${stageDetails.skill.toUpperCase()} = ${total} vs DC ${stageDetails.dc}) - ${outcome}!`, timestamp: Date.now() });
-            if (effect.text) room.chatLog.push({ type: outcome === 'Success' ? 'system-good' : 'system-bad', text: effect.text, timestamp: Date.now() });
+            room.chatLog.push({ type: 'system', text: `${player.name} attempts ${challengeDetails?.name || stageDetails.name}... (Roll: ${roll} + ${statBonus} ${stageDetails.skill.toUpperCase()} = ${total} vs DC ${stageDetails.dc}) - ${outcome}!`, timestamp: Date.now() });
+            if (effect?.text) room.chatLog.push({ type: outcome === 'Success' ? 'system-good' : 'system-bad', text: effect.text, timestamp: Date.now() });
 
             // Apply effect
-            this.applySkillCheckEffect(room, player, effect, sourceCardId);
+            this.applySkillCheckEffect(room, player, effect, sourceCard?.id);
 
             // Handle multi-stage progression
-            const isMultiStage = challenge && challenge.eventType === 'multi_stage_skill_challenge';
-            if (isMultiStage && outcome === 'Success' && currentStageIndex < challenge.stages.length - 1) {
+            const isMultiStage = challengeDetails && challengeDetails.eventType === 'multi_stage_skill_challenge';
+            if (isMultiStage && outcome === 'Success' && room.gameState.skillChallenge.currentStage < challengeDetails.stages.length - 1) {
                 room.gameState.skillChallenge.currentStage++;
-                const nextStage = challenge.stages[room.gameState.skillChallenge.currentStage];
+                const nextStage = challengeDetails.stages[room.gameState.skillChallenge.currentStage];
                 room.chatLog.push({ type: 'system', text: `Next stage: ${nextStage.description}`, timestamp: Date.now() });
-                // Re-trigger the check for the next stage automatically
                 this.resolveSkillCheck(room, player, { apCost: 0 }, socket);
             } else {
-                // End the challenge
                 room.gameState.skillChallenge.isActive = false;
                 room.gameState.skillChallenge.details = null;
-                if (challenge && challenge.type === 'World Event') room.gameState.worldEvents.currentEvent = null;
+                if (challengeDetails && challengeDetails.type === 'World Event') room.gameState.worldEvents.currentEvent = null;
             }
 
             io.to(room.id).emit('skillCheckResolved', { rollerId: player.id, rollerName: player.name, roll, bonus: statBonus, total, targetAC: stageDetails.dc, outcome });
