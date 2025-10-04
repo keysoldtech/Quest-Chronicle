@@ -521,9 +521,27 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     text-align: left;
 }
 #help-close-btn {
+    background: none;
+    border: none;
     color: var(--color-text-secondary);
-    text-shadow: none;
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    width: 32px;
+    height: 32px;
 }
+#help-close-btn::before {
+    content: '\e5cd'; /* Material Symbols 'close' icon */
+    font-family: 'Material Symbols Outlined';
+    font-size: 28px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: color 0.2s;
+}
+#help-close-btn:hover::before { color: var(--color-special); }
+
 .help-content {
     flex-grow: 1;
     overflow-y: auto;
@@ -589,7 +607,7 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     .game-area-mobile { display: flex; flex-direction: column; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; position: relative; }
     .game-area { padding: 0; }
     
-    .mobile-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 2px solid var(--color-border); flex-shrink: 0; background-color: var(--color-bg-dark); }
+    .mobile-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 2px solid var(--color-border); flex-shrink: 0; background-color: var(--color-bg-dark); position: relative; z-index: 10; }
     .mobile-turn-info { display: flex; flex-direction: column; align-items: flex-start; }
     .mobile-turn-info .turn-indicator-font { font-size: 1rem; }
     .mobile-turn-info .turn-counter.mobile { font-size: 0.8rem; padding: 0; background: none; border: none; }
@@ -602,9 +620,12 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 
     .mobile-header-right-cluster { display: flex; align-items: center; gap: 0.5rem; }
     
-    #mobile-info-dropdown { position: absolute; top: 52px; right: 0.5rem; z-index: 1001; background-color: var(--color-surface-light); border: 1px solid var(--color-border); border-radius: 4px; box-shadow: var(--shadow-lg); padding: 0.5rem; display: flex; flex-direction: column; gap: 0.75rem; align-items: center; }
-    #mobile-info-dropdown .party-hope-meter-container.mobile { width: 100%; }
-    #mobile-info-dropdown .party-hope-meter.mobile { width: 100%; }
+    .mobile-drawer-toggle { position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%); width: 32px; height: 16px; background-color: var(--color-surface); border: 2px solid var(--color-border); border-top: none; border-radius: 0 0 8px 8px; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+    .mobile-drawer-toggle .material-symbols-outlined { color: var(--color-text-secondary); transition: transform 0.3s ease; }
+    .mobile-drawer-toggle.toggled .material-symbols-outlined { transform: rotate(180deg); }
+
+    #mobile-top-drawer { position: absolute; top: 52px; left: 0; width: 100%; z-index: 9; background-color: var(--color-surface); border-bottom: 2px solid var(--color-border); padding: 1rem; display: flex; justify-content: space-around; align-items: center; gap: 1rem; transform: translateY(-150%); transition: transform 0.3s ease-in-out; }
+    #mobile-top-drawer.active { transform: translateY(0); }
 
     .mobile-main { flex-grow: 1; overflow-y: auto; }
     .mobile-screen { display: none; padding: 0.5rem; flex-direction: column; gap: 0.5rem; }
@@ -652,12 +673,12 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
         display: inline-block;
         font-variation-settings: 'FILL' 1;
     }
-    .card-action-buttons .btn[data-action="equip"]::before { content: '\\e86a'; } /* checkroom */
-    .card-action-buttons .btn[data-action="useConsumable"]::before { content: '\\ea4a'; } /* science */
-    .card-action-buttons .btn[data-action="castSpell"]::before { content: '\\e659'; } /* auto_awesome */
-    .card-action-buttons .btn[data-action="claimLoot"]::before { content: '\\e8b1'; } /* redeem */
-    .card-action-buttons .btn[data-action="interact"]::before { content: '\\e913'; } /* touch_app */
-    .card-action-buttons .btn[data-action="discardCard"]::before { content: '\\e872'; } /* delete */
+    .card-action-buttons .btn[data-action="equip"]::before { content: '\e86a'; } /* checkroom */
+    .card-action-buttons .btn[data-action="useConsumable"]::before { content: '\ea4a'; } /* science */
+    .card-action-buttons .btn[data-action="castSpell"]::before { content: '\e659'; } /* auto_awesome */
+    .card-action-buttons .btn[data-action="claimLoot"]::before { content: '\e8b1'; } /* redeem */
+    .card-action-buttons .btn[data-action="interact"]::before { content: '\e913'; } /* touch_app */
+    .card-action-buttons .btn[data-action="discardCard"]::before { content: '\e872'; } /* delete */
 
     .discard-choice-container, .discovery-choice-container { flex-direction: column; align-items: center; }
 }

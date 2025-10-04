@@ -1002,30 +1002,32 @@ function initializeGameUIListeners() {
     get('chat-toggle-btn').addEventListener('click', () => get('chat-overlay').classList.toggle('hidden'));
     get('chat-close-btn').addEventListener('click', () => get('chat-overlay').classList.add('hidden'));
 
-    const menuToggleBtns = ['menu-toggle-btn', 'mobile-menu-toggle-btn'];
-    const menuDropdowns = ['menu-dropdown', 'mobile-menu-dropdown'];
-    menuToggleBtns.forEach(btnId => {
-        get(btnId).addEventListener('click', (e) => {
-            e.stopPropagation();
-            const dropdownId = btnId.replace('toggle-btn', 'dropdown');
-            const dropdown = get(dropdownId);
-            const isCurrentlyHidden = dropdown.classList.contains('hidden');
-            menuDropdowns.forEach(id => get(id).classList.add('hidden'));
-            if (isCurrentlyHidden) dropdown.classList.remove('hidden');
-        });
+    get('menu-toggle-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        get('menu-dropdown').classList.toggle('hidden');
     });
 
-    get('mobile-info-toggle-btn').addEventListener('click', (e) => {
+    get('mobile-menu-toggle-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        get('mobile-info-dropdown').classList.toggle('hidden');
+        get('mobile-menu-dropdown').classList.toggle('hidden');
+    });
+
+    get('mobile-drawer-toggle-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const btn = e.currentTarget;
+        const drawer = get('mobile-top-drawer');
+        btn.classList.toggle('toggled');
+        drawer.classList.toggle('active');
     });
 
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.header-menu')) {
-            menuDropdowns.forEach(id => get(id).classList.add('hidden'));
+            get('menu-dropdown').classList.add('hidden');
+            get('mobile-menu-dropdown').classList.add('hidden');
         }
-        if (!e.target.closest('#mobile-info-toggle-btn') && !e.target.closest('#mobile-info-dropdown')) {
-            get('mobile-info-dropdown').classList.add('hidden');
+        if (!e.target.closest('.mobile-header') && !e.target.closest('#mobile-top-drawer')) {
+            get('mobile-top-drawer').classList.remove('active');
+            get('mobile-drawer-toggle-btn').classList.remove('toggled');
         }
     });
 
