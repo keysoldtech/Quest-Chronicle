@@ -1470,7 +1470,7 @@ function animateDiceResult(container, sides, finalRoll, callback) {
         return;
     }
 
-    const slowdownSteps = [100, 150, 220, 300, 400, 550]; 
+    const slowdownSteps = [80, 100, 120, 150, 200, 280, 380, 500, 650]; 
     let currentStep = 0;
 
     function nextStep() {
