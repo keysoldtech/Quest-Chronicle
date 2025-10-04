@@ -557,10 +557,14 @@ function renderGameplayState(myPlayer, gameState) {
 
     const playerResources = queryAll('[data-container="player-resources"]');
     if (myPlayer.stats.maxHp > 0) {
-        const healthPercent = (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100;
+        const healthPercent = myPlayer.stats.maxHp > 0 ? (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100 : 0;
         queryAll('[data-container="player-health-bar"]').forEach(el => el.style.width = `${healthPercent}%`);
         queryAll('[data-container="player-health-text"]').forEach(el => el.textContent = `${myPlayer.stats.currentHp} / ${myPlayer.stats.maxHp}`);
-        queryAll('[data-container="ap-counter"]').forEach(el => el.innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`);
+
+        const apPercent = myPlayer.stats.maxAP > 0 ? (myPlayer.currentAp / myPlayer.stats.maxAP) * 100 : 0;
+        queryAll('[data-container="player-ap-bar"]').forEach(el => el.style.width = `${apPercent}%`);
+        queryAll('[data-container="player-ap-text"]').forEach(el => el.textContent = `${myPlayer.currentAp} / ${myPlayer.stats.maxAP}`);
+        
         playerResources.forEach(el => el.classList.remove('hidden'));
     } else {
         playerResources.forEach(el => el.classList.add('hidden'));

@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.1.0 - Major Bug Fixes</p>
+            <p class="build-number-font-menu">v9.1.2 - UI Polish & Fixes</p>
         </div>
     </div>
     
@@ -131,8 +131,8 @@
                             </div>
                         </div>
                         <div class="player-resources-container hidden" data-container="player-resources">
-                             <div class="player-health-bar-container">
-                                 <span class="material-symbols-outlined">favorite</span>
+                             <div class="resource-bar">
+                                 <span class="material-symbols-outlined resource-icon hp">favorite</span>
                                  <div class="progress-bar-wrapper">
                                      <div class="progress-bar health">
                                          <div class="progress-bar-fill" data-container="player-health-bar"></div>
@@ -140,12 +140,20 @@
                                      <span class="progress-bar-text" data-container="player-health-text"></span>
                                  </div>
                              </div>
-                             <p class="ap-counter" data-container="ap-counter"></p>
+                             <div class="resource-bar">
+                                 <span class="material-symbols-outlined resource-icon ap">bolt</span>
+                                 <div class="progress-bar-wrapper">
+                                     <div class="progress-bar ap">
+                                         <div class="progress-bar-fill" data-container="player-ap-bar"></div>
+                                     </div>
+                                     <span class="progress-bar-text" data-container="player-ap-text"></span>
+                                 </div>
+                             </div>
                         </div>
                          <p class="turn-counter">Round: <span data-container="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v9.1.0 - Major Bug Fixes</p>
+                        <p class="build-number-font">v9.1.2 - UI Polish & Fixes</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -238,16 +246,24 @@
                                 </div>
                             </div>
                             <div class="player-resources-container mobile hidden" data-container="player-resources">
-                                <div class="player-health-bar-container">
-                                    <span class="material-symbols-outlined">favorite</span>
-                                    <div class="progress-bar-wrapper">
-                                        <div class="progress-bar health">
-                                            <div class="progress-bar-fill" data-container="player-health-bar"></div>
-                                        </div>
-                                        <span class="progress-bar-text" data-container="player-health-text"></span>
-                                    </div>
-                                </div>
-                                <p class="ap-counter" data-container="ap-counter"></p>
+                                 <div class="resource-bar">
+                                     <span class="material-symbols-outlined resource-icon hp">favorite</span>
+                                     <div class="progress-bar-wrapper">
+                                         <div class="progress-bar health">
+                                             <div class="progress-bar-fill" data-container="player-health-bar"></div>
+                                         </div>
+                                         <span class="progress-bar-text" data-container="player-health-text"></span>
+                                     </div>
+                                 </div>
+                                 <div class="resource-bar">
+                                     <span class="material-symbols-outlined resource-icon ap">bolt</span>
+                                     <div class="progress-bar-wrapper">
+                                         <div class="progress-bar ap">
+                                             <div class="progress-bar-fill" data-container="player-ap-bar"></div>
+                                         </div>
+                                         <span class="progress-bar-text" data-container="player-ap-text"></span>
+                                     </div>
+                                 </div>
                             </div>
                         </div>
                         <div class="mobile-header-controls">
