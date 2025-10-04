@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v10.0.0 - Mobile UI Overhaul</p>
+            <p class="build-number-font-menu">v11.0.0 - Mobile Polish & Guide</p>
         </div>
     </div>
     
@@ -153,7 +153,7 @@
                          <p class="turn-counter">Round: <span data-container="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v10.0.0 - Mobile UI Overhaul</p>
+                        <p class="build-number-font">v11.0.0 - Mobile Polish & Guide</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -266,7 +266,6 @@
                         <div class="header-menu">
                             <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
                             <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
-                                <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
                                 <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Voice</button>
                                 <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
                                 <button id="mobile-leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
@@ -293,6 +292,7 @@
                         <span>CODE</span>
                         <p data-container="room-code">----</p>
                     </div>
+                    <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
                 </div>
 
                 <main class="mobile-main">
@@ -553,7 +553,7 @@
             <div class="modal-content help-modal-content">
                 <div class="help-header">
                     <h2 class="panel-header">Game Guide</h2>
-                    <button id="help-close-btn" class="btn btn-icon btn-sm" style="background: none; border: none; font-size: 1.5rem;">&times;</button>
+                    <button id="help-close-btn" class="btn btn-icon btn-sm" aria-label="Close Guide">&times;</button>
                 </div>
                 <div id="help-content" class="help-content">
                     <!-- Pages will be rendered here -->

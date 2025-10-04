@@ -1376,13 +1376,86 @@ function showCardInspectorModal(cardId) {
 }
 
 const helpPages = [
-    { title: "Welcome to Quest & Chronicle", content: `<p>This is a cooperative dungeon-crawling adventure. Your goal is to survive the challenges thrown at you by the Dungeon Master (DM) and emerge victorious.</p><h3>Game Flow</h3><ul><li>The game proceeds in rounds, starting with the DM.</li><li>On your turn, you'll use Action Points (AP) to perform actions like attacking, using items, or resting.</li><li>The DM will spawn monsters and trigger world events to challenge the party.</li></ul>` },
-    { title: "Your Character Stats", content: `<p>Your character's abilities are defined by several key stats:</p><ul><li><b>HP (Health Points):</b> Your life force. If it reaches 0, you are Downed.</li><li><b>AP (Action Points):</b> The resource you spend each turn to take actions.</li><li><b>Damage Bonus:</b> Added to your damage rolls when you hit with a weapon.</li><li><b>Shield Bonus:</b> Your defense. Monsters must roll higher than 10 + your Shield Bonus to hit you.</li><li><b>Hit Bonus:</b> Added to your d20 roll when you attack. This can be affected by Party Hope.</li><li><b>Core Stats (STR, DEX, etc.):</b> These influence class abilities and may be used for skill checks.</li></ul>` },
-    { title: "Common Actions", content: `<p>On your turn, you can spend AP on these actions from the action bar:</p><ul><li><b>Guard (1 AP):</b> Gain temporary Shield HP equal to your Shield Bonus. This lasts until the start of your next turn.</li><li><b>Respite (1 AP):</b> A quick breather. Heals you for a small amount (1d4).</li><li><b>Rest (2 AP):</b> A longer rest. Heals you based on your class's Health Dice.</li><li><b>Equip (1 AP):</b> From your hand, click the "Equip" button on a Weapon or Armor card.</li></ul><p>Attacking and using card abilities also cost AP, as listed on the card.</p>` },
-    { title: "Combat Explained", content: `<p>Combat is resolved with a two-step dice roll process.</p><h3>How to Attack</h3><ol><li><b>Select Weapon:</b> Click on one of your equipped weapons (including 'Unarmed Strike'). It will gain a golden border to show it's selected.</li><li><b>Select Target:</b> Click on a monster on the game board. This will open a prompt to describe your attack and confirm.</li></ol><h3>The Dice Roll</h3><ol><li><b>Roll to Hit:</b> You roll a 20-sided die (d20). The result is <b>(Your d20 Roll + Your Hit Bonus)</b>. If this total meets or exceeds the monster's Armor Class (AC), you hit!</li><li><b>Roll for Damage:</b> On a successful hit, you roll your weapon's damage dice. The total damage is <b>(Your Damage Roll + Your Damage Bonus)</b>.</li></ol>` },
-    { title: "The Party Hope System", content: `<p>The meter at the top of the screen represents your party's collective morale and resolve. It is a shared resource that reflects your successes and failures.</p><h3>Changing Hope</h3><ul><li><b style="color:var(--color-success)">Hope Increases:</b> Landing a critical hit (rolling a natural 20) or defeating a powerful Boss monster will raise the party's hope.</li><li><b style="color:var(--color-danger)">Hope Decreases:</b> When a hero is downed (reaches 0 HP), the party's hope falters.</li></ul><h3>Effects of Hope</h3><ul><li><b>Inspired (9-10 Hope):</b> Your confidence is soaring! The entire party gains a <b>+1 bonus to attack rolls</b>.</li><li><b>Despairing (0-2 Hope):</b> The situation is dire. The party suffers a <b>-1 penalty to attack rolls</b>.</li></ul>` },
-    { title: "Advanced Actions", content: `<p>The world of Quest & Chronicle is interactive. On your turn, you may see special action buttons appear on certain monster or environmental cards, allowing for creative strategies.</p><h3>Environmental Interactions</h3><p>Objects like a 'Crumbling Pillar' might appear on the board. You can spend AP to attempt a skill check (e.g., a Strength check to topple it), potentially dealing damage to all monsters or revealing a secret.</p><h3>Monster-Specific Checks</h3><p>Some creatures have unique weaknesses. You might see an option to 'Intimidate' a cowardly monster (a Charisma check) to frighten it, or 'Find Weakness' on a golem (an Intelligence check) to give your allies an advantage.</p><h3>Traps & Challenges</h3><p>Some challenges, like disarming a complex trap, may require multiple successful skill checks in a row. Be prepared!</p>` },
-    { title: "Items & Loot", content: `<p>Defeating monsters and overcoming challenges can reward the party with loot.</p><ul><li><b>Rarity:</b> Items can be Common, Uncommon (Green), Rare (Blue), or Legendary (Purple). Higher rarities provide better bonuses.</li><li><b>Claiming Loot:</b> When an item is discovered, it appears in the "Party Discoveries" tab. Any player can click "Claim" to assign it to a party member.</li><li><b>Individual Discovery:</b> Every 3 rounds, you'll get a personal chance to find a rare item and swap it with your currently equipped gear of the same type.</li></ul>` }
+    { 
+        title: "Welcome to Quest & Chronicle", 
+        content: `<p>This is a cooperative dungeon-crawling adventure. Your goal is to survive the challenges thrown at you by the Dungeon Master (DM) and emerge victorious.</p>
+                  <h3><span class="help-icon material-symbols-outlined">map</span>Game Flow</h3>
+                  <ul>
+                      <li>The game proceeds in rounds, starting with the DM.</li>
+                      <li>On your turn, you'll use <span class="help-keyword ap">Action Points (AP)</span> to perform actions like attacking, using items, or resting.</li>
+                      <li>The DM will spawn monsters and trigger world events to challenge the party.</li>
+                  </ul>` 
+    },
+    { 
+        title: "Your Character Stats", 
+        content: `<p>Your character's abilities are defined by several key stats:</p>
+                  <ul>
+                      <li><span class="help-icon material-symbols-outlined hp">favorite</span> <span class="help-keyword hp">HP (Health Points):</span> Your life force. If it reaches 0, you are Downed.</li>
+                      <li><span class="help-icon material-symbols-outlined ap">bolt</span> <span class="help-keyword ap">AP (Action Points):</span> The resource you spend each turn to take actions.</li>
+                      <li><span class="help-icon material-symbols-outlined damage">swords</span> <span class="help-keyword damage">Damage Bonus:</span> Added to your damage rolls when you hit with a weapon.</li>
+                      <li><span class="help-icon material-symbols-outlined shield">security</span> <span class="help-keyword shield">Shield Bonus:</span> Your defense. Monsters must roll higher than 10 + your Shield Bonus to hit you.</li>
+                      <li><span class="help-icon material-symbols-outlined hit">colorize</span> <span class="help-keyword hit">Hit Bonus:</span> Added to your d20 roll when you attack. This can be affected by Party Hope.</li>
+                      <li><span class="help-icon material-symbols-outlined core">psychology</span> <span class="help-keyword">Core Stats (STR, DEX, etc.):</span> These influence class abilities and may be used for skill checks.</li>
+                  </ul>` 
+    },
+    { 
+        title: "Common Actions", 
+        content: `<p>On your turn, you can spend AP on these actions from the action bar:</p>
+                  <ul>
+                      <li><span class="help-keyword action">Guard (1 AP):</span> Gain temporary <span class="help-keyword shield">Shield HP</span> equal to your Shield Bonus. This lasts until the start of your next turn.</li>
+                      <li><span class="help-keyword action">Respite (1 AP):</span> A quick breather. Heals you for a small amount (1d4).</li>
+                      <li><span class="help-keyword action">Rest (2 AP):</span> A longer rest. Heals you based on your class's Health Dice.</li>
+                      <li><span class="help-keyword action">Equip (1 AP):</span> From your hand, click the "Equip" button on a Weapon or Armor card.</li>
+                  </ul>
+                  <p>Attacking and using card abilities also cost AP, as listed on the card.</p>` 
+    },
+    { 
+        title: "Combat Explained", 
+        content: `<p>Combat is resolved with a two-step dice roll process.</p>
+                  <h3><span class="help-icon material-symbols-outlined">swords</span>How to Attack</h3>
+                  <ol>
+                      <li><b>Select Weapon:</b> Click on one of your equipped weapons (including 'Unarmed Strike'). It will gain a golden border to show it's selected.</li>
+                      <li><b>Select Target:</b> Click on a monster on the game board. This will open a prompt to describe your attack and confirm.</li>
+                  </ol>
+                  <h3><span class="help-icon material-symbols-outlined">casino</span>The Dice Roll</h3>
+                  <ol>
+                      <li><b>Roll to Hit:</b> You roll a 20-sided die (d20). The result is <span class="help-keyword hit">(Your d20 Roll + Your Hit Bonus)</span>. If this total meets or exceeds the monster's Armor Class (AC), you hit!</li>
+                      <li><b>Roll for Damage:</b> On a successful hit, you roll your weapon's damage dice. The total damage is <span class="help-keyword damage">(Your Damage Roll + Your Damage Bonus)</span>.</li>
+                  </ol>` 
+    },
+    { 
+        title: "The Party Hope System", 
+        content: `<p>The meter at the top of the screen represents your party's collective morale and resolve. It is a shared resource that reflects your successes and failures.</p>
+                  <h3><span class="help-icon material-symbols-outlined">group_add</span>Changing Hope</h3>
+                  <ul>
+                      <li><b class="help-keyword success">Hope Increases:</b> Landing a critical hit (rolling a natural 20) or defeating a powerful Boss monster will raise the party's hope.</li>
+                      <li><b class="help-keyword danger">Hope Decreases:</b> When a hero is downed (reaches 0 HP), the party's hope falters.</li>
+                  </ul>
+                  <h3><span class="help-icon material-symbols-outlined">auto_awesome</span>Effects of Hope</h3>
+                  <ul>
+                      <li><span class="help-keyword success">Inspired (9-10 Hope):</span> Your confidence is soaring! The entire party gains a <b class="help-keyword hit">+1 bonus to attack rolls</b>.</li>
+                      <li><span class="help-keyword danger">Despairing (0-2 Hope):</span> The situation is dire. The party suffers a <b class="help-keyword hit">-1 penalty to attack rolls</b>.</li>
+                  </ul>` 
+    },
+    { 
+        title: "Advanced Actions", 
+        content: `<p>The world of Quest & Chronicle is interactive. On your turn, you may see special action buttons appear on certain monster or environmental cards, allowing for creative strategies.</p>
+                  <h3><span class="help-icon material-symbols-outlined">nature</span>Environmental Interactions</h3>
+                  <p>Objects like a 'Crumbling Pillar' might appear on the board. You can spend AP to attempt a <span class="help-keyword">skill check</span> (e.g., a Strength check to topple it), potentially dealing damage to all monsters or revealing a secret.</p>
+                  <h3><span class="help-icon material-symbols-outlined">neurology</span>Monster-Specific Checks</h3>
+                  <p>Some creatures have unique weaknesses. You might see an option to 'Intimidate' a cowardly monster (a Charisma check) to frighten it, or 'Find Weakness' on a golem (an Intelligence check) to give your allies an advantage.</p>
+                  <h3><span class="help-icon material-symbols-outlined">crisis_alert</span>Traps & Challenges</h3>
+                  <p>Some challenges, like disarming a complex trap, may require multiple successful skill checks in a row. Be prepared!</p>` 
+    },
+    { 
+        title: "Items & Loot", 
+        content: `<p>Defeating monsters and overcoming challenges can reward the party with loot.</p>
+                  <ul>
+                      <li><b>Rarity:</b> Items can be Common, <span class="help-keyword uncommon">Uncommon</span>, <span class="help-keyword rare">Rare</span>, or <span class="help-keyword legendary">Legendary</span>. Higher rarities provide better bonuses.</li>
+                      <li><b>Claiming Loot:</b> When an item is discovered, it appears in the "Party Discoveries" tab. Any player can click "Claim" to assign it to a party member.</li>
+                      <li><b>Individual Discovery:</b> Every 3 rounds, you'll get a personal chance to find a rare item and swap it with your currently equipped gear of the same type.</li>
+                  </ul>` 
+    }
 ];
 
 function renderHelpPage() {
