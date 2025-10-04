@@ -46,6 +46,8 @@
         </div>
         <div class="pixel-art-container">
             <div class="pixel-knight"></div>
+            <div class="pixel-monster-slime"></div>
+            <div class="pixel-monster-bat"></div>
         </div>
         <div class="menu-container">
             <h1 class="game-title">Quest & Chronicle</h1>
@@ -312,64 +314,66 @@
 
                 <main class="mobile-main">
                     <div class="world-event-banner hidden" data-container="world-event-display"></div>
-                    <!-- Mobile Screen 1: Game (Board, Equipment, Hand, Actions) -->
-                    <div id="mobile-screen-game" class="mobile-screen active">
-                        <div class="panel mobile-panel">
-                            <h2 class="panel-header">Game Board</h2>
-                            <div class="card-container-row" data-container="board-cards"></div>
-                        </div>
-                        <div class="panel mobile-panel">
-                             <h2 class="panel-header">Your Equipment</h2>
-                             <div class="card-container-row" data-container="equipped-items"></div>
-                        </div>
-                        <div class="panel mobile-panel">
-                            <div class="player-hand-header">
-                                 <h2 class="panel-header">Your Hand</h2>
+                    <div class="mobile-screen-container">
+                        <!-- Mobile Screen 1: Game (Board, Equipment, Hand, Actions) -->
+                        <div id="mobile-screen-game" class="mobile-screen active">
+                            <div class="panel mobile-panel">
+                                <h2 class="panel-header">Game Board</h2>
+                                <div class="card-container-row" data-container="board-cards"></div>
                             </div>
-                            <div class="player-hand-container card-container-row" data-container="player-hand"></div>
-                        </div>
-                    </div>
-    
-                    <!-- Mobile Screen 2: Character (Stats, Class Selection) -->
-                    <div id="mobile-screen-character" class="mobile-screen">
-                        <!-- Content rendered by JS -->
-                    </div>
-    
-                    <!-- Mobile Screen 3: Party (Player List) -->
-                    <div id="mobile-screen-party" class="mobile-screen">
-                         <div class="panel mobile-panel">
-                            <h2 class="panel-header">Players</h2>
-                            <div class="lobby-settings-display hidden" data-container="game-lobby-settings"></div>
-                            <ul class="player-list" data-container="player-list"></ul>
-                             <div class="lobby-controls hidden" data-container="lobby-controls">
-                               <button class="btn btn-primary" data-container="start-game-btn" disabled>Start Game</button>
+                            <div class="panel mobile-panel">
+                                 <h2 class="panel-header">Your Equipment</h2>
+                                 <div class="card-container-row" data-container="equipped-items"></div>
+                            </div>
+                            <div class="panel mobile-panel">
+                                <div class="player-hand-header">
+                                     <h2 class="panel-header">Your Hand</h2>
+                                </div>
+                                <div class="player-hand-container card-container-row" data-container="player-hand"></div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- Mobile Screen 4: Info (World Events, Discoveries) -->
-                     <div id="mobile-screen-info" class="mobile-screen">
-                         <div class="panel mobile-panel">
-                            <h2 class="panel-header">Party Discoveries</h2>
-                            <div class="card-container-row" data-container="party-loot"></div>
+        
+                        <!-- Mobile Screen 2: Character (Stats, Class Selection) -->
+                        <div id="mobile-screen-character" class="mobile-screen">
+                            <!-- Content rendered by JS -->
                         </div>
-                    </div>
-    
-                    <!-- Mobile Screen 5: Log -->
-                    <div id="mobile-screen-log" class="mobile-screen">
-                        <div class="panel mobile-panel">
-                            <div class="chat-header">
-                                <h2 class="panel-header">Chat & Log</h2>
+        
+                        <!-- Mobile Screen 3: Party (Player List) -->
+                        <div id="mobile-screen-party" class="mobile-screen">
+                             <div class="panel mobile-panel">
+                                <h2 class="panel-header">Players</h2>
+                                <div class="lobby-settings-display hidden" data-container="game-lobby-settings"></div>
+                                <ul class="player-list" data-container="player-list"></ul>
+                                 <div class="lobby-controls hidden" data-container="lobby-controls">
+                                   <button class="btn btn-primary" data-container="start-game-btn" disabled>Start Game</button>
+                                </div>
                             </div>
-                            <div class="chat-log" data-container="game-log"></div>
-                            <form id="mobile-chat-form" class="chat-form">
-                                <select id="mobile-chat-channel" class="select-field">
-                                    <option value="game">Game</option>
-                                    <option value="party">Party</option>
-                                </select>
-                                <input type="text" id="mobile-chat-input" class="input-field" placeholder="Type..." autocomplete="off">
-                                <button type="submit" class="btn btn-sm btn-primary">Send</button>
-                            </form>
+                        </div>
+                        
+                        <!-- Mobile Screen 4: Info (World Events, Discoveries) -->
+                         <div id="mobile-screen-info" class="mobile-screen">
+                             <div class="panel mobile-panel">
+                                <h2 class="panel-header">Party Discoveries</h2>
+                                <div class="card-container-row" data-container="party-loot"></div>
+                            </div>
+                        </div>
+        
+                        <!-- Mobile Screen 5: Log -->
+                        <div id="mobile-screen-log" class="mobile-screen">
+                            <div class="panel mobile-panel">
+                                <div class="chat-header">
+                                    <h2 class="panel-header">Chat & Log</h2>
+                                </div>
+                                <div class="chat-log" data-container="game-log"></div>
+                                <form id="mobile-chat-form" class="chat-form">
+                                    <select id="mobile-chat-channel" class="select-field">
+                                        <option value="game">Game</option>
+                                        <option value="party">Party</option>
+                                    </select>
+                                    <input type="text" id="mobile-chat-input" class="input-field" placeholder="Type..." autocomplete="off">
+                                    <button type="submit" class="btn btn-sm btn-primary">Send</button>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 </main>

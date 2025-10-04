@@ -880,37 +880,30 @@ function initializeUI() {
 
 /**
  * Main handler for all clicks within the game area. Uses event delegation.
+ * This function is refactored to prioritize specific button clicks over general card selections,
+ * fixing issues on mobile where tapping buttons would be misinterpreted.
  */
 function handleGameAreaClick(e) {
     const cardElement = e.target.closest('.card');
+    if (!cardElement) return; // Exit if the click wasn't on a card at all
+
     const isMobile = !isDesktop();
-
-    // --- Mobile Card Selection Logic ---
-    if (isMobile && cardElement && cardElement.closest('.player-hand-container')) {
-         const cardId = cardElement.dataset.cardId;
-         // If clicking the already selected card, treat it as a deselect.
-         if (clientState.selectedHandCardId === cardId) {
-             clientState.selectedHandCardId = null;
-         } else {
-             clientState.selectedHandCardId = cardId;
-         }
-         renderUI(); // Re-render to show/hide buttons
-         // Stop further processing to prevent other actions firing on select.
-         return;
-    }
-
-    // --- Delegated Button Actions ---
     const button = e.target.closest('button');
+
+    // 1. PRIORITIZE ALL BUTTON CLICKS WITHIN A CARD
     if (button) {
-        if (button.classList.contains('card-info-btn') && cardElement) {
-            e.stopPropagation();
+        // Stop propagation immediately to prevent the card selection logic from firing.
+        e.stopPropagation(); 
+        
+        // A. Handle Info Button
+        if (button.classList.contains('card-info-btn')) {
             showCardInspectorModal(cardElement.dataset.cardId);
-            return;
+            return; // Action handled
         }
 
+        // B. Handle Action Buttons (Use, Discard, Equip, etc.)
         const action = button.dataset.action;
-        if (action && cardElement) {
-            e.stopPropagation();
+        if (action) {
             const cardId = cardElement.dataset.cardId;
             const myPlayer = currentRoomState.players[myId];
             if (!myPlayer) return;
@@ -942,14 +935,22 @@ function handleGameAreaClick(e) {
                     socket.emit('playerAction', { action: 'discardCard', cardId });
                     break;
             }
-            clientState.selectedHandCardId = null; // Deselect card after action
-            return;
+            clientState.selectedHandCardId = null; // Deselect card after an action is taken
+            renderUI(); // Re-render to remove selection highlight/buttons
+            return; // Action handled
         }
     }
-    
-    if (!cardElement) return;
 
-    // --- Direct Card Click Actions (Attack/Target) ---
+    // 2. HANDLE MOBILE CARD SELECTION (only if no button was clicked)
+    if (isMobile && cardElement.closest('.player-hand-container')) {
+         const cardId = cardElement.dataset.cardId;
+         // If clicking the already selected card, treat it as a deselect.
+         clientState.selectedHandCardId = (clientState.selectedHandCardId === cardId) ? null : cardId;
+         renderUI(); // Re-render to show/hide buttons
+         return; // Action handled
+    }
+
+    // 3. HANDLE OTHER CARD CLICKS (ATTACKING, etc.)
     const myPlayer = currentRoomState.players[myId];
     if (!myPlayer) return;
     const isMyTurn = currentRoomState.gameState.turnOrder[currentRoomState.gameState.currentPlayerIndex] === myPlayer.id && !myPlayer.isDowned;
@@ -982,11 +983,11 @@ function initializeGameUIListeners() {
     document.body.addEventListener('click', (e) => {
         const target = e.target;
         
-        // Deselect card logic
+        // Deselect card logic for mobile when clicking outside of the hand
         const cardInHand = e.target.closest('.player-hand-container .card');
         if (!isDesktop() && !cardInHand && clientState.selectedHandCardId) {
             clientState.selectedHandCardId = null;
-            renderUI(); // Re-render to remove selection class
+            renderUI();
         }
 
         // Class selection on mobile
