@@ -9,15 +9,6 @@
     --font-title: 'MedievalSharp', serif;
     --font-body: 'Inter', sans-serif;
     
-    /* Original Palette (commented out for reference)
-    --color-bg-dark: #12181b;
-    --color-surface: #1a2226;
-    --color-surface-light: #243036;
-    --color-border: #4a4a4a; 
-    --color-primary: #0d6efd;
-    --color-secondary: #5c636a;
-    */
-    
     /* New Thematic Palette */
     --color-bg-dark: #1a1a1a; /* Dark, slightly textured stone */
     --color-surface: #3a322b; /* Dark leather/wood */
@@ -90,23 +81,126 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .screen.active {
     display: flex;
 }
-#menu-screen {
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-}
-#game-screen {
-    flex-direction: column;
-}
-
 .background-animation { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background-image: var(--bg-texture); background-blend-mode: overlay; background-color: #2c2521; animation: background-pan 60s linear infinite; }
 @keyframes background-pan { 0% { background-position: 0% 0%; } 100% { background-position: 100% 100%; } }
 
 .hidden { display: none !important; }
 
-/* --- 3. MENU / LOBBY STYLES --- */
-.menu-container { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 1.5rem; text-align: center; padding: 1rem; }
-.game-title { font-family: var(--font-title); font-size: 3.5rem; color: var(--color-special); text-shadow: 0 0 10px var(--color-glow), 2px 2px 2px var(--color-border); }
+/* --- 3. REVAMPED MENU SCREEN --- */
+#menu-screen {
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+
+.menu-background-layers {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 0;
+}
+.bg-layer {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-size: cover;
+    background-repeat: no-repeat;
+    opacity: 0.3;
+}
+.layer-1 {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"><filter id="f1"><feTurbulence type="fractalNoise" baseFrequency="0.005 0.008" numOctaves="3" seed="10"/></filter><rect width="100%" height="100%" filter="url(%23f1)"/></svg>');
+    animation: slow-pan 120s linear infinite alternate;
+}
+.layer-2 {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"><filter id="f2"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="4" seed="20"/></filter><rect width="100%" height="100%" filter="url(%23f2)"/></svg>');
+    opacity: 0.15;
+    animation: slow-pan 90s linear infinite alternate-reverse;
+}
+@keyframes slow-pan {
+    from { background-position: 0% 0%; }
+    to { background-position: 100% 100%; }
+}
+
+.ember-container {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+}
+.ember {
+    position: absolute;
+    bottom: -20px;
+    background-color: var(--color-special);
+    border-radius: 50%;
+    animation: float-up 20s linear infinite;
+    opacity: 0;
+    filter: blur(3px);
+}
+
+@keyframes float-up {
+    0% { transform: translateY(0) translateX(0); opacity: 0; }
+    10% { opacity: 0.8; }
+    90% { opacity: 0.8; }
+    100% { transform: translateY(-100vh) translateX(50px); opacity: 0; }
+}
+/* Generate random embers */
+.ember:nth-child(1) { left: 10%; animation-duration: 15s; animation-delay: 0s; width: 5px; height: 5px; }
+.ember:nth-child(2) { left: 20%; animation-duration: 12s; animation-delay: 2s; width: 3px; height: 3px; }
+.ember:nth-child(3) { left: 30%; animation-duration: 18s; animation-delay: 5s; width: 6px; height: 6px; }
+.ember:nth-child(4) { left: 40%; animation-duration: 22s; animation-delay: 1s; width: 4px; height: 4px; }
+.ember:nth-child(5) { left: 50%; animation-duration: 14s; animation-delay: 8s; width: 5px; height: 5px; }
+.ember:nth-child(6) { left: 60%; animation-duration: 17s; animation-delay: 3s; width: 3px; height: 3px; }
+.ember:nth-child(7) { left: 70%; animation-duration: 20s; animation-delay: 6s; width: 6px; height: 6px; }
+.ember:nth-child(8) { left: 80%; animation-duration: 13s; animation-delay: 4s; width: 4px; height: 4px; }
+.ember:nth-child(9) { left: 90%; animation-duration: 16s; animation-delay: 9s; width: 5px; height: 5px; }
+.ember:nth-child(10){ left: 5%;  animation-duration: 19s; animation-delay: 7s; width: 3px; height: 3px; }
+.ember:nth-child(11){ left: 85%; animation-duration: 21s; animation-delay: 10s;width: 6px; height: 6px; }
+.ember:nth-child(12){ left: 95%; animation-duration: 23s; animation-delay: 12s;width: 4px; height: 4px; }
+
+
+.menu-container { 
+    width: 100%; 
+    max-width: 600px; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 1.5rem; 
+    text-align: center; 
+    padding: 2rem; 
+    position: relative;
+    z-index: 2;
+    background: rgba(43, 37, 33, 0.8);
+    backdrop-filter: blur(5px);
+    border: 3px solid #4a3f35;
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg), inset 0 0 20px rgba(0,0,0,0.5);
+}
+
+.game-title { 
+    font-family: var(--font-title); 
+    font-size: clamp(2.5rem, 10vw, 4rem);
+    color: var(--color-special); 
+    text-shadow: 
+        0 0 5px rgba(255,255,255,0.5),
+        0 0 10px var(--color-glow),
+        0 0 20px var(--color-glow),
+        0 0 40px var(--color-primary),
+        2px 2px 2px var(--color-border);
+    animation: title-flicker 5s infinite alternate;
+}
+@keyframes title-flicker {
+    0%, 18%, 22%, 25%, 53%, 57%, 100% {
+        text-shadow:
+            0 0 4px rgba(255,255,255,0.5),
+            0 0 11px var(--color-glow),
+            0 0 19px var(--color-glow),
+            0 0 40px var(--color-primary),
+            2px 2px 2px var(--color-border);
+    }
+    20%, 24%, 55% {
+        text-shadow: none;
+    }
+}
+
+
 .game-subtitle { font-size: 1rem; color: var(--color-text-secondary); margin-top: -1.25rem; font-family: var(--font-title); }
 .menu-section { display: flex; flex-direction: column; gap: 0.75rem; align-items: center; }
 .menu-section h3 { text-align: center; font-family: var(--font-title); color: var(--color-text-secondary); font-size: 1.25rem; }
@@ -129,6 +223,104 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
 .lobby-controls { padding: 1rem; border-top: 1px solid var(--color-border); }
 .lobby-controls-character-panel { padding: 1rem; border-top: 1px solid var(--color-border); margin-top: 1rem; }
 .waiting-text { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.5rem; text-align: center; }
+
+/* --- 3.5 PIXEL KNIGHT ANIMATION --- */
+.pixel-art-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100px;
+    z-index: 1;
+    pointer-events: none;
+    image-rendering: pixelated;
+}
+.pixel-knight {
+    position: absolute;
+    bottom: 20px;
+    width: 4px;
+    height: 4px;
+    animation: knight-walk-across 25s linear infinite;
+}
+.pixel-knight::before {
+    content: "";
+    position: absolute;
+    width: inherit;
+    height: inherit;
+    animation: knight-walk-cycle 0.8s steps(4) infinite;
+    /* Frame 1 */
+    box-shadow: 
+        /* Helmet */
+        3px -19px #aaa, 4px -19px #aaa, 5px -19px #aaa, 6px -19px #aaa,
+        4px -18px #aaa, 5px -18px #aaa,
+        4px -17px #666, 5px -17px #666, 6px -17px #666,
+        /* Torso */
+        3px -16px #666, 4px -16px #ccc, 5px -16px #ccc, 6px -16px #666,
+        2px -15px #666, 3px -15px #ccc, 4px -15px #ccc, 5px -15px #ccc, 6px -15px #666,
+        2px -14px #666, 3px -14px #ccc, 4px -14px #ccc, 5px -14px #ccc, 6px -14px #666,
+        3px -13px #666, 4px -13px #ccc, 5px -13px #ccc, 6px -13px #666,
+        /* Legs */
+        3px -12px #666, 6px -12px #666,
+        3px -11px #444, 6px -11px #444,
+        3px -10px #444, 6px -10px #444,
+        3px -9px #aaa, 6px -9px #aaa,
+        /* Sword Arm */
+        1px -15px #666, 0px -14px #666,
+        -1px -13px #444, -2px -12px #444, -3px -11px #444,
+        -4px -14px #aaa, -4px -13px #aaa, -4px -12px #aaa, -4px -11px #aaa, -4px -10px #aaa,
+        /* Shield Arm */
+        8px -15px #666, 9px -14px #666, 9px -13px #666;
+}
+
+@keyframes knight-walk-across {
+    from { transform: translateX(-60px) scaleX(1); }
+    49.9% { transform: translateX(calc(100vw + 60px)) scaleX(1); }
+    50% { transform: translateX(calc(100vw + 60px)) scaleX(-1); }
+    99.9% { transform: translateX(-60px) scaleX(-1); }
+    100% { transform: translateX(-60px) scaleX(1); }
+}
+
+@keyframes knight-walk-cycle {
+    0% { /* Frame 1 - Left leg forward */
+        box-shadow: 
+            3px -19px #aaa, 4px -19px #aaa, 5px -19px #aaa, 6px -19px #aaa, 4px -18px #aaa, 5px -18px #aaa, 4px -17px #666, 5px -17px #666, 6px -17px #666,
+            3px -16px #666, 4px -16px #ccc, 5px -16px #ccc, 6px -16px #666, 2px -15px #666, 3px -15px #ccc, 4px -15px #ccc, 5px -15px #ccc, 6px -15px #666, 2px -14px #666, 3px -14px #ccc, 4px -14px #ccc, 5px -14px #ccc, 6px -14px #666, 3px -13px #666, 4px -13px #ccc, 5px -13px #ccc, 6px -13px #666,
+            /* Legs */
+            3px -12px #666, 5px -12px #666, 3px -11px #444, 5px -11px #444, 3px -10px #444, 5px -10px #444, 2px -9px #aaa, 5px -9px #aaa,
+            1px -15px #666, 0px -14px #666, -1px -13px #444, -2px -12px #444, -3px -11px #444, -4px -14px #aaa, -4px -13px #aaa, -4px -12px #aaa, -4px -11px #aaa, -4px -10px #aaa,
+            8px -15px #666, 9px -14px #666, 9px -13px #666;
+    }
+    25% { /* Frame 2 - Legs together */
+        box-shadow: 
+            3px -19px #aaa, 4px -19px #aaa, 5px -19px #aaa, 6px -19px #aaa, 4px -18px #aaa, 5px -18px #aaa, 4px -17px #666, 5px -17px #666, 6px -17px #666,
+            3px -16px #666, 4px -16px #ccc, 5px -16px #ccc, 6px -16px #666, 2px -15px #666, 3px -15px #ccc, 4px -15px #ccc, 5px -15px #ccc, 6px -15px #666, 2px -14px #666, 3px -14px #ccc, 4px -14px #ccc, 5px -14px #ccc, 6px -14px #666, 3px -13px #666, 4px -13px #ccc, 5px -13px #ccc, 6px -13px #666,
+            /* Legs */
+            3px -12px #666, 6px -12px #666, 3px -11px #444, 6px -11px #444, 3px -10px #444, 6px -10px #444, 3px -9px #aaa, 6px -9px #aaa,
+            /* Sword Arm moving */
+            1px -15px #666, 0px -15px #666, -1px -14px #444, -2px -13px #444, -3px -12px #444, -4px -15px #aaa, -4px -14px #aaa, -4px -13px #aaa, -4px -12px #aaa, -4px -11px #aaa,
+            8px -15px #666, 9px -14px #666, 9px -13px #666;
+    }
+    50% { /* Frame 3 - Right leg forward */
+        box-shadow: 
+            3px -19px #aaa, 4px -19px #aaa, 5px -19px #aaa, 6px -19px #aaa, 4px -18px #aaa, 5px -18px #aaa, 4px -17px #666, 5px -17px #666, 6px -17px #666,
+            3px -16px #666, 4px -16px #ccc, 5px -16px #ccc, 6px -16px #666, 2px -15px #666, 3px -15px #ccc, 4px -15px #ccc, 5px -15px #ccc, 6px -15px #666, 2px -14px #666, 3px -14px #ccc, 4px -14px #ccc, 5px -14px #ccc, 6px -14px #666, 3px -13px #666, 4px -13px #ccc, 5px -13px #ccc, 6px -13px #666,
+            /* Legs */
+            4px -12px #666, 6px -12px #666, 4px -11px #444, 6px -11px #444, 4px -10px #444, 7px -10px #444, 4px -9px #aaa, 7px -9px #aaa,
+            1px -15px #666, 0px -14px #666, -1px -13px #444, -2px -12px #444, -3px -11px #444, -4px -14px #aaa, -4px -13px #aaa, -4px -12px #aaa, -4px -11px #aaa, -4px -10px #aaa,
+            8px -15px #666, 9px -14px #666, 9px -13px #666;
+    }
+    75% { /* Frame 4 - Legs together */
+        box-shadow: 
+            3px -19px #aaa, 4px -19px #aaa, 5px -19px #aaa, 6px -19px #aaa, 4px -18px #aaa, 5px -18px #aaa, 4px -17px #666, 5px -17px #666, 6px -17px #666,
+            3px -16px #666, 4px -16px #ccc, 5px -16px #ccc, 6px -16px #666, 2px -15px #666, 3px -15px #ccc, 4px -15px #ccc, 5px -15px #ccc, 6px -15px #666, 2px -14px #666, 3px -14px #ccc, 4px -14px #ccc, 5px -14px #ccc, 6px -14px #666, 3px -13px #666, 4px -13px #ccc, 5px -13px #ccc, 6px -13px #666,
+            /* Legs */
+            3px -12px #666, 6px -12px #666, 3px -11px #444, 6px -11px #444, 3px -10px #444, 6px -10px #444, 3px -9px #aaa, 6px -9px #aaa,
+             /* Sword Arm moving */
+            1px -15px #666, 0px -15px #666, -1px -14px #444, -2px -13px #444, -3px -12px #444, -4px -15px #aaa, -4px -14px #aaa, -4px -13px #aaa, -4px -12px #aaa, -4px -11px #aaa,
+            8px -15px #666, 9px -14px #666, 9px -13px #666;
+    }
+}
+
 
 /* --- 4. BUTTONS & FORMS --- */
 .btn { padding: 0.75rem 1.5rem; border: 2px solid var(--color-border); border-radius: 4px; font-family: var(--font-title); font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }

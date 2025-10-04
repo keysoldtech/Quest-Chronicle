@@ -1599,7 +1599,12 @@ function showDiceRollModal({ title, description, dice, bonus, targetAC, hasAdvan
     
     get('dice-roll-result-container').classList.add('hidden');
     get('dice-roll-damage-line').textContent = ''; // Clear previous damage line
-    get('dice-roll-confirm-btn').classList.remove('hidden');
+    
+    const confirmBtn = get('dice-roll-confirm-btn');
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Roll Dice';
+    confirmBtn.classList.remove('hidden');
+
     get('dice-roll-close-btn').classList.add('hidden');
     
     const diceDisplay = get('dice-display-container');
@@ -1760,7 +1765,11 @@ socket.on('promptAttackRoll', (data) => {
         dice: data.dice,
         bonus: data.bonus,
         targetAC: data.targetAC,
-        onConfirm: () => socket.emit('playerAction', { action: 'resolveAttackRoll' })
+        onConfirm: () => socket.emit('playerAction', {
+            action: 'resolveAttackRoll',
+            weaponId: data.weaponId,
+            targetId: data.targetId
+        })
     });
 });
 
@@ -1818,7 +1827,11 @@ socket.on('promptDamageRoll', (data) => {
             dice: data.dice,
             bonus: data.bonus,
             targetAC: 'N/A', // Target AC is not relevant for damage
-            onConfirm: () => socket.emit('playerAction', { action: 'resolveDamageRoll' })
+            onConfirm: () => socket.emit('playerAction', {
+                action: 'resolveDamageRoll',
+                weaponId: data.weaponId,
+                targetId: data.targetId
+            })
         });
     }, 1500); // 1.5 second delay for better pacing
 });

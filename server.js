@@ -938,6 +938,8 @@ class GameManager {
             dice: '1d20',
             bonus,
             targetAC: target.requiredRollToHit,
+            weaponId: cardId,
+            targetId: targetId,
         });
         
         this.emitGameState(room.id);
@@ -1002,6 +1004,8 @@ class GameManager {
                     title: `Damage Roll vs ${target.name}`,
                     dice: weapon.effect.dice,
                     bonus: player.stats.damageBonus || 0,
+                    weaponId: weapon.id,
+                    targetId: target.id,
                 };
                 socket.emit('promptDamageRoll', damageRollData);
             } else {
@@ -1189,7 +1193,7 @@ class GameManager {
                 } else if (targetMonster) {
                     targetMonster.currentHp -= damage;
                     this._logSpellCast(room, player, card, targetMonster, `dealing ${damage} damage`);
-                    if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, targetMonster.id, player.id);
+                    if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, monster.id, player.id);
                 }
                 break;
             case 'buff':
