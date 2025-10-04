@@ -269,6 +269,17 @@ body { font-family: var(--font-body); background-color: var(--color-bg-dark); co
     font-size: 18px;
 }
 
+/* Fix for horizontal scrolling on desktop hand/equipment */
+#hand-equipment-container .hand-and-equipped-container {
+    display: flex;
+    flex-grow: 1; 
+    min-height: 0;
+}
+
+#hand-equipment-container .player-hand-container {
+    min-width: 0;
+}
+
 
 /* --- 10. INFO PANEL, ACTION BAR, CHAT --- */
 .info-tabs-panel { display: flex; flex-direction: column; }

@@ -269,10 +269,6 @@ function createCardElement(card, options = {}) {
     const infoBtn = document.createElement('button');
     infoBtn.className = 'card-info-btn';
     infoBtn.innerHTML = `<span class="material-symbols-outlined">info</span>`;
-    infoBtn.onclick = (e) => {
-        e.stopPropagation();
-        showCardInspectorModal(card.id);
-    };
     cardDiv.appendChild(infoBtn);
 
     const actionContainer = document.createElement('div');
@@ -282,7 +278,7 @@ function createCardElement(card, options = {}) {
         const equipBtn = document.createElement('button');
         equipBtn.textContent = 'Equip (1AP)';
         equipBtn.className = 'btn btn-xs btn-success';
-        equipBtn.onclick = (e) => { e.stopPropagation(); socket.emit('equipItem', { cardId: card.id }); };
+        equipBtn.dataset.action = 'equip';
         actionContainer.appendChild(equipBtn);
     }
     
@@ -290,7 +286,7 @@ function createCardElement(card, options = {}) {
         const useBtn = document.createElement('button');
         useBtn.textContent = 'Use';
         useBtn.className = 'btn btn-xs btn-special';
-        useBtn.onclick = (e) => { e.stopPropagation(); handleUseConsumable(card); };
+        useBtn.dataset.action = 'useConsumable';
         actionContainer.appendChild(useBtn);
     }
 
@@ -298,7 +294,7 @@ function createCardElement(card, options = {}) {
         const castBtn = document.createElement('button');
         castBtn.textContent = `Cast (${card.apCost}AP)`;
         castBtn.className = 'btn btn-xs btn-special';
-        castBtn.onclick = (e) => { e.stopPropagation(); handleCastSpell(card); };
+        castBtn.dataset.action = 'castSpell';
         actionContainer.appendChild(castBtn);
     }
 
@@ -306,7 +302,7 @@ function createCardElement(card, options = {}) {
         const claimBtn = document.createElement('button');
         claimBtn.textContent = 'Claim';
         claimBtn.className = 'btn btn-xs btn-primary';
-        claimBtn.onclick = (e) => { e.stopPropagation(); showClaimLootModal(card); };
+        claimBtn.dataset.action = 'claimLoot';
         actionContainer.appendChild(claimBtn);
     }
 
@@ -315,14 +311,8 @@ function createCardElement(card, options = {}) {
             const interactBtn = document.createElement('button');
             interactBtn.textContent = `${interaction.name} (${interaction.apCost} AP)`;
             interactBtn.className = 'btn btn-xs btn-interaction';
-            interactBtn.onclick = (e) => {
-                e.stopPropagation();
-                socket.emit('playerAction', {
-                    action: 'resolveSkillInteraction',
-                    cardId: card.id,
-                    interactionName: interaction.name
-                });
-            };
+            interactBtn.dataset.action = 'interact';
+            interactBtn.dataset.interactionName = interaction.name;
             actionContainer.appendChild(interactBtn);
         });
     }
@@ -331,7 +321,7 @@ function createCardElement(card, options = {}) {
         const discardBtn = document.createElement('button');
         discardBtn.textContent = 'Discard';
         discardBtn.className = 'btn btn-xs btn-danger';
-        discardBtn.onclick = (e) => { e.stopPropagation(); socket.emit('playerAction', { action: 'discardCard', cardId: card.id }); };
+        discardBtn.dataset.action = 'discardCard';
         actionContainer.appendChild(discardBtn);
     }
 
@@ -341,6 +331,7 @@ function createCardElement(card, options = {}) {
 
     return cardDiv;
 }
+
 
 /**
  * The master rendering function. Wipes and redraws the UI based on the current state.
@@ -423,7 +414,7 @@ function renderUI() {
     });
     
     if (isDesktop()) {
-        const activePlayerListItem = document.querySelector('#player-list .player-list-item.active');
+        const activePlayerListItem = document.querySelector('#player-list-display .player-list-item.active');
         if (activePlayerListItem) activePlayerListItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
@@ -586,17 +577,6 @@ function renderGameplayState(myPlayer, gameState) {
     [...gameState.board.monsters, ...gameState.board.environment].forEach(card => {
         const isInteractable = isMyTurn && (card.type === 'Monster' || card.type === 'Environmental');
         const cardEl = createCardElement(card, { isTargetable: isMyTurn, isInteractable });
-        if (card.type === 'Monster') {
-            cardEl.onclick = () => {
-                if (!isMyTurn || !clientState.selectedWeaponId) return;
-                 if (clientState.isFirstTurnTutorialActive) {
-                    clientState.isFirstTurnTutorialActive = false;
-                }
-                showNarrativeModal(clientState.selectedWeaponId, card.id);
-                clientState.selectedWeaponId = null; 
-                renderUI();
-            };
-        }
         boardContainers.forEach(container => container.appendChild(cardEl.cloneNode(true)));
     });
 
@@ -730,18 +710,8 @@ function renderHandAndEquipment(player, isMyTurn) {
 
     Object.values(player.equipment).forEach(item => {
         if (item) {
-            // FIX: Made the check for 'weapon' case-insensitive to fix a bug where weapons couldn't be selected.
             const isAttackable = item.type.toLowerCase() === 'weapon' && isMyTurn;
             const cardEl = createCardElement(item, { isAttackable });
-            if (isAttackable) {
-                cardEl.onclick = () => {
-                    clientState.selectedWeaponId = clientState.selectedWeaponId === item.id ? null : item.id;
-                    if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
-                        showToast("Great! Now click a monster on the board to attack it.", "info");
-                    }
-                    renderUI();
-                };
-            }
             equippedContainers.forEach(container => container.appendChild(cardEl.cloneNode(true)));
         }
     });
@@ -749,13 +719,6 @@ function renderHandAndEquipment(player, isMyTurn) {
     if (isMyTurn) {
         const unarmed = { id: 'unarmed', name: 'Unarmed Strike', type: 'Weapon', apCost: 1, effect: { dice: '1d4' } };
         const cardEl = createCardElement(unarmed, { isAttackable: true });
-        cardEl.onclick = () => {
-            clientState.selectedWeaponId = clientState.selectedWeaponId === unarmed.id ? null : unarmed.id;
-             if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
-                showToast("Great! Now click a monster on the board to attack it.", "info");
-            }
-            renderUI();
-        };
         equippedContainers.forEach(container => container.appendChild(cardEl.cloneNode(true)));
     }
 }
@@ -850,7 +813,92 @@ function initializeUI() {
     }
 }
 
+/**
+ * Main handler for all clicks within the game area. Uses event delegation.
+ * This fixes the bug where cloned elements for mobile/desktop views lost their event listeners.
+ */
+function handleGameAreaClick(e) {
+    const cardElement = e.target.closest('.card');
+
+    // --- Delegated Button Actions ---
+    const button = e.target.closest('button');
+    if (button) {
+        if (button.classList.contains('card-info-btn') && cardElement) {
+            e.stopPropagation();
+            showCardInspectorModal(cardElement.dataset.cardId);
+            return;
+        }
+
+        const action = button.dataset.action;
+        if (action && cardElement) {
+            e.stopPropagation();
+            const cardId = cardElement.dataset.cardId;
+            const myPlayer = currentRoomState.players[myId];
+            if (!myPlayer) return;
+
+            const cardInHand = myPlayer.hand.find(c => c.id === cardId);
+            const lootItem = currentRoomState.gameState.lootPool.find(c => c.id === cardId);
+
+            switch (action) {
+                case 'equip':
+                    socket.emit('equipItem', { cardId });
+                    break;
+                case 'useConsumable':
+                    if (cardInHand) handleUseConsumable(cardInHand);
+                    break;
+                case 'castSpell':
+                    if (cardInHand) handleCastSpell(cardInHand);
+                    break;
+                case 'claimLoot':
+                    if (lootItem) showClaimLootModal(lootItem);
+                    break;
+                case 'interact':
+                    socket.emit('playerAction', {
+                        action: 'resolveSkillInteraction',
+                        cardId: cardId,
+                        interactionName: button.dataset.interactionName
+                    });
+                    break;
+                case 'discardCard':
+                    socket.emit('playerAction', { action: 'discardCard', cardId });
+                    break;
+            }
+            return;
+        }
+    }
+    
+    if (!cardElement) return;
+
+    // --- Direct Card Click Actions (Attack/Target) ---
+    const myPlayer = currentRoomState.players[myId];
+    if (!myPlayer) return;
+    const isMyTurn = currentRoomState.gameState.turnOrder[currentRoomState.gameState.currentPlayerIndex] === myPlayer.id && !myPlayer.isDowned;
+    if (!isMyTurn) return;
+
+    if (cardElement.classList.contains('attackable-weapon')) {
+        const cardId = cardElement.dataset.cardId;
+        clientState.selectedWeaponId = clientState.selectedWeaponId === cardId ? null : cardId;
+        if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
+            showToast("Great! Now click a monster on the board to attack it.", "info");
+        }
+        renderUI(); // Re-render to show selection highlight
+    } else if (cardElement.classList.contains('targetable')) {
+        const monsterId = cardElement.dataset.monsterId;
+        if (clientState.selectedWeaponId) {
+            if (clientState.isFirstTurnTutorialActive) {
+                clientState.isFirstTurnTutorialActive = false;
+            }
+            showNarrativeModal(clientState.selectedWeaponId, monsterId);
+            clientState.selectedWeaponId = null;
+            renderUI(); // Re-render to remove selection highlight
+        }
+    }
+}
+
+
 function initializeGameUIListeners() {
+    get('game-area').addEventListener('click', handleGameAreaClick);
+    
     document.body.addEventListener('click', (e) => {
         const target = e.target;
         // Class selection on mobile
