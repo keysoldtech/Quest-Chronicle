@@ -1014,9 +1014,18 @@ function initializeGameUIListeners() {
             if (isCurrentlyHidden) dropdown.classList.remove('hidden');
         });
     });
+
+    get('mobile-info-toggle-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        get('mobile-info-dropdown').classList.toggle('hidden');
+    });
+
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.header-menu')) {
             menuDropdowns.forEach(id => get(id).classList.add('hidden'));
+        }
+        if (!e.target.closest('#mobile-info-toggle-btn') && !e.target.closest('#mobile-info-dropdown')) {
+            get('mobile-info-dropdown').classList.add('hidden');
         }
     });
 

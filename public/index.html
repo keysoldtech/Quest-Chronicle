@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.1.2 - UI Polish & Fixes</p>
+            <p class="build-number-font-menu">v10.0.0 - Mobile UI Overhaul</p>
         </div>
     </div>
     
@@ -153,7 +153,7 @@
                          <p class="turn-counter">Round: <span data-container="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v9.1.2 - UI Polish & Fixes</p>
+                        <p class="build-number-font">v10.0.0 - Mobile UI Overhaul</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
@@ -235,56 +235,66 @@
             <!-- ================= MOBILE LAYOUT ================= -->
             <div class="game-area-mobile">
                 <header class="mobile-header">
-                    <p class="turn-indicator-font" data-container="turn-indicator">Waiting...</p>
+                    <div class="mobile-turn-info">
+                        <p class="turn-indicator-font" data-container="turn-indicator">Waiting...</p>
+                        <p class="turn-counter mobile">Round: <span data-container="turn-counter">0</span></p>
+                    </div>
+
+                    <div class="mobile-resources-stack hidden" data-container="player-resources">
+                         <div class="resource-bar">
+                             <span class="material-symbols-outlined resource-icon hp">favorite</span>
+                             <div class="progress-bar-wrapper">
+                                 <div class="progress-bar health">
+                                     <div class="progress-bar-fill" data-container="player-health-bar"></div>
+                                 </div>
+                                 <span class="progress-bar-text" data-container="player-health-text"></span>
+                             </div>
+                         </div>
+                         <div class="resource-bar">
+                             <span class="material-symbols-outlined resource-icon ap">bolt</span>
+                             <div class="progress-bar-wrapper">
+                                 <div class="progress-bar ap">
+                                     <div class="progress-bar-fill" data-container="player-ap-bar"></div>
+                                 </div>
+                                 <span class="progress-bar-text" data-container="player-ap-text"></span>
+                             </div>
+                         </div>
+                    </div>
+
                     <div class="mobile-header-right-cluster">
-                        <div class="mobile-resources">
-                            <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden" data-container="party-hope-meter">
-                                <span class="party-hope-label">Party Hope</span>
-                                <div class="party-hope-meter mobile">
-                                    <span class="material-symbols-outlined">stars</span>
-                                    <span id="party-hope-text-mobile"></span>
-                                </div>
-                            </div>
-                            <div class="player-resources-container mobile hidden" data-container="player-resources">
-                                 <div class="resource-bar">
-                                     <span class="material-symbols-outlined resource-icon hp">favorite</span>
-                                     <div class="progress-bar-wrapper">
-                                         <div class="progress-bar health">
-                                             <div class="progress-bar-fill" data-container="player-health-bar"></div>
-                                         </div>
-                                         <span class="progress-bar-text" data-container="player-health-text"></span>
-                                     </div>
-                                 </div>
-                                 <div class="resource-bar">
-                                     <span class="material-symbols-outlined resource-icon ap">bolt</span>
-                                     <div class="progress-bar-wrapper">
-                                         <div class="progress-bar ap">
-                                             <div class="progress-bar-fill" data-container="player-ap-bar"></div>
-                                         </div>
-                                         <span class="progress-bar-text" data-container="player-ap-text"></span>
-                                     </div>
-                                 </div>
-                            </div>
-                        </div>
-                        <div class="mobile-header-controls">
-                            <div class="room-code-display mobile">
-                                <span>CODE</span>
-                                <p data-container="room-code">----</p>
-                            </div>
-                            <div class="header-menu">
-                                <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
-                                <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
-                                    <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
-                                    <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Voice</button>
-                                    <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
-                                    <button id="mobile-leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
-                                    <button id="mobile-leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
-                                </div>
+                        <button id="mobile-info-toggle-btn" class="btn btn-sm btn-icon" aria-label="Toggle game info"><span class="material-symbols-outlined">info</span></button>
+                        <div class="header-menu">
+                            <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
+                            <div id="mobile-menu-dropdown" class="menu-dropdown hidden">
+                                <button id="mobile-help-btn" class="menu-item"><span class="material-symbols-outlined">help</span>Game Guide</button>
+                                <button id="mobile-join-voice-btn" class="menu-item"><span class="material-symbols-outlined">mic</span>Voice</button>
+                                <button id="mobile-mute-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">mic_off</span>Mute</button>
+                                <button id="mobile-leave-voice-btn" class="menu-item hidden"><span class="material-symbols-outlined">voice_over_off</span>Leave</button>
+                                <button id="mobile-leave-game-btn" class="menu-item danger"><span class="material-symbols-outlined">logout</span>Leave Game</button>
                             </div>
                         </div>
                     </div>
                 </header>
                 
+                <div id="mobile-info-dropdown" class="mobile-info-dropdown hidden">
+                    <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden" data-container="party-hope-meter">
+                        <span class="party-hope-label">Party Hope</span>
+                        <div class="party-hope-meter mobile">
+                            <span class="material-symbols-outlined">stars</span>
+                             <div class="progress-bar-wrapper">
+                                <div class="progress-bar hope">
+                                    <div class="progress-bar-fill" data-container="party-hope-bar"></div>
+                                </div>
+                                <span class="progress-bar-text" id="party-hope-text-mobile"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="room-code-display mobile">
+                        <span>CODE</span>
+                        <p data-container="room-code">----</p>
+                    </div>
+                </div>
+
                 <main class="mobile-main">
                     <div class="world-event-banner hidden" data-container="world-event-display"></div>
                     <!-- Mobile Screen 1: Game (Board, Equipment, Hand, Actions) -->
@@ -332,12 +342,12 @@
     
                     <!-- Mobile Screen 5: Log -->
                     <div id="mobile-screen-log" class="mobile-screen">
-                        <div class="panel mobile-panel" style="flex: 1; display: flex; flex-direction: column;">
-                            <div class="chat-header" style="margin-bottom: 0.5rem;">
-                                <h2 class="panel-header" style="margin: 0; border: none;">Chat & Log</h2>
+                        <div class="panel mobile-panel">
+                            <div class="chat-header">
+                                <h2 class="panel-header">Chat & Log</h2>
                             </div>
-                            <div class="chat-log" style="flex-grow: 1;" data-container="game-log"></div>
-                            <form id="mobile-chat-form" class="chat-form" style="padding-top: 0.5rem; border-top: 1px solid var(--color-border)">
+                            <div class="chat-log" data-container="game-log"></div>
+                            <form id="mobile-chat-form" class="chat-form">
                                 <select id="mobile-chat-channel" class="select-field">
                                     <option value="game">Game</option>
                                     <option value="party">Party</option>
