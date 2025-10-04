@@ -35,6 +35,7 @@ const statusEffectDefinitions = {
     'Stunned': { cannotAct: true, description: 'Cannot take actions.' },
     'On Fire': { trigger: 'start', damage: '1d6', description: 'Takes 1d6 damage at the start of their turn.'},
     'Frightened': { cannotAct: true, description: 'Cannot take actions for 1 turn.' },
+    'Restrained': { cannotAct: true, description: 'Cannot move or take actions.' }
 };
 
 // --- 3. ACTION COSTS ---
@@ -294,6 +295,8 @@ const environmentalCards = [
 
 
 // --- 7. MONSTER DATA ---
+
+// --- 7.1. All Monsters List (structured) ---
 const allMonsters = {
     // Tier 1
     phantomLight: { name: "Phantom Light", type: "Monster", maxHp: 5, attackBonus: 0, requiredRollToHit: 10, effect: { dice: "1d8", description: "Incorporeal. Deals 1d8 lightning to creatures ending turn within 5ft." }, ap: 1, weakness: "Radiant" },
@@ -304,7 +307,11 @@ const allMonsters = {
         ]
     },
     pestiePilferer: { name: "Pestie Pilferer", type: "Monster", maxHp: 8, attackBonus: 4, requiredRollToHit: 12, effect: { dice: "1d6+2", description: "Quick Feet: Can Break Away as a bonus action." }, ap: 1, weakness: "Psychic" },
-    grottoWeaver: { name: "Grotto Weaver", type: "Monster", maxHp: 10, attackBonus: 4, requiredRollToHit: 12, effect: { dice: "1d6", description: "Web Shot: Can attempt to restrain a player (DC 10 STR save)." }, ap: 2 },
+    grottoWeaver: { name: "Grotto Weaver", type: "Monster", maxHp: 10, attackBonus: 4, requiredRollToHit: 12, effect: { dice: "1d6", description: "" }, ap: 2, 
+        abilities: [
+            { name: "Web Shot", type: "control", status: "Restrained", duration: 2, cooldown: 3, description: "Attempts to restrain a player." }
+        ]
+    },
     flutterwingSwarm: { name: "Flutterwing Swarm", type: "Monster", maxHp: 10, attackBonus: 4, requiredRollToHit: 12, effect: { dice: "2d4", description: "Blind Flight: Immune to blindness. Disadvantage on Perception checks." }, ap: 1, weakness: "Thunder" },
     pestieWhisperer: { name: "Pestie Whisperer", type: "Monster", maxHp: 10, attackBonus: 3, requiredRollToHit: 13, effect: { dice: "1d4", description: "Tribal Magic: Once per combat, +2 attack rolls for all pesties within 20 ft for 1 round." }, ap: 1 },
     scaleKinSkulker: { name: "Scale-kin Skulker", type: "Monster", maxHp: 10, attackBonus: 2, requiredRollToHit: 14, effect: { dice: "1d4+1", description: "Trap Master: Sets a trap at start of combat." }, ap: 1, weakness: "Area-of-effect" },
@@ -319,7 +326,10 @@ const allMonsters = {
     causticSludge: { name: "Caustic Sludge", type: "Monster", maxHp: 24, attackBonus: 3, requiredRollToHit: 13, effect: { dice: "1d8", description: "Corrodes armor (-1 AC) on hit. Splits on Lightning damage." }, ap: 1, weakness: "Slashing, Cold" },
     skyLurer: { name: "Sky Lurer", type: "Monster", maxHp: 27, attackBonus: 4, requiredRollToHit: 14, effect: { dice: "1d6+1", description: "Swooping Attack. Captivating Song (DC 11 WIS save or charmed)." }, ap: 2, weakness: "Piercing" },
     highwayScourge: { name: "Highway Scourge", type: "Monster", maxHp: 28, attackBonus: 6, requiredRollToHit: 15, effect: { dice: "2d6+3", description: "Bonus Action: Shout (All Bandits get +1 attack for one round)." }, ap: 2, weakness: "Low Wisdom" },
-    ruinedSentinel: { name: "Ruined Sentinel", type: "Monster", maxHp: 33, attackBonus: 6, requiredRollToHit: 16, effect: { dice: "2d8", description: "Magic Resistance. DC 14 CON save or stunned on hit." }, ap: 2, weakness: "Thunder, Psychic",
+    ruinedSentinel: { name: "Ruined Sentinel", type: "Monster", maxHp: 33, attackBonus: 6, requiredRollToHit: 16, effect: { dice: "2d8", description: "" }, ap: 2, weakness: "Thunder, Psychic",
+        abilities: [
+            { name: "Stunning Slam", type: "control", status: "Stunned", duration: 2, cooldown: 4, description: "Slams the ground, attempting to stun a target." }
+        ],
         skillInteractions: [
             { name: "Find Weakness", apCost: 1, skill: "int", dc: 15, success: { type: "apply_vulnerability", text: "You spot a crack in its armor! The next attack against it has advantage." }, failure: { type: "none", text: "The sentinel's construction is flawless." } }
         ]
@@ -329,41 +339,45 @@ const allMonsters = {
 
     // Tier 3 & Bosses
     hauntedCuirass: { name: "Haunted Cuirass", type: "Monster", maxHp: 41, attackBonus: 4, requiredRollToHit: 16, effect: { dice: "2d6", description: "Unyielding Form (Immune to poison, exhaustion, and fear)." }, ap: 2, weakness: "Bludgeoning" },
-    greenskinMauler: { name: "Greenskin Mauler", type: "Monster", maxHp: 44, attackBonus: 5, requiredRollToHit: 15, effect: { dice: "1d12+3", description: "Relentless Endurance (Once/day, if reduced to 0 HP, drop to 1 HP instead)." }, ap: 2, weakness: "Psychic" },
-    spectralCorruptor: { name: "Spectral Corruptor", type: "Monster", maxHp: 45, attackBonus: 6, requiredRollToHit: 16, effect: { dice: "3d6", description: "Incorporeal. Reduces maximum HP by damage dealt." }, ap: 2, weakness: "Radiant" },
-    axehornBrute: { name: "Axehorn Brute (Mini-Boss)", type: "Monster", maxHp: 55, attackBonus: 7, requiredRollToHit: 16, effect: { dice: "2d12+4", description: "Labyrinthine Recall (Cannot become lost)." }, ap: 3, weakness: "Piercing" },
-    briarWitch: { name: "Briar Witch (Mini-Boss)", type: "Monster", maxHp: 59, attackBonus: 5, requiredRollToHit: 15, effect: { dice: "2d6", description: "Cackle of Madness: Confuse enemies. Can cast Grasping Vines, Vanish, or Curse." }, ap: 2, weakness: "Fire, Radiant" },
-    wrappedAncient: { name: "Wrapped Ancient (Mini-Boss)", type: "Monster", maxHp: 60, attackBonus: 5, requiredRollToHit: 15, effect: { dice: "2d6+3", description: "Undead Fortitude. Curse of the Mummy Rot." }, ap: 2, weakness: "Fire" },
-    wateryCharmer: { name: "Watery Charmer (Mini-Boss)", type: "Monster", maxHp: 63, attackBonus: 6, requiredRollToHit: 16, effect: { dice: "1d6+3", description: "Captivating Song. Can cast Immobilize Foe or Suggestion." }, ap: 2, weakness: "Bludgeoning" },
-    hillOaf: { name: "Hill Oaf (Mini-Boss)", type: "Monster", maxHp: 64, attackBonus: 6, requiredRollToHit: 14, effect: { dice: "2d8+4", description: "Powerful Blow (Once per turn, can add +2 to damage)." }, ap: 2, weakness: "Psychic" },
-    deathlordMarshal: { name: "Deathlord Marshal (Boss)", isBoss: true, maxHp: 78, attackBonus: 7, requiredRollToHit: 17, effect: { dice: "3d6+4", description: "Aura of Fear. Unholy Endurance." }, ap: 3, weakness: "Radiant" },
-    earthColossus: { name: "Earth Colossus (Boss)", isBoss: true, maxHp: 112, attackBonus: 8, requiredRollToHit: 18, effect: { dice: "2d10+5", description: "Immutable Form. Slows target on hit." }, ap: 3, weakness: "Thunder" },
-    winterJuggernaut: { name: "Winter Juggernaut (Boss)", isBoss: true, maxHp: 130, attackBonus: 9, requiredRollToHit: 18, effect: { dice: "3d12+6", description: "Icy Aura (Deals 1d4 cold damage to nearby creatures)." }, ap: 3, weakness: "Fire" },
-    hellfireSovereign: { name: "Hellfire Sovereign (Boss)", isBoss: true, maxHp: 195, attackBonus: 9, requiredRollToHit: 19, effect: { dice: "4d6+5", description: "Hellish Regeneration. Flaming Aura. Legendary Action (Hellfire Wave)." }, ap: 4, weakness: "Cold, Radiant" },
-    rotwoodBehemoth: { name: "Rotwood Behemoth (Boss)", isBoss: true, maxHp: 214, attackBonus: 8, requiredRollToHit: 18, effect: { dice: "3d8+4", description: "Rooted Horror (difficult terrain). Corruption Pulse." }, ap: 3, weakness: "Fire, Radiant" },
+    greenskinMauler: { name: "Greenskin Mauler", type: "Monster", maxHp: 44, attackBonus: 6, requiredRollToHit: 15, effect: { dice: "2d8+3", description: "Brute Force: Ignores 2 points of Shield Bonus from armor." }, ap: 2, weakness: "Psychic" },
+    cavernWight: { name: "Cavern Wight", type: "Monster", maxHp: 38, attackBonus: 5, requiredRollToHit: 15, effect: { dice: "2d6", description: "Life Drain: Heals for half the damage dealt. Incorporeal." }, ap: 2, weakness: "Radiant, Fire" },
+    abyssalStalker: { name: "Abyssal Stalker", type: "Monster", maxHp: 40, attackBonus: 7, requiredRollToHit: 16, effect: { dice: "2d10+2", description: "" }, ap: 2, weakness: "Thunder", 
+        abilities: [{ name: "Shadow Step", type: "utility", cooldown: 2, description: "Teleports to an unoccupied space within 30 feet." }] 
+    },
+    magmaGolem: { name: "Magma Golem", type: "Monster", maxHp: 55, attackBonus: 6, requiredRollToHit: 17, effect: { dice: "2d6+4", description: "Heated Body: Deals 1d6 fire damage to creatures starting their turn adjacent to it." }, ap: 1, weakness: "Cold", isBoss: true },
 };
 
-
+// --- 7.2. Monster Tiers (for spawning) ---
 const monsterTiers = {
-    tier1: Object.values(allMonsters).filter(m => m.maxHp < 25),
-    tier2: Object.values(allMonsters).filter(m => m.maxHp >= 25 && m.maxHp < 70),
-    tier3: Object.values(allMonsters).filter(m => m.maxHp >= 70)
+    tier1: [
+        allMonsters.phantomLight, allMonsters.emberFlicker, allMonsters.pestieProwler, allMonsters.pestiePilferer,
+        allMonsters.grottoWeaver, allMonsters.flutterwingSwarm, allMonsters.pestieWhisperer, allMonsters.scaleKinSkulker,
+        allMonsters.essenceThief, allMonsters.boneArcher
+    ],
+    tier2: [
+        allMonsters.veiledFanatic, allMonsters.stripedMarauder, allMonsters.segmentedHorror, allMonsters.stonegazeWyrmlet,
+        allMonsters.causticSludge, allMonsters.skyLurer, allMonsters.highwayScourge, allMonsters.ruinedSentinel,
+        allMonsters.shadowmawAlpha, allMonsters.stoneWing
+    ],
+    tier3: [
+        allMonsters.hauntedCuirass, allMonsters.greenskinMauler, allMonsters.cavernWight, allMonsters.abyssalStalker,
+        allMonsters.magmaGolem
+    ]
 };
 
-// --- 9. MODULE EXPORTS ---
+// --- 8. MODULE EXPORTS ---
 module.exports = {
     classes,
-    itemCards,
-    spellCards,
+    statusEffectDefinitions,
+    actionCosts,
+    npcDialogue,
+    magicalAffixes,
     weaponCards,
     armorCards,
+    spellCards,
+    itemCards,
     worldEventCards,
     partyEventCards,
     environmentalCards,
-    monsterTiers,
-    npcDialogue,
-    magicalAffixes,
-    actionCosts,
-    statusEffectDefinitions,
-    allMonsters, // Exporting all monsters for easier lookup by name/id
+    monsterTiers
 };

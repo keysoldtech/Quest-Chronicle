@@ -23,6 +23,10 @@ const clientState = {
     hasSeenSkillChallengePrompt: false, // Prevents re-opening the modal
 };
 
+// --- HELPERS ---
+const get = (id) => document.getElementById(id);
+const queryAll = (selector) => document.querySelectorAll(selector);
+
 // --- VOICE CHAT MANAGER ---
 const voiceChatManager = {
     localStream: null,
@@ -33,14 +37,14 @@ const voiceChatManager = {
         if (this.localStream) return;
         try {
             this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            document.getElementById('join-voice-btn').classList.add('hidden');
-            document.getElementById('mobile-join-voice-btn').classList.add('hidden');
-            document.getElementById('mute-voice-btn').classList.remove('hidden');
-            document.getElementById('leave-voice-btn').classList.remove('hidden');
-            document.getElementById('mobile-mute-voice-btn').classList.remove('hidden');
-            document.getElementById('mobile-leave-voice-btn').classList.remove('hidden');
+            get('join-voice-btn').classList.add('hidden');
+            get('mobile-join-voice-btn').classList.add('hidden');
+            get('mute-voice-btn').classList.remove('hidden');
+            get('leave-voice-btn').classList.remove('hidden');
+            get('mobile-mute-voice-btn').classList.remove('hidden');
+            get('mobile-leave-voice-btn').classList.remove('hidden');
 
-            this.audioContainer = document.getElementById('voice-chat-audio-container');
+            this.audioContainer = get('voice-chat-audio-container');
             socket.emit('join-voice-chat');
         } catch (err) {
             showToast('Microphone access denied.', 'error');
@@ -61,20 +65,20 @@ const voiceChatManager = {
         this.peers = {};
         if (this.audioContainer) this.audioContainer.innerHTML = '';
 
-        document.getElementById('join-voice-btn').classList.remove('hidden');
-        document.getElementById('mobile-join-voice-btn').classList.remove('hidden');
-        document.getElementById('mute-voice-btn').classList.add('hidden');
-        document.getElementById('leave-voice-btn').classList.add('hidden');
-        document.getElementById('mobile-mute-voice-btn').classList.add('hidden');
-        document.getElementById('mobile-leave-voice-btn').classList.add('hidden');
+        get('join-voice-btn').classList.remove('hidden');
+        get('mobile-join-voice-btn').classList.remove('hidden');
+        get('mute-voice-btn').classList.add('hidden');
+        get('leave-voice-btn').classList.add('hidden');
+        get('mobile-mute-voice-btn').classList.add('hidden');
+        get('mobile-leave-voice-btn').classList.add('hidden');
     },
 
     toggleMute() {
         if (!this.localStream) return;
         const enabled = !this.localStream.getAudioTracks()[0].enabled;
         this.localStream.getAudioTracks()[0].enabled = enabled;
-        const muteBtn = document.getElementById('mute-voice-btn');
-        const mobileMuteBtn = document.getElementById('mobile-mute-voice-btn');
+        const muteBtn = get('mute-voice-btn');
+        const mobileMuteBtn = get('mobile-mute-voice-btn');
         muteBtn.innerHTML = enabled ? `<span class="material-symbols-outlined">mic_off</span>Mute` : `<span class="material-symbols-outlined">mic</span>Unmute`;
         mobileMuteBtn.innerHTML = enabled ? `<span class="material-symbols-outlined">mic_off</span>Mute` : `<span class="material-symbols-outlined">mic</span>Unmute`;
     },
@@ -97,7 +101,7 @@ const voiceChatManager = {
         };
 
         peer.ontrack = (event) => {
-            let audioEl = document.getElementById(`audio-${peerId}`);
+            let audioEl = get(`audio-${peerId}`);
             if (!audioEl) {
                 audioEl = document.createElement('audio');
                 audioEl.id = `audio-${peerId}`;
@@ -123,7 +127,7 @@ const voiceChatManager = {
             this.peers[peerId].close();
             delete this.peers[peerId];
         }
-        const audioEl = document.getElementById(`audio-${peerId}`);
+        const audioEl = get(`audio-${peerId}`);
         if (audioEl) audioEl.remove();
     },
 
@@ -176,7 +180,7 @@ function createCardElement(card, options = {}) {
         return emptyCardDiv;
     }
 
-    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false, isInteractable = false } = options;
+    const { isEquippable = false, isAttackable = false, isTargetable = false, isDiscardable = false, isConsumable = false, isClaimable = false, isInteractable = false, isCastable = false } = options;
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.dataset.cardId = card.id;
@@ -203,6 +207,19 @@ function createCardElement(card, options = {}) {
     const damageDiceHTML = card.effect?.dice ? `<div class="card-bonus" title="Damage Dice"><span class="material-symbols-outlined icon-damage">casino</span>${card.effect.dice}</div>` : '';
     const apCostHTML = card.apCost ? `<div class="card-bonus" title="AP Cost"><span class="material-symbols-outlined icon-ap">bolt</span>${card.apCost}</div>` : '';
     
+    let monsterAbilitiesHTML = '';
+    if (card.type === 'Monster' && card.abilities && card.abilities.length > 0) {
+        monsterAbilitiesHTML = `
+            <div class="card-abilities">
+                ${card.abilities.map(ability => `
+                    <div class="card-ability-item">
+                        <strong>${ability.name}:</strong> ${ability.description}
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
     const bonuses = card.effect?.bonuses;
     let bonusesHTML = '';
     if (bonuses) {
@@ -235,6 +252,7 @@ function createCardElement(card, options = {}) {
         </div>
         <div class="card-content">
             <p class="card-effect">${card.effect?.description || card.description || ''}</p>
+            ${monsterAbilitiesHTML}
         </div>
         <div class="card-footer">
             <div class="card-bonuses-grid">
@@ -264,6 +282,14 @@ function createCardElement(card, options = {}) {
         useBtn.className = 'btn btn-xs btn-special';
         useBtn.onclick = (e) => { e.stopPropagation(); handleUseConsumable(card); };
         actionContainer.appendChild(useBtn);
+    }
+
+    if (isCastable) {
+        const castBtn = document.createElement('button');
+        castBtn.textContent = `Cast (${card.apCost}AP)`;
+        castBtn.className = 'btn btn-xs btn-special';
+        castBtn.onclick = (e) => { e.stopPropagation(); handleCastSpell(card); };
+        actionContainer.appendChild(castBtn);
     }
 
     if (isClaimable) {
@@ -313,9 +339,6 @@ function renderUI() {
     if (!currentRoomState || !currentRoomState.id) return;
     const myPlayer = currentRoomState.players[myId];
     if (!myPlayer) {
-        // If we have a player ID, it means we were in a game but are no longer.
-        // This can happen if the host disconnects or we were kicked.
-        // We should clear session and reload.
         if (sessionStorage.getItem('qc_playerId')) {
             sessionStorage.removeItem('qc_roomId');
             sessionStorage.removeItem('qc_playerId');
@@ -326,7 +349,6 @@ function renderUI() {
 
     const { players, gameState, chatLog, hostId } = currentRoomState;
     const { phase, isPaused, pauseReason } = gameState;
-    const get = id => document.getElementById(id);
 
     // Game Paused Overlay
     const pauseModal = get('game-paused-modal');
@@ -356,15 +378,12 @@ function renderUI() {
     }
 
     // --- Phase 2: Render Common Game Elements ---
-    get('room-code').textContent = currentRoomState.id;
-    get('mobile-room-code').textContent = currentRoomState.id;
-    get('turn-counter').textContent = gameState.turnCount;
+    queryAll('[data-container="room-code"]').forEach(el => el.textContent = currentRoomState.id);
+    queryAll('[data-container="turn-counter"]').forEach(el => el.textContent = gameState.turnCount);
     renderGameLog(chatLog, phase === 'started');
 
-    const playerList = get('player-list');
-    const mobilePlayerList = get('mobile-player-list');
-    playerList.innerHTML = '';
-    mobilePlayerList.innerHTML = '';
+    const playerListContainers = queryAll('[data-container="player-list"]');
+    playerListContainers.forEach(c => c.innerHTML = '');
     const currentPlayerId = gameState.turnOrder[gameState.currentPlayerIndex];
     
     const playerArray = Object.values(players).sort((a,b) => {
@@ -390,12 +409,11 @@ function renderUI() {
         const downedText = p.isDowned ? '<span class="downed-text">[DOWNED]</span> ' : '';
         const disconnectedText = p.disconnected ? '<span class="disconnected-text">[OFFLINE]</span> ' : '';
         li.innerHTML = `<div class="player-info"><span>${disconnectedText}${downedText}${npcTag}${p.name}${classText}${roleText}</span></div><div class="player-hp">${hpDisplay}</div>`;
-        playerList.appendChild(li);
-        mobilePlayerList.appendChild(li.cloneNode(true));
+        playerListContainers.forEach(c => c.appendChild(li.cloneNode(true)));
     });
     
     if (isDesktop()) {
-        const activePlayerListItem = playerList.querySelector('.player-list-item.active');
+        const activePlayerListItem = document.querySelector('#player-list .player-list-item.active');
         if (activePlayerListItem) activePlayerListItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
@@ -403,9 +421,7 @@ function renderUI() {
     const desktopCharacterPanel = get('character-sheet-block');
     const mobileCharacterPanel = get('mobile-screen-character');
     
-    // Hide all lobby controls by default
-    get('lobby-controls').classList.add('hidden');
-    get('mobile-lobby-controls').classList.add('hidden');
+    queryAll('[data-container="lobby-controls"]').forEach(c => c.classList.add('hidden'));
 
     if (phase === 'class_selection') {
         if (myPlayer.class) {
@@ -432,7 +448,6 @@ function renderUI() {
         renderGameplayState(myPlayer, gameState);
     }
     
-    // Reworked skill challenge modal logic
     const skillChallengeIsActiveForMe = gameState.skillChallenge.isActive && gameState.turnOrder[gameState.currentPlayerIndex] === myId;
     const skillChallengeModal = get('skill-challenge-modal');
 
@@ -440,7 +455,7 @@ function renderUI() {
         const details = gameState.skillChallenge.details;
         const stage = details.stages ? details.stages[gameState.skillChallenge.currentStage] : details;
         showSkillChallengeModal(stage, details.name);
-        clientState.hasSeenSkillChallengePrompt = true; // Set flag so it doesn't reopen
+        clientState.hasSeenSkillChallengePrompt = true;
     } else if (!skillChallengeIsActiveForMe && !skillChallengeModal.classList.contains('hidden')) {
         skillChallengeModal.classList.add('hidden');
     }
@@ -482,9 +497,9 @@ function createClassCardElement(id, data, forMobile = false) {
 
 function showClassSelectionModal() {
     const classData = currentRoomState.staticData.classes;
-    const modal = document.getElementById('class-selection-modal');
-    const displayContainer = document.getElementById('desktop-class-card-display');
-    const confirmBtn = document.getElementById('confirm-class-selection-btn');
+    const modal = get('class-selection-modal');
+    const displayContainer = get('desktop-class-card-display');
+    const confirmBtn = get('confirm-class-selection-btn');
 
     displayContainer.innerHTML = '';
     let selectedClassId = null;
@@ -534,70 +549,48 @@ function renderClassSelection(desktopContainer, mobileContainer) {
  * Renders all elements related to the active gameplay loop.
  */
 function renderGameplayState(myPlayer, gameState) {
-    const get = id => document.getElementById(id);
     const isMyTurn = gameState.turnOrder[gameState.currentPlayerIndex] === myPlayer.id && !myPlayer.isDowned;
 
-    // Party Hope Meter
     renderPartyHope(gameState.partyHope);
 
-    // Health and AP bars
-    const desktopResources = get('desktop-resources-container');
-    const mobileResources = get('mobile-resources-container');
-
+    const playerResources = queryAll('[data-container="player-resources"]');
     if (myPlayer.stats.maxHp > 0) {
         const healthPercent = (myPlayer.stats.currentHp / myPlayer.stats.maxHp) * 100;
-        
-        get('player-health-bar').style.width = `${healthPercent}%`;
-        get('player-health-text').textContent = `${myPlayer.stats.currentHp} / ${myPlayer.stats.maxHp}`;
-        get('ap-counter-desktop').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
-        desktopResources.classList.remove('hidden');
-
-        get('mobile-player-health-bar').style.width = `${healthPercent}%`;
-        get('mobile-player-health-text').textContent = `${myPlayer.stats.currentHp}/${myPlayer.stats.maxHp}`;
-        get('ap-counter-mobile').innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`;
-        mobileResources.classList.remove('hidden');
+        queryAll('[data-container="player-health-bar"]').forEach(el => el.style.width = `${healthPercent}%`);
+        queryAll('[data-container="player-health-text"]').forEach(el => el.textContent = `${myPlayer.stats.currentHp} / ${myPlayer.stats.maxHp}`);
+        queryAll('[data-container="ap-counter"]').forEach(el => el.innerHTML = `<span class="material-symbols-outlined">bolt</span>${myPlayer.currentAp}/${myPlayer.stats.maxAP}`);
+        playerResources.forEach(el => el.classList.remove('hidden'));
     } else {
-        desktopResources.classList.add('hidden');
-        mobileResources.classList.add('hidden');
+        playerResources.forEach(el => el.classList.add('hidden'));
     }
 
-    // Turn Indicator
     const turnPlayer = currentRoomState.players[gameState.turnOrder[gameState.currentPlayerIndex]];
     const turnText = turnPlayer ? `${turnPlayer.name}'s Turn` : "Loading...";
-    get('turn-indicator').textContent = turnText;
-    get('mobile-turn-indicator').textContent = turnText;
+    queryAll('[data-container="turn-indicator"]').forEach(el => el.textContent = turnText);
     
-    // Action Bars
-    get('fixed-action-bar').classList.toggle('hidden', !isMyTurn);
-    get('mobile-action-bar').classList.toggle('hidden', !isMyTurn);
-    get('action-skill-challenge-btn').classList.toggle('hidden', !gameState.skillChallenge.isActive);
-    get('mobile-action-skill-challenge-btn').classList.toggle('hidden', !gameState.skillChallenge.isActive);
+    queryAll('[data-container="action-bar"]').forEach(el => el.classList.toggle('hidden', !isMyTurn));
+    queryAll('[data-container="action-skill-challenge-btn"]').forEach(el => el.classList.toggle('hidden', !gameState.skillChallenge.isActive));
     
-    // Board (Monsters & Environment)
-    const boardContainers = [get('board-cards'), get('mobile-board-cards')];
+    const boardContainers = queryAll('[data-container="board-cards"]');
     boardContainers.forEach(c => c.innerHTML = '');
     [...gameState.board.monsters, ...gameState.board.environment].forEach(card => {
-        boardContainers.forEach(container => {
-            const isInteractable = isMyTurn && (card.type === 'Monster' || card.type === 'Environmental');
-            const cardEl = createCardElement(card, { isTargetable: isMyTurn, isInteractable });
-            if (card.type === 'Monster') {
-                cardEl.onclick = () => {
-                    if (!isMyTurn || !clientState.selectedWeaponId) return;
-                     if (clientState.isFirstTurnTutorialActive) { // Tutorial logic
-                        clientState.isFirstTurnTutorialActive = false;
-                    }
-                    showNarrativeModal(clientState.selectedWeaponId, card.id);
-                    clientState.selectedWeaponId = null; 
-                    renderUI();
-                };
-            }
-            container.appendChild(cardEl);
-        });
+        const isInteractable = isMyTurn && (card.type === 'Monster' || card.type === 'Environmental');
+        const cardEl = createCardElement(card, { isTargetable: isMyTurn, isInteractable });
+        if (card.type === 'Monster') {
+            cardEl.onclick = () => {
+                if (!isMyTurn || !clientState.selectedWeaponId) return;
+                 if (clientState.isFirstTurnTutorialActive) {
+                    clientState.isFirstTurnTutorialActive = false;
+                }
+                showNarrativeModal(clientState.selectedWeaponId, card.id);
+                clientState.selectedWeaponId = null; 
+                renderUI();
+            };
+        }
+        boardContainers.forEach(container => container.appendChild(cardEl.cloneNode(true)));
     });
 
-    // World Events
-    const worldEventBanner = get('active-world-event-display');
-    const mobileWorldEventBanner = get('mobile-active-world-event-display');
+    const worldEventBanners = queryAll('[data-container="world-event-display"]');
     const event = gameState.worldEvents.currentEvent;
     if (event) {
         const eventDesc = event.stages ? event.stages[gameState.skillChallenge.currentStage]?.description : event.description;
@@ -609,22 +602,22 @@ function renderGameplayState(myPlayer, gameState) {
             </div>
             <span class="world-event-duration">Rounds Left: ${gameState.worldEvents.duration}</span>
         `;
-        worldEventBanner.innerHTML = bannerHTML;
-        mobileWorldEventBanner.innerHTML = bannerHTML;
-        worldEventBanner.classList.remove('hidden');
-        mobileWorldEventBanner.classList.remove('hidden');
+        worldEventBanners.forEach(banner => {
+            banner.innerHTML = bannerHTML;
+            banner.classList.remove('hidden');
+        });
     } else {
-        worldEventBanner.classList.add('hidden');
-        mobileWorldEventBanner.classList.add('hidden');
+        worldEventBanners.forEach(banner => banner.classList.add('hidden'));
     }
 
     renderCharacterPanel(get('character-sheet-block'), get('mobile-screen-character'), myPlayer, isMyTurn);
 
-    const lootContainers = [get('party-loot-container'), get('mobile-party-loot-container')];
+    const lootContainers = queryAll('[data-container="party-loot"]');
     lootContainers.forEach(c => c.innerHTML = '');
     if (gameState.lootPool && gameState.lootPool.length > 0) {
         gameState.lootPool.forEach(lootItem => {
-            lootContainers.forEach(container => container.appendChild(createCardElement(lootItem, { isClaimable: true })));
+            const lootEl = createCardElement(lootItem, { isClaimable: true });
+            lootContainers.forEach(container => container.appendChild(lootEl.cloneNode(true)));
         });
     } else {
          lootContainers.forEach(container => container.innerHTML = `<p class="empty-pool-text">No discoveries yet.</p>`);
@@ -643,18 +636,15 @@ function renderPartyHope(hope) {
     else if (hope >= 9) { hopeLabel = 'Inspired (+1 Hit)'; hopeClass = 'inspired'; }
     else if (hope >= 7) { hopeLabel = 'Hopeful'; hopeClass = 'hopeful'; }
 
-    const desktopMeterContainer = document.getElementById('party-hope-meter-desktop');
-    const mobileMeterContainer = document.getElementById('party-hope-meter-mobile');
-    
-    desktopMeterContainer.className = `party-hope-meter-container ${hopeClass}`;
-    mobileMeterContainer.className = `party-hope-meter-container mobile ${hopeClass}`;
+    queryAll('[data-container="party-hope-meter"]').forEach(container => {
+        container.className = container.className.replace(/despairing|struggling|neutral|hopeful|inspired/g, '').trim() + ` ${hopeClass}`;
+        container.classList.remove('hidden');
+    });
 
-    document.getElementById('party-hope-bar-desktop').style.width = `${hopePercent}%`;
-    document.getElementById('party-hope-text-desktop').textContent = `${hopeLabel} ${hope}/10`;
-    document.getElementById('party-hope-text-mobile').textContent = `${hope}/10`;
-    
-    desktopMeterContainer.classList.remove('hidden');
-    mobileMeterContainer.classList.remove('hidden');
+    queryAll('[data-container="party-hope-bar"]').forEach(el => el.style.width = `${hopePercent}%`);
+    // Desktop and mobile have slightly different text formats
+    get('party-hope-text-desktop').textContent = `${hopeLabel} ${hope}/10`;
+    get('party-hope-text-mobile').textContent = `${hope}/10`;
 }
 
 function renderCharacterPanel(desktopContainer, mobileContainer, player, isMyTurn) {
@@ -714,8 +704,8 @@ function renderCharacterPanel(desktopContainer, mobileContainer, player, isMyTur
 }
 
 function renderHandAndEquipment(player, isMyTurn) {
-    const handContainers = [document.getElementById('player-hand'), document.getElementById('mobile-player-hand')];
-    const equippedContainers = [document.getElementById('equipped-items'), document.getElementById('mobile-equipped-items')];
+    const handContainers = queryAll('[data-container="player-hand"]');
+    const equippedContainers = queryAll('[data-container="equipped-items"]');
     
     handContainers.forEach(c => c.innerHTML = '');
     equippedContainers.forEach(c => c.innerHTML = '');
@@ -723,54 +713,50 @@ function renderHandAndEquipment(player, isMyTurn) {
     player.hand.forEach(card => {
         const isEquippable = (card.type === 'Weapon' || card.type === 'Armor');
         const isConsumable = card.type === 'Consumable';
-        handContainers.forEach(container => {
-            container.appendChild(createCardElement(card, { isEquippable, isConsumable, isDiscardable: isMyTurn }));
-        });
+        const isCastable = card.type === 'Spell' && isMyTurn;
+        const cardEl = createCardElement(card, { isEquippable, isConsumable, isCastable, isDiscardable: isMyTurn });
+        handContainers.forEach(container => container.appendChild(cardEl.cloneNode(true)));
     });
 
     Object.values(player.equipment).forEach(item => {
         if (item) {
             const isAttackable = item.type === 'Weapon' && isMyTurn;
-            equippedContainers.forEach(container => {
-                const cardEl = createCardElement(item, { isAttackable });
-                if (isAttackable) {
-                    cardEl.onclick = () => {
-                        clientState.selectedWeaponId = clientState.selectedWeaponId === item.id ? null : item.id;
-                        if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
-                            showToast("Great! Now click a monster on the board to attack it.", "info");
-                        }
-                        renderUI();
-                    };
-                }
-                container.appendChild(cardEl);
-            });
+            const cardEl = createCardElement(item, { isAttackable });
+            if (isAttackable) {
+                cardEl.onclick = () => {
+                    clientState.selectedWeaponId = clientState.selectedWeaponId === item.id ? null : item.id;
+                    if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
+                        showToast("Great! Now click a monster on the board to attack it.", "info");
+                    }
+                    renderUI();
+                };
+            }
+            equippedContainers.forEach(container => container.appendChild(cardEl.cloneNode(true)));
         }
     });
 
     if (isMyTurn) {
         const unarmed = { id: 'unarmed', name: 'Unarmed Strike', type: 'Weapon', apCost: 1, effect: { dice: '1d4' } };
-        equippedContainers.forEach(container => {
-            const cardEl = createCardElement(unarmed, { isAttackable: true });
-            cardEl.onclick = () => {
-                clientState.selectedWeaponId = clientState.selectedWeaponId === unarmed.id ? null : unarmed.id;
-                 if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
-                    showToast("Great! Now click a monster on the board to attack it.", "info");
-                }
-                renderUI();
-            };
-            container.appendChild(cardEl);
-        });
+        const cardEl = createCardElement(unarmed, { isAttackable: true });
+        cardEl.onclick = () => {
+            clientState.selectedWeaponId = clientState.selectedWeaponId === unarmed.id ? null : unarmed.id;
+             if (clientState.selectedWeaponId && clientState.isFirstTurnTutorialActive) {
+                showToast("Great! Now click a monster on the board to attack it.", "info");
+            }
+            renderUI();
+        };
+        equippedContainers.forEach(container => container.appendChild(cardEl.cloneNode(true)));
     }
 }
 
 
 function renderGameLog(log, gameStarted) {
-    const logContainers = [document.getElementById('game-log-content'), document.getElementById('mobile-chat-log')];
+    const logContainers = queryAll('[data-container="game-log"]');
     logContainers.forEach(container => {
         if(!container) return;
         
         const shouldScroll = Math.abs(container.scrollHeight - container.clientHeight - container.scrollTop) < 5;
-        container.innerHTML = log.map(entry => {
+        const logHTML = log.map(entry => {
             let content = '';
             const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const timeSpan = gameStarted ? `<span class="chat-timestamp">${time}</span>` : '';
@@ -792,16 +778,17 @@ function renderGameLog(log, gameStarted) {
             return `<div class="chat-message ${entry.type}">${content}</div>`;
         }).join('');
         
+        container.innerHTML = logHTML;
         if (shouldScroll) container.scrollTop = container.scrollHeight;
     });
 }
 
 // --- 3. UI INITIALIZATION & EVENT LISTENERS ---
 function initializeUI() {
-    const playerNameInput = document.getElementById('player-name-input');
-    const roomCodeInput = document.getElementById('room-code-input');
-    const createBtn = document.getElementById('create-room-btn');
-    const joinBtn = document.getElementById('join-room-btn');
+    const playerNameInput = get('player-name-input');
+    const roomCodeInput = get('room-code-input');
+    const createBtn = get('create-room-btn');
+    const joinBtn = get('join-room-btn');
 
     function validateMenu() {
         const hasName = playerNameInput.value.trim().length > 0;
@@ -818,7 +805,7 @@ function initializeUI() {
             document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             clientState.selectedGameMode = btn.dataset.mode;
-            document.getElementById('custom-settings').classList.toggle('hidden', clientState.selectedGameMode !== 'Custom');
+            get('custom-settings').classList.toggle('hidden', clientState.selectedGameMode !== 'Custom');
             validateMenu();
         });
     });
@@ -828,12 +815,12 @@ function initializeUI() {
         let payload = { playerName: myPlayerName, gameMode: clientState.selectedGameMode };
         if (clientState.selectedGameMode === 'Custom') {
             payload.customSettings = {
-                startWithWeapon: document.getElementById('setting-weapon').checked,
-                startWithArmor: document.getElementById('setting-armor').checked,
-                startingItems: parseInt(document.getElementById('setting-items').value, 10),
-                startingSpells: parseInt(document.getElementById('setting-spells').value, 10),
-                lootDropRate: parseInt(document.getElementById('setting-loot-rate').value, 10),
-                discoveryRolls: document.getElementById('setting-discovery-rolls').checked
+                startWithWeapon: get('setting-weapon').checked,
+                startWithArmor: get('setting-armor').checked,
+                startingItems: parseInt(get('setting-items').value, 10),
+                startingSpells: parseInt(get('setting-spells').value, 10),
+                lootDropRate: parseInt(get('setting-loot-rate').value, 10),
+                discoveryRolls: get('setting-discovery-rolls').checked
             };
         }
         socket.emit('createRoom', payload);
@@ -854,35 +841,57 @@ function initializeUI() {
 
 function initializeGameUIListeners() {
     document.body.addEventListener('click', (e) => {
+        const target = e.target;
         // Class selection on mobile
-        const classBtn = e.target.closest('.select-class-btn');
+        const classBtn = target.closest('.select-class-btn');
         if (classBtn) {
             socket.emit('chooseClass', { classId: classBtn.dataset.classId });
+            return;
         }
         // Use class ability
-        if (e.target.id === 'use-ability-btn') {
+        if (target.id === 'use-ability-btn') {
             const playerClass = currentRoomState.players[myId]?.class;
             if (playerClass) {
                 const abilityName = currentRoomState.staticData.classes[playerClass].ability.name;
                 socket.emit('playerAction', { action: 'useAbility', abilityName });
             }
+            return;
         }
-        // Start game button on character panel
-        if (e.target.id === 'character-sheet-start-game-btn') {
+        // Start game button
+        if (target.id === 'character-sheet-start-game-btn' || target.closest('[data-container="start-game-btn"]')) {
             socket.emit('startGame');
+            return;
         }
-    });
 
-    ['start-game-btn', 'mobile-start-game-btn'].forEach(id => {
-        document.getElementById(id).addEventListener('click', () => socket.emit('startGame'));
+        // Action bar buttons
+        const actionBar = target.closest('[data-container="action-bar"]');
+        if (actionBar) {
+            const btn = target.closest('button');
+            if (!btn) return;
+            const actionType = Object.keys(btn.dataset).find(key => key.startsWith('container'));
+            if (!actionType) return;
+            
+            const action = btn.dataset[actionType];
+            if (action.includes('end-turn-btn')) socket.emit('endTurn');
+            else if (action.includes('guard-btn')) socket.emit('playerAction', { action: 'guard' });
+            else if (action.includes('brief-respite-btn')) socket.emit('playerAction', { action: 'respite' });
+            else if (action.includes('full-rest-btn')) socket.emit('playerAction', { action: 'rest' });
+            else if (action.includes('skill-challenge-btn')) {
+                const challenge = currentRoomState.gameState.skillChallenge.details;
+                if (challenge) {
+                    const stage = challenge.stages ? challenge.stages[currentRoomState.gameState.skillChallenge.currentStage] : challenge;
+                    showSkillChallengeModal(stage, challenge.name);
+                }
+            }
+        }
     });
 
     ['chat-form', 'mobile-chat-form'].forEach(id => {
-        const form = document.getElementById(id);
+        const form = get(id);
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            const input = document.getElementById(id.replace('form', 'input'));
-            const channel = document.getElementById(id.replace('form', 'channel'));
+            const input = get(id.replace('form', 'input'));
+            const channel = get(id.replace('form', 'channel'));
             const message = input.value.trim();
             if (message) {
                 socket.emit('chatMessage', { channel: channel.value, message });
@@ -891,70 +900,37 @@ function initializeGameUIListeners() {
         });
     });
 
-    ['fixed-action-bar', 'mobile-action-bar'].forEach(id => {
-        const bar = document.getElementById(id);
-        bar.addEventListener('click', (e) => {
-            const targetId = e.target.id;
-            if (targetId.includes('end-turn-btn')) socket.emit('endTurn');
-            else if (targetId.includes('guard-btn')) socket.emit('playerAction', { action: 'guard' });
-            else if (targetId.includes('brief-respite-btn')) socket.emit('playerAction', { action: 'respite' });
-            else if (targetId.includes('full-rest-btn')) socket.emit('playerAction', { action: 'rest' });
-            else if (targetId.includes('skill-challenge-btn')) {
-                const challenge = currentRoomState.gameState.skillChallenge.details;
-                if (challenge) {
-                    const stage = challenge.stages ? challenge.stages[currentRoomState.gameState.skillChallenge.currentStage] : challenge;
-                    showSkillChallengeModal(stage, challenge.name);
-                }
-            }
-        });
-    });
+    get('chat-toggle-btn').addEventListener('click', () => get('chat-overlay').classList.toggle('hidden'));
+    get('chat-close-btn').addEventListener('click', () => get('chat-overlay').classList.add('hidden'));
 
-    document.getElementById('chat-toggle-btn').addEventListener('click', () => document.getElementById('chat-overlay').classList.toggle('hidden'));
-    document.getElementById('chat-close-btn').addEventListener('click', () => document.getElementById('chat-overlay').classList.add('hidden'));
-
-    // --- Menu Dropdown Logic ---
     const menuToggleBtns = ['menu-toggle-btn', 'mobile-menu-toggle-btn'];
     const menuDropdowns = ['menu-dropdown', 'mobile-menu-dropdown'];
-
     menuToggleBtns.forEach(btnId => {
-        document.getElementById(btnId).addEventListener('click', (e) => {
+        get(btnId).addEventListener('click', (e) => {
             e.stopPropagation();
             const dropdownId = btnId.replace('toggle-btn', 'dropdown');
-            const dropdown = document.getElementById(dropdownId);
+            const dropdown = get(dropdownId);
             const isCurrentlyHidden = dropdown.classList.contains('hidden');
-
-            // Always hide all dropdowns first
-            menuDropdowns.forEach(id => document.getElementById(id).classList.add('hidden'));
-
-            // If the one we clicked was hidden, show it.
-            if (isCurrentlyHidden) {
-                dropdown.classList.remove('hidden');
-            }
+            menuDropdowns.forEach(id => get(id).classList.add('hidden'));
+            if (isCurrentlyHidden) dropdown.classList.remove('hidden');
         });
     });
-
-    // Global click listener to close menus if click is outside
     document.addEventListener('click', (e) => {
-        const isClickInsideMenu = e.target.closest('.header-menu');
-        if (!isClickInsideMenu) {
-            menuDropdowns.forEach(id => document.getElementById(id).classList.add('hidden'));
+        if (!e.target.closest('.header-menu')) {
+            menuDropdowns.forEach(id => get(id).classList.add('hidden'));
         }
     });
-    // --- End Menu Dropdown Logic ---
 
     const leaveGameAction = () => {
         sessionStorage.removeItem('qc_roomId');
         sessionStorage.removeItem('qc_playerId');
         window.location.reload();
     };
-    ['leave-game-btn', 'mobile-leave-game-btn'].forEach(id => {
-        document.getElementById(id).addEventListener('click', leaveGameAction);
-    });
+    ['leave-game-btn', 'mobile-leave-game-btn'].forEach(id => get(id).addEventListener('click', leaveGameAction));
     
-    // Voice Chat Buttons
-    ['join-voice-btn', 'mobile-join-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.join()));
-    ['leave-voice-btn', 'mobile-leave-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.leave()));
-    ['mute-voice-btn', 'mobile-mute-voice-btn'].forEach(id => document.getElementById(id).addEventListener('click', () => voiceChatManager.toggleMute()));
+    ['join-voice-btn', 'mobile-join-voice-btn'].forEach(id => get(id).addEventListener('click', () => voiceChatManager.join()));
+    ['leave-voice-btn', 'mobile-leave-voice-btn'].forEach(id => get(id).addEventListener('click', () => voiceChatManager.leave()));
+    ['mute-voice-btn', 'mobile-mute-voice-btn'].forEach(id => get(id).addEventListener('click', () => voiceChatManager.toggleMute()));
 
     document.querySelector('.info-tabs-panel .tab-buttons').addEventListener('click', (e) => {
         if (e.target.classList.contains('tab-btn')) {
@@ -962,7 +938,7 @@ function initializeGameUIListeners() {
             document.querySelectorAll('.info-tabs-panel .tab-btn').forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
             document.querySelectorAll('.info-tabs-panel .tab-content').forEach(c => c.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
+            get(tabId).classList.add('active');
         }
     });
 
@@ -971,92 +947,78 @@ function initializeGameUIListeners() {
         if (navBtn) switchMobileScreen(navBtn.dataset.screen);
     });
     
-    document.getElementById('dice-roll-confirm-btn').addEventListener('click', handleDiceRoll);
-    document.getElementById('dice-roll-close-btn').addEventListener('click', () => {
-        document.getElementById('dice-roll-modal').classList.add('hidden');
+    get('dice-roll-confirm-btn').addEventListener('click', handleDiceRoll);
+    get('dice-roll-close-btn').addEventListener('click', () => {
+        get('dice-roll-modal').classList.add('hidden');
         if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
     });
     
-    document.getElementById('narrative-confirm-btn').addEventListener('click', () => {
+    get('narrative-confirm-btn').addEventListener('click', () => {
         if (!clientState.activeItem) return;
         socket.emit('playerAction', {
             action: 'attack',
             cardId: clientState.activeItem.weaponId,
             targetId: clientState.activeItem.targetId,
-            narrative: document.getElementById('narrative-input').value.trim() || null
+            narrative: get('narrative-input').value.trim() || null
         });
-        document.getElementById('narrative-modal').classList.add('hidden');
+        get('narrative-modal').classList.add('hidden');
         clientState.activeItem = null;
     });
-     document.getElementById('narrative-cancel-btn').addEventListener('click', () => {
-        document.getElementById('narrative-modal').classList.add('hidden');
+    get('narrative-cancel-btn').addEventListener('click', () => {
+        get('narrative-modal').classList.add('hidden');
         clientState.activeItem = null;
-     });
+    });
      
-    document.getElementById('confirm-discard-btn').addEventListener('click', () => {
+    get('confirm-discard-btn').addEventListener('click', () => {
         if (!clientState.activeItem || !clientState.activeItem.selectedCardId) return;
         socket.emit('playerAction', {
             action: 'chooseNewCardDiscard',
             cardToDiscardId: clientState.activeItem.selectedCardId,
             newCard: clientState.activeItem.newCard
         });
-        document.getElementById('choose-discard-modal').classList.add('hidden');
+        get('choose-discard-modal').classList.add('hidden');
         clientState.activeItem = null;
     });
-
-     document.getElementById('claim-loot-cancel-btn').addEventListener('click', () => {
-        document.getElementById('claim-loot-modal').classList.add('hidden');
-        clientState.activeItem = null;
-     });
      
-     document.getElementById('game-over-leave-btn').addEventListener('click', leaveGameAction);
+    get('game-over-leave-btn').addEventListener('click', leaveGameAction);
      
-     // Discovery Modal Listeners
-     document.getElementById('discovery-confirm-btn').addEventListener('click', () => {
+    get('discovery-confirm-btn').addEventListener('click', () => {
         if (!clientState.activeItem || !clientState.activeItem.keptItemId) return;
         socket.emit('playerAction', { action: 'resolveDiscovery', keptItemId: clientState.activeItem.keptItemId });
-        document.getElementById('discovery-modal').classList.add('hidden');
+        get('discovery-modal').classList.add('hidden');
         clientState.activeItem = null;
-     });
+    });
      
-     // Help Modal Listeners
-     document.getElementById('help-btn').addEventListener('click', showHelpModal);
-     document.getElementById('mobile-help-btn').addEventListener('click', showHelpModal);
-     document.getElementById('help-close-btn').addEventListener('click', hideHelpModal);
-     document.getElementById('help-prev-btn').addEventListener('click', () => navigateHelpModal(-1));
-     document.getElementById('help-next-btn').addEventListener('click', () => navigateHelpModal(1));
+    ['help-btn', 'mobile-help-btn'].forEach(id => get(id).addEventListener('click', showHelpModal));
+    get('help-close-btn').addEventListener('click', hideHelpModal);
+    get('help-prev-btn').addEventListener('click', () => navigateHelpModal(-1));
+    get('help-next-btn').addEventListener('click', () => navigateHelpModal(1));
 
-     // Skill Challenge Modal Listeners
-     document.getElementById('skill-challenge-resolve-btn').addEventListener('click', () => {
+    get('skill-challenge-resolve-btn').addEventListener('click', () => {
          socket.emit('playerAction', { action: 'resolveSkillCheck' });
-         document.getElementById('skill-challenge-modal').classList.add('hidden');
+         get('skill-challenge-modal').classList.add('hidden');
      });
-     document.getElementById('skill-challenge-decline-btn').addEventListener('click', () => {
-         document.getElementById('skill-challenge-modal').classList.add('hidden');
+    get('skill-challenge-decline-btn').addEventListener('click', () => {
+         get('skill-challenge-modal').classList.add('hidden');
      });
 }
 
 // --- 4. MODAL & POPUP LOGIC ---
 function switchMobileScreen(screenName) {
     document.querySelectorAll('.mobile-screen').forEach(s => s.classList.remove('active'));
-    document.getElementById(`mobile-screen-${screenName}`).classList.add('active');
+    get(`mobile-screen-${screenName}`).classList.add('active');
     document.querySelectorAll('.mobile-bottom-nav .nav-btn').forEach(b => b.classList.remove('active'));
     document.querySelector(`.mobile-bottom-nav .nav-btn[data-screen="${screenName}"]`).classList.add('active');
 }
 
 function showToast(message, type = 'info', duration = 3000) {
-    const container = document.getElementById('toast-container');
+    const container = get('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
     container.appendChild(toast);
     
-    // Add class to animate in
-    setTimeout(() => {
-        toast.classList.add('visible');
-    }, 10);
-
-    // Set timer to remove
+    setTimeout(() => toast.classList.add('visible'), 10);
     setTimeout(() => {
         toast.classList.remove('visible');
         toast.addEventListener('transitionend', () => toast.remove());
@@ -1064,16 +1026,13 @@ function showToast(message, type = 'info', duration = 3000) {
 }
 
 function showChatPreview(sender, message) {
-    const container = document.getElementById('chat-preview-container');
+    const container = get('chat-preview-container');
     const preview = document.createElement('div');
     preview.className = 'chat-preview-item';
     preview.innerHTML = `<span class="chat-preview-sender">${sender}:</span> ${message}`;
     container.appendChild(preview);
 
-    setTimeout(() => {
-        preview.classList.add('visible');
-    }, 10);
-    
+    setTimeout(() => preview.classList.add('visible'), 10);
     setTimeout(() => {
         preview.classList.remove('visible');
         preview.addEventListener('transitionend', () => preview.remove());
@@ -1081,22 +1040,53 @@ function showChatPreview(sender, message) {
 }
 
 function showYourTurnPopup() {
-    const popup = document.getElementById('your-turn-popup');
+    const popup = get('your-turn-popup');
     popup.classList.remove('hidden');
     setTimeout(() => popup.classList.add('hidden'), 2500);
+}
+
+function showTargetSelectionModal({ title, prompt, targets, onSelect, onCancel }) {
+    const modal = get('target-selection-modal');
+    const targetList = get('target-selection-list');
+    
+    get('target-selection-title').textContent = title;
+    get('target-selection-prompt').textContent = prompt;
+    targetList.innerHTML = '';
+
+    targets.forEach(target => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary';
+        btn.textContent = target.name;
+        btn.onclick = () => {
+            onSelect(target);
+            modal.classList.add('hidden');
+        };
+        targetList.appendChild(btn);
+    });
+
+    const cancelBtn = get('target-selection-cancel-btn');
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+    
+    newCancelBtn.onclick = () => {
+        if (onCancel) onCancel();
+        modal.classList.add('hidden');
+    };
+    
+    modal.classList.remove('hidden');
 }
 
 function showNarrativeModal(weaponId, targetId) {
     clientState.activeItem = { weaponId, targetId };
     const weapon = Object.values(currentRoomState.players[myId].equipment).find(e => e?.id === weaponId) || { name: 'Unarmed Strike' };
-    document.getElementById('narrative-prompt').textContent = `How do you use your ${weapon.name}?`;
-    document.getElementById('narrative-input').value = '';
-    document.getElementById('narrative-modal').classList.remove('hidden');
+    get('narrative-prompt').textContent = `How do you use your ${weapon.name}?`;
+    get('narrative-input').value = '';
+    get('narrative-modal').classList.remove('hidden');
 }
 
 function showGameOverModal(winner) {
-    const title = document.getElementById('game-over-title');
-    const message = document.getElementById('game-over-message');
+    const title = get('game-over-title');
+    const message = get('game-over-message');
     
     if (winner === 'Explorers') {
         title.textContent = "Victory!";
@@ -1105,40 +1095,41 @@ function showGameOverModal(winner) {
         title.textContent = "Defeat...";
         message.textContent = "Your party has fallen. The darkness claims another victory.";
     }
-    document.getElementById('game-over-modal').classList.remove('hidden');
+    get('game-over-modal').classList.remove('hidden');
 }
 
 function showClaimLootModal(item) {
     clientState.activeItem = item;
-    const playerList = document.getElementById('claim-loot-player-list');
-    playerList.innerHTML = '';
+    const explorers = Object.values(currentRoomState.players).filter(p => p.role === 'Explorer');
     
-    Object.values(currentRoomState.players).filter(p => p.role === 'Explorer').forEach(p => {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-secondary';
-        btn.textContent = p.name;
-        btn.onclick = () => {
-            socket.emit('playerAction', { action: 'claimLoot', itemId: clientState.activeItem.id, targetPlayerId: p.id });
-            document.getElementById('claim-loot-modal').classList.add('hidden');
+    showTargetSelectionModal({
+        title: `Claim ${item.name}`,
+        prompt: 'Who should receive this item?',
+        targets: explorers,
+        onSelect: (selectedPlayer) => {
+            socket.emit('playerAction', { 
+                action: 'claimLoot', 
+                itemId: clientState.activeItem.id, 
+                targetPlayerId: selectedPlayer.id 
+            });
             clientState.activeItem = null;
-        };
-        playerList.appendChild(btn);
+        },
+        onCancel: () => {
+            clientState.activeItem = null;
+        }
     });
-
-    document.getElementById('claim-loot-title').textContent = `Claim ${item.name}`;
-    document.getElementById('claim-loot-modal').classList.remove('hidden');
 }
 
 function showDiscoveryModal({ newCard }) {
-    const modal = document.getElementById('discovery-modal');
+    const modal = get('discovery-modal');
     const myPlayer = currentRoomState.players[myId];
     if (!myPlayer) return;
 
-    const newItemContainer = document.getElementById('discovery-new-item-container');
-    const equippedContainer = document.getElementById('discovery-equipped-container');
-    const confirmBtn = document.getElementById('discovery-confirm-btn');
+    const newItemContainer = get('discovery-new-item-container');
+    const equippedContainer = get('discovery-equipped-container');
+    const confirmBtn = get('discovery-confirm-btn');
 
-    const itemType = newCard.type.toLowerCase(); // 'weapon' or 'armor'
+    const itemType = newCard.type.toLowerCase();
     const equippedCard = myPlayer.equipment[itemType];
 
     clientState.activeItem = { newCard, equippedCard, keptItemId: null };
@@ -1148,7 +1139,6 @@ function showDiscoveryModal({ newCard }) {
     equippedContainer.innerHTML = '';
 
     const handleCardSelection = (cardEl, cardId) => {
-        // Remove selection from all cards in this modal
         modal.querySelectorAll('.card').forEach(c => c.classList.remove('selected-for-discard'));
         cardEl.classList.add('selected-for-discard');
         clientState.activeItem.keptItemId = cardId;
@@ -1159,7 +1149,7 @@ function showDiscoveryModal({ newCard }) {
     newCardEl.onclick = () => handleCardSelection(newCardEl, newCard.id);
     newItemContainer.appendChild(newCardEl);
 
-    const equippedCardEl = createCardElement(equippedCard); // createCardElement handles null
+    const equippedCardEl = createCardElement(equippedCard);
     if(equippedCard) {
         equippedCardEl.onclick = () => handleCardSelection(equippedCardEl, equippedCard.id);
     }
@@ -1170,23 +1160,24 @@ function showDiscoveryModal({ newCard }) {
 
 function handleUseConsumable(card) {
     const effect = card.effect;
+    clientState.activeItem = card;
+
     if (effect.target === 'any-player') {
-        clientState.activeItem = card;
-        const playerList = document.getElementById('claim-loot-player-list');
-        playerList.innerHTML = '';
-        Object.values(currentRoomState.players).filter(p => p.role === 'Explorer').forEach(p => {
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-secondary';
-            btn.textContent = p.name;
-            btn.onclick = () => {
-                socket.emit('playerAction', { action: 'useConsumable', cardId: clientState.activeItem.id, targetId: p.id });
-                document.getElementById('claim-loot-modal').classList.add('hidden');
+        const explorers = Object.values(currentRoomState.players).filter(p => p.role === 'Explorer' && !p.isDowned);
+        showTargetSelectionModal({
+            title: `Use ${card.name} on...`,
+            prompt: 'Select a player to target.',
+            targets: explorers,
+            onSelect: (selectedPlayer) => {
+                socket.emit('playerAction', { 
+                    action: 'useConsumable', 
+                    cardId: clientState.activeItem.id, 
+                    targetId: selectedPlayer.id 
+                });
                 clientState.activeItem = null;
-            };
-            playerList.appendChild(btn);
+            },
+            onCancel: () => { clientState.activeItem = null; }
         });
-        document.getElementById('claim-loot-title').textContent = `Use ${card.name} on...`;
-        document.getElementById('claim-loot-modal').classList.remove('hidden');
     } else if (effect.target === 'any-monster') {
         const firstMonster = currentRoomState.gameState.board.monsters[0];
         if (firstMonster) {
@@ -1194,131 +1185,89 @@ function handleUseConsumable(card) {
         } else {
             showToast('No monsters to target!', 'error');
         }
+        clientState.activeItem = null;
     } else {
         socket.emit('playerAction', { action: 'useConsumable', cardId: card.id, targetId: myId });
+        clientState.activeItem = null;
+    }
+}
+
+function handleCastSpell(card) {
+    const effect = card.effect;
+    clientState.activeItem = card;
+
+    const basePayload = { action: 'castSpell', cardId: clientState.activeItem.id };
+    const targetAndSend = (targetId) => {
+        socket.emit('playerAction', { ...basePayload, targetId });
+        clientState.activeItem = null;
+    };
+
+    const targetType = effect.target;
+    if (targetType === 'any-player' || targetType === 'party') {
+        const targets = Object.values(currentRoomState.players).filter(p => p.role === 'Explorer' && !p.isDowned);
+        showTargetSelectionModal({
+            title: `Cast ${card.name} on...`,
+            prompt: 'Select a player to target.',
+            targets: targets,
+            onSelect: (selectedPlayer) => targetAndSend(selectedPlayer.id),
+            onCancel: () => { clientState.activeItem = null; }
+        });
+    } else if (targetType === 'any-monster' || targetType === 'multi-monster') {
+        const targets = currentRoomState.gameState.board.monsters;
+        if (targets.length === 0) {
+            showToast('No monsters to target!', 'error');
+            clientState.activeItem = null;
+            return;
+        }
+        showTargetSelectionModal({
+            title: `Cast ${card.name} on...`,
+            prompt: 'Select a monster to target.',
+            targets: targets,
+            onSelect: (selectedMonster) => targetAndSend(selectedMonster.id),
+            onCancel: () => { clientState.activeItem = null; }
+        });
+    } else if (targetType === 'self' || !targetType) {
+        targetAndSend(myId);
+    } else if (targetType === 'aoe') {
+        targetAndSend(null);
+    } else {
+        showToast(`Unhandled target type: ${targetType}`, 'error');
+        clientState.activeItem = null;
     }
 }
 
 function showSkillChallengeModal(challenge, title) {
-    document.getElementById('skill-challenge-title').textContent = title || "A New Challenge!";
-    document.getElementById('skill-challenge-description').textContent = challenge.description;
-    document.getElementById('skill-challenge-modal').classList.remove('hidden');
+    get('skill-challenge-title').textContent = title || "A New Challenge!";
+    get('skill-challenge-description').textContent = challenge.description;
+    get('skill-challenge-modal').classList.remove('hidden');
 }
 
-// Help Modal Logic
 const helpPages = [
-    {
-        title: "Welcome to Quest & Chronicle",
-        content: `
-            <p>This is a cooperative dungeon-crawling adventure. Your goal is to survive the challenges thrown at you by the Dungeon Master (DM) and emerge victorious.</p>
-            <h3>Game Flow</h3>
-            <ul>
-                <li>The game proceeds in rounds, starting with the DM.</li>
-                <li>On your turn, you'll use Action Points (AP) to perform actions like attacking, using items, or resting.</li>
-                <li>The DM will spawn monsters and trigger world events to challenge the party.</li>
-            </ul>
-        `
-    },
-    {
-        title: "Your Character Stats",
-        content: `
-            <p>Your character's abilities are defined by several key stats:</p>
-            <ul>
-                <li><b>HP (Health Points):</b> Your life force. If it reaches 0, you are Downed.</li>
-                <li><b>AP (Action Points):</b> The resource you spend each turn to take actions.</li>
-                <li><b>Damage Bonus:</b> Added to your damage rolls when you hit with a weapon.</li>
-                <li><b>Shield Bonus:</b> Your defense. Monsters must roll higher than 10 + your Shield Bonus to hit you.</li>
-                <li><b>Hit Bonus:</b> Added to your d20 roll when you attack. This can be affected by Party Hope.</li>
-                <li><b>Core Stats (STR, DEX, etc.):</b> These influence class abilities and may be used for skill checks.</li>
-            </ul>
-        `
-    },
-    {
-        title: "Common Actions",
-        content: `
-            <p>On your turn, you can spend AP on these actions from the action bar:</p>
-            <ul>
-                <li><b>Guard (1 AP):</b> Gain temporary Shield HP equal to your Shield Bonus. This lasts until the start of your next turn.</li>
-                <li><b>Respite (1 AP):</b> A quick breather. Heals you for a small amount (1d4).</li>
-                <li><b>Rest (2 AP):</b> A longer rest. Heals you based on your class's Health Dice.</li>
-                <li><b>Equip (1 AP):</b> From your hand, click the "Equip" button on a Weapon or Armor card.</li>
-            </ul>
-            <p>Attacking and using card abilities also cost AP, as listed on the card.</p>
-        `
-    },
-    {
-        title: "Combat Explained",
-        content: `
-            <p>Combat is resolved with a two-step dice roll process.</p>
-            <h3>How to Attack</h3>
-            <ol>
-                <li><b>Select Weapon:</b> Click on one of your equipped weapons (including 'Unarmed Strike'). It will gain a golden border to show it's selected.</li>
-                <li><b>Select Target:</b> Click on a monster on the game board. This will open a prompt to describe your attack and confirm.</li>
-            </ol>
-            <h3>The Dice Roll</h3>
-            <ol>
-                <li><b>Roll to Hit:</b> You roll a 20-sided die (d20). The result is <b>(Your d20 Roll + Your Hit Bonus)</b>. If this total meets or exceeds the monster's Armor Class (AC), you hit!</li>
-                <li><b>Roll for Damage:</b> On a successful hit, you roll your weapon's damage dice. The total damage is <b>(Your Damage Roll + Your Damage Bonus)</b>.</li>
-            </ol>
-        `
-    },
-    {
-        title: "The Party Hope System",
-        content: `
-            <p>The meter at the top of the screen represents your party's collective morale and resolve. It is a shared resource that reflects your successes and failures.</p>
-            <h3>Changing Hope</h3>
-            <ul>
-                <li><b style="color:var(--color-success)">Hope Increases:</b> Landing a critical hit (rolling a natural 20) or defeating a powerful Boss monster will raise the party's hope.</li>
-                <li><b style="color:var(--color-danger)">Hope Decreases:</b> When a hero is downed (reaches 0 HP), the party's hope falters.</li>
-            </ul>
-            <h3>Effects of Hope</h3>
-            <ul>
-                <li><b>Inspired (9-10 Hope):</b> Your confidence is soaring! The entire party gains a <b>+1 bonus to attack rolls</b>.</li>
-                <li><b>Despairing (0-2 Hope):</b> The situation is dire. The party suffers a <b>-1 penalty to attack rolls</b>.</li>
-            </ul>
-        `
-    },
-    {
-        title: "Advanced Actions",
-        content: `
-            <p>The world of Quest & Chronicle is interactive. On your turn, you may see special action buttons appear on certain monster or environmental cards, allowing for creative strategies.</p>
-            <h3>Environmental Interactions</h3>
-            <p>Objects like a 'Crumbling Pillar' might appear on the board. You can spend AP to attempt a skill check (e.g., a Strength check to topple it), potentially dealing damage to all monsters or revealing a secret.</p>
-            <h3>Monster-Specific Checks</h3>
-            <p>Some creatures have unique weaknesses. You might see an option to 'Intimidate' a cowardly monster (a Charisma check) to frighten it, or 'Find Weakness' on a golem (an Intelligence check) to give your allies an advantage.</p>
-            <h3>Traps & Challenges</h3>
-            <p>Some challenges, like disarming a complex trap, may require multiple successful skill checks in a row. Be prepared!</p>
-        `
-    },
-    {
-        title: "Items & Loot",
-        content: `
-            <p>Defeating monsters and overcoming challenges can reward the party with loot.</p>
-            <ul>
-                <li><b>Rarity:</b> Items can be Common, Uncommon (Green), Rare (Blue), or Legendary (Purple). Higher rarities provide better bonuses.</li>
-                <li><b>Claiming Loot:</b> When an item is discovered, it appears in the "Party Discoveries" tab. Any player can click "Claim" to assign it to a party member.</li>
-                <li><b>Individual Discovery:</b> Every 3 rounds, you'll get a personal chance to find a rare item and swap it with your currently equipped gear of the same type.</li>
-            </ul>
-        `
-    }
+    { title: "Welcome to Quest & Chronicle", content: `<p>This is a cooperative dungeon-crawling adventure. Your goal is to survive the challenges thrown at you by the Dungeon Master (DM) and emerge victorious.</p><h3>Game Flow</h3><ul><li>The game proceeds in rounds, starting with the DM.</li><li>On your turn, you'll use Action Points (AP) to perform actions like attacking, using items, or resting.</li><li>The DM will spawn monsters and trigger world events to challenge the party.</li></ul>` },
+    { title: "Your Character Stats", content: `<p>Your character's abilities are defined by several key stats:</p><ul><li><b>HP (Health Points):</b> Your life force. If it reaches 0, you are Downed.</li><li><b>AP (Action Points):</b> The resource you spend each turn to take actions.</li><li><b>Damage Bonus:</b> Added to your damage rolls when you hit with a weapon.</li><li><b>Shield Bonus:</b> Your defense. Monsters must roll higher than 10 + your Shield Bonus to hit you.</li><li><b>Hit Bonus:</b> Added to your d20 roll when you attack. This can be affected by Party Hope.</li><li><b>Core Stats (STR, DEX, etc.):</b> These influence class abilities and may be used for skill checks.</li></ul>` },
+    { title: "Common Actions", content: `<p>On your turn, you can spend AP on these actions from the action bar:</p><ul><li><b>Guard (1 AP):</b> Gain temporary Shield HP equal to your Shield Bonus. This lasts until the start of your next turn.</li><li><b>Respite (1 AP):</b> A quick breather. Heals you for a small amount (1d4).</li><li><b>Rest (2 AP):</b> A longer rest. Heals you based on your class's Health Dice.</li><li><b>Equip (1 AP):</b> From your hand, click the "Equip" button on a Weapon or Armor card.</li></ul><p>Attacking and using card abilities also cost AP, as listed on the card.</p>` },
+    { title: "Combat Explained", content: `<p>Combat is resolved with a two-step dice roll process.</p><h3>How to Attack</h3><ol><li><b>Select Weapon:</b> Click on one of your equipped weapons (including 'Unarmed Strike'). It will gain a golden border to show it's selected.</li><li><b>Select Target:</b> Click on a monster on the game board. This will open a prompt to describe your attack and confirm.</li></ol><h3>The Dice Roll</h3><ol><li><b>Roll to Hit:</b> You roll a 20-sided die (d20). The result is <b>(Your d20 Roll + Your Hit Bonus)</b>. If this total meets or exceeds the monster's Armor Class (AC), you hit!</li><li><b>Roll for Damage:</b> On a successful hit, you roll your weapon's damage dice. The total damage is <b>(Your Damage Roll + Your Damage Bonus)</b>.</li></ol>` },
+    { title: "The Party Hope System", content: `<p>The meter at the top of the screen represents your party's collective morale and resolve. It is a shared resource that reflects your successes and failures.</p><h3>Changing Hope</h3><ul><li><b style="color:var(--color-success)">Hope Increases:</b> Landing a critical hit (rolling a natural 20) or defeating a powerful Boss monster will raise the party's hope.</li><li><b style="color:var(--color-danger)">Hope Decreases:</b> When a hero is downed (reaches 0 HP), the party's hope falters.</li></ul><h3>Effects of Hope</h3><ul><li><b>Inspired (9-10 Hope):</b> Your confidence is soaring! The entire party gains a <b>+1 bonus to attack rolls</b>.</li><li><b>Despairing (0-2 Hope):</b> The situation is dire. The party suffers a <b>-1 penalty to attack rolls</b>.</li></ul>` },
+    { title: "Advanced Actions", content: `<p>The world of Quest & Chronicle is interactive. On your turn, you may see special action buttons appear on certain monster or environmental cards, allowing for creative strategies.</p><h3>Environmental Interactions</h3><p>Objects like a 'Crumbling Pillar' might appear on the board. You can spend AP to attempt a skill check (e.g., a Strength check to topple it), potentially dealing damage to all monsters or revealing a secret.</p><h3>Monster-Specific Checks</h3><p>Some creatures have unique weaknesses. You might see an option to 'Intimidate' a cowardly monster (a Charisma check) to frighten it, or 'Find Weakness' on a golem (an Intelligence check) to give your allies an advantage.</p><h3>Traps & Challenges</h3><p>Some challenges, like disarming a complex trap, may require multiple successful skill checks in a row. Be prepared!</p>` },
+    { title: "Items & Loot", content: `<p>Defeating monsters and overcoming challenges can reward the party with loot.</p><ul><li><b>Rarity:</b> Items can be Common, Uncommon (Green), Rare (Blue), or Legendary (Purple). Higher rarities provide better bonuses.</li><li><b>Claiming Loot:</b> When an item is discovered, it appears in the "Party Discoveries" tab. Any player can click "Claim" to assign it to a party member.</li><li><b>Individual Discovery:</b> Every 3 rounds, you'll get a personal chance to find a rare item and swap it with your currently equipped gear of the same type.</li></ul>` }
 ];
 
 function renderHelpPage() {
     const page = helpPages[clientState.helpModalPage];
-    document.getElementById('help-content').innerHTML = `<h3>${page.title}</h3>${page.content}`;
-    document.getElementById('help-page-indicator').textContent = `Page ${clientState.helpModalPage + 1} / ${helpPages.length}`;
-    document.getElementById('help-prev-btn').disabled = clientState.helpModalPage === 0;
-    document.getElementById('help-next-btn').disabled = clientState.helpModalPage === helpPages.length - 1;
+    get('help-content').innerHTML = `<h3>${page.title}</h3>${page.content}`;
+    get('help-page-indicator').textContent = `Page ${clientState.helpModalPage + 1} / ${helpPages.length}`;
+    get('help-prev-btn').disabled = clientState.helpModalPage === 0;
+    get('help-next-btn').disabled = clientState.helpModalPage === helpPages.length - 1;
 }
 
 function showHelpModal() {
     clientState.helpModalPage = 0;
     renderHelpPage();
-    document.getElementById('help-modal').classList.remove('hidden');
+    get('help-modal').classList.remove('hidden');
 }
 
 function hideHelpModal() {
-    document.getElementById('help-modal').classList.add('hidden');
+    get('help-modal').classList.add('hidden');
 }
 
 function navigateHelpModal(direction) {
@@ -1333,154 +1282,92 @@ function navigateHelpModal(direction) {
 // --- 5. DICE ROLLING LOGIC ---
 function createDieSVG(sides, value) {
     const text = value || '?';
-    let dieShapePath = '';
-    // Adjust y-position of text for better centering on different shapes
-    let textY = 55; 
-    let sidesTextY = 85;
-
+    let dieShapePath = '', textY = 55, sidesTextY = 85;
     switch (Number(sides)) {
-        case 4:
-        case 20: // d20 face is a triangle
-            dieShapePath = 'M 50,10 L 95,85 L 5,85 Z';
-            textY = 65;
-            sidesTextY = 88;
-            break;
-        case 8:
-            dieShapePath = 'M 50,5 L 95,50 L 50,95 L 5,50 Z';
-            sidesTextY = 90;
-            break;
-        case 10:
-            dieShapePath = 'M 50,5 L 95,40 L 80,95 L 20,95 L 5,40 Z';
-            sidesTextY = 88;
-            break;
-        case 12:
-            dieShapePath = 'M 50,10 L 95,45 L 75,95 L 25,95 L 5,45 Z';
-            sidesTextY = 88;
-            break;
-        case 6:
-        default: // Default to d6 shape
-            dieShapePath = 'M 10,10 H 90 V 90 H 10 Z';
-            break;
+        case 4: case 20: dieShapePath = 'M 50,10 L 95,85 L 5,85 Z'; textY = 65; sidesTextY = 88; break;
+        case 8: dieShapePath = 'M 50,5 L 95,50 L 50,95 L 5,50 Z'; sidesTextY = 90; break;
+        case 10: dieShapePath = 'M 50,5 L 95,40 L 80,95 L 20,95 L 5,40 Z'; sidesTextY = 88; break;
+        case 12: dieShapePath = 'M 50,10 L 95,45 L 75,95 L 25,95 L 5,45 Z'; sidesTextY = 88; break;
+        default: dieShapePath = 'M 10,10 H 90 V 90 H 10 Z'; break;
     }
-
-    return `
-        <svg class="die-svg" viewBox="0 0 100 100">
-            <path class="die-shape" d="${dieShapePath}" />
-            <text class="die-text" x="50" y="${textY}" dominant-baseline="middle" text-anchor="middle">${text}</text>
-            <text class="die-sides-text" x="50" y="${sidesTextY}" dominant-baseline="middle" text-anchor="middle">d${sides}</text>
-        </svg>
-    `;
+    return `<svg class="die-svg" viewBox="0 0 100 100"><path class="die-shape" d="${dieShapePath}" /><text class="die-text" x="50" y="${textY}" dominant-baseline="middle" text-anchor="middle">${text}</text><text class="die-sides-text" x="50" y="${sidesTextY}" dominant-baseline="middle" text-anchor="middle">d${sides}</text></svg>`;
 }
 
-
 function showDiceRollModal(data, type) {
-    clientState.currentRollData = { ...data, type }; // type is 'attack', 'damage', 'skillcheck', or 'discovery'
+    clientState.currentRollData = { ...data, type };
     const { title, dice, bonus, targetAC, description } = data;
-    const modal = document.getElementById('dice-roll-modal');
-    document.getElementById('dice-roll-title').textContent = title;
+    const modal = get('dice-roll-modal');
+    get('dice-roll-title').textContent = title;
     
     let desc = description || `Roll ${dice}`;
     if (bonus > 0) desc += ` + ${bonus}`;
     if (bonus < 0) desc += ` - ${Math.abs(bonus)}`;
     if (targetAC) desc += ` vs Target AC of ${targetAC}`;
-    document.getElementById('dice-roll-description').textContent = desc;
+    get('dice-roll-description').textContent = desc;
 
-    const container = document.getElementById('dice-display-container');
-    const [num, sides] = dice.split('d').map(Number);
+    const container = get('dice-display-container');
+    const [, sides] = dice.split('d').map(Number);
     container.innerHTML = createDieSVG(sides, '?');
 
-    document.getElementById('dice-roll-result-container').classList.add('hidden');
-    document.getElementById('dice-roll-result-line').textContent = '';
-    document.getElementById('dice-roll-damage-line').textContent = '';
-    document.getElementById('dice-roll-details').textContent = '';
+    get('dice-roll-result-container').classList.add('hidden');
+    get('dice-roll-result-line').textContent = '';
+    get('dice-roll-damage-line').textContent = '';
+    get('dice-roll-details').textContent = '';
     
-    const confirmBtn = document.getElementById('dice-roll-confirm-btn');
+    const confirmBtn = get('dice-roll-confirm-btn');
     confirmBtn.textContent = 'Roll Dice';
     confirmBtn.classList.remove('hidden');
     confirmBtn.disabled = false;
-    document.getElementById('dice-roll-close-btn').classList.add('hidden');
+    get('dice-roll-close-btn').classList.add('hidden');
 
     modal.classList.remove('hidden');
 
-    // Set a timeout to prevent the modal from getting stuck if no response is received.
     if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
     clientState.rollResponseTimeout = setTimeout(() => {
-        const modal = document.getElementById('dice-roll-modal');
-        if (!modal.classList.contains('hidden') && !document.getElementById('dice-roll-close-btn').classList.contains('hidden')) {
-             // Only auto-close if the result has been shown. If the button is still "Roll Dice", there might be a server lag.
-        } else if (!modal.classList.contains('hidden') && document.getElementById('dice-roll-confirm-btn').disabled) {
-            // If the button is disabled (i.e., we are waiting for server), don't auto-close.
-        } else {
-            // If it's still just showing 'Roll Dice', maybe show an error.
+        if (!modal.classList.contains('hidden')) {
             console.warn("Dice roll timed out waiting for server response.");
         }
-    }, 8000); // 8 seconds
+    }, 8000);
 }
 
 function handleDiceRoll() {
-    const confirmBtn = document.getElementById('dice-roll-confirm-btn');
-    if (confirmBtn.disabled) return; // Prevent double-clicks
+    const confirmBtn = get('dice-roll-confirm-btn');
+    if (confirmBtn.disabled) return;
 
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Rolling...';
 
-    const container = document.getElementById('dice-display-container');
+    const container = get('dice-display-container');
     const svg = container.querySelector('.die-svg');
     svg.classList.add('rolling');
 
     if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
-    
     const [, sides] = clientState.currentRollData.dice.split('d').map(Number);
-
     clientState.diceAnimationInterval = setInterval(() => {
-        const randomValue = Math.floor(Math.random() * sides) + 1;
-        svg.querySelector('.die-text').textContent = randomValue;
+        svg.querySelector('.die-text').textContent = Math.floor(Math.random() * sides) + 1;
     }, 80);
     
-    // Send appropriate socket event based on roll type
     const payload = { ...clientState.currentRollData };
-    delete payload.type; // Remove internal type property
-    delete payload.title;
-    delete payload.description;
+    delete payload.type; delete payload.title; delete payload.description;
 
-    const actionMap = {
-        attack: 'resolveAttackRoll',
-        damage: 'resolveDamageRoll',
-        discovery: 'resolveDiscoveryRoll',
-        skillcheck: 'resolveSkillCheckRoll'
-    };
+    const actionMap = { attack: 'resolveAttackRoll', damage: 'resolveDamageRoll', discovery: 'resolveDiscoveryRoll', skillcheck: 'resolveSkillCheckRoll' };
     const action = actionMap[clientState.currentRollData.type];
-    if (action) {
-        socket.emit('playerAction', { action, ...payload });
-    }
+    if (action) socket.emit('playerAction', { action, ...payload });
 }
 
-/**
- * Creates a satisfying slowdown animation for the dice roll result.
- * @param {HTMLElement} container - The element holding the die SVG.
- * @param {number} sides - The number of sides on the die.
- * @param {number} finalRoll - The actual result from the server.
- * @param {function} callback - Function to execute after the animation completes.
- */
 function animateDiceResult(container, sides, finalRoll, callback) {
     if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
     const svg = container.querySelector('.die-svg');
-    if (!svg) {
-        if (callback) callback();
-        return;
-    }
+    if (!svg) { if (callback) callback(); return; }
 
     const slowdownSteps = [80, 100, 120, 150, 200, 280, 380, 500, 650]; 
     let currentStep = 0;
-
     function nextStep() {
         if (currentStep < slowdownSteps.length) {
-            const randomValue = Math.floor(Math.random() * sides) + 1;
-            svg.querySelector('.die-text').textContent = randomValue;
+            svg.querySelector('.die-text').textContent = Math.floor(Math.random() * sides) + 1;
             setTimeout(nextStep, slowdownSteps[currentStep]);
             currentStep++;
         } else {
-            // Last step: show the final roll
             svg.classList.remove('rolling');
             container.innerHTML = createDieSVG(sides, finalRoll);
             container.querySelector('.die-svg').classList.add('result-glow');
@@ -1499,10 +1386,10 @@ function initializeSocketListeners() {
 
     socket.on('actionError', (message) => showToast(message, 'error'));
     socket.on('diceRollError', () => {
-         const modal = document.getElementById('dice-roll-modal');
+        const modal = get('dice-roll-modal');
         if (!modal.classList.contains('hidden')) {
-            document.getElementById('dice-roll-confirm-btn').disabled = false;
-            document.getElementById('dice-roll-confirm-btn').textContent = 'Roll Dice';
+            get('dice-roll-confirm-btn').disabled = false;
+            get('dice-roll-confirm-btn').textContent = 'Roll Dice';
             if (clientState.diceAnimationInterval) clearInterval(clientState.diceAnimationInterval);
         }
     });
@@ -1524,11 +1411,9 @@ function initializeSocketListeners() {
         if (playerId === myId) {
             clientState.isFirstTurnTutorialActive = !currentRoomState.players[myId]?.hasTakenFirstTurn;
             showYourTurnPopup();
-            clientState.hasSeenSkillChallengePrompt = false; // Reset for my turn
+            clientState.hasSeenSkillChallengePrompt = false;
              if (clientState.isFirstTurnTutorialActive) {
-                setTimeout(() => {
-                    showToast("It's your first turn! Select a weapon from your equipped items below.", "info", 6000);
-                }, 2500);
+                setTimeout(() => showToast("It's your first turn! Select a weapon from your equipped items below.", "info", 6000), 2500);
             }
         }
     });
@@ -1540,42 +1425,32 @@ function initializeSocketListeners() {
     
     socket.on('attackResolved', (result) => {
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        const container = document.getElementById('dice-display-container');
-
-        animateDiceResult(container, 20, result.roll, () => {
-            const resultLine = document.getElementById('dice-roll-result-line');
-            resultLine.textContent = result.outcome.toUpperCase() + '!';
+        animateDiceResult(get('dice-display-container'), 20, result.roll, () => {
+            const resultLine = get('dice-roll-result-line');
+            resultLine.textContent = `${result.outcome.toUpperCase()}!`;
             resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
-            
-            document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
-            document.getElementById('dice-roll-result-container').classList.remove('hidden');
-
+            get('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs AC ${result.targetAC})`;
+            get('dice-roll-result-container').classList.remove('hidden');
             if (result.outcome === 'Miss') {
-                document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-                document.getElementById('dice-roll-close-btn').classList.remove('hidden');
+                get('dice-roll-confirm-btn').classList.add('hidden');
+                get('dice-roll-close-btn').classList.remove('hidden');
                 if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-                clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+                clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 3000);
             }
         });
     });
 
     socket.on('damageResolved', (result) => {
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        
         const sides = result.damageDice.split('d')[1];
-        const container = document.getElementById('dice-display-container');
-
-        animateDiceResult(container, sides, result.damageRoll, () => {
-            document.getElementById('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
-            document.getElementById('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
-            
-            document.getElementById('dice-roll-result-container').classList.remove('hidden');
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-            
+        animateDiceResult(get('dice-display-container'), sides, result.damageRoll, () => {
+            get('dice-roll-damage-line').textContent = `${result.totalDamage} Damage!`;
+            get('dice-roll-details').textContent = `Roll: ${result.damageRoll} + ${result.damageBonus} = ${result.totalDamage}`;
+            get('dice-roll-result-container').classList.remove('hidden');
+            get('dice-roll-confirm-btn').classList.add('hidden');
+            get('dice-roll-close-btn').classList.remove('hidden');
             if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
-
+            clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 3000);
             const targetCard = document.querySelector(`.card[data-monster-id="${result.targetId}"]`);
             if (targetCard) {
                 targetCard.classList.add('shake');
@@ -1586,94 +1461,69 @@ function initializeSocketListeners() {
     
      socket.on('discoveryRollResolved', (result) => {
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        const container = document.getElementById('dice-display-container');
-
-        animateDiceResult(container, 20, result.roll, () => {
+        animateDiceResult(get('dice-display-container'), 20, result.roll, () => {
             let fortuneText = 'A decent find.';
             if (result.roll <= 10) fortuneText = 'A common find.';
             else if (result.roll <= 15) fortuneText = 'An uncommon find!';
             else if (result.roll <= 19) fortuneText = 'A rare find!';
             else fortuneText = 'A legendary find!';
-
-            document.getElementById('dice-roll-result-line').textContent = fortuneText;
-            document.getElementById('dice-roll-details').textContent = `You rolled a ${result.roll}.`;
-            document.getElementById('dice-roll-result-container').classList.remove('hidden');
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-
+            get('dice-roll-result-line').textContent = fortuneText;
+            get('dice-roll-details').textContent = `You rolled a ${result.roll}.`;
+            get('dice-roll-result-container').classList.remove('hidden');
+            get('dice-roll-confirm-btn').classList.add('hidden');
+            get('dice-roll-close-btn').classList.remove('hidden');
             if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 2000);
+            clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 2000);
         });
     });
 
     socket.on('skillCheckResolved', (result) => {
         if (clientState.rollResponseTimeout) clearTimeout(clientState.rollResponseTimeout);
-        const container = document.getElementById('dice-display-container');
-
-        animateDiceResult(container, 20, result.roll, () => {
-            const resultLine = document.getElementById('dice-roll-result-line');
-            resultLine.textContent = result.outcome.toUpperCase() + '!';
+        animateDiceResult(get('dice-display-container'), 20, result.roll, () => {
+            const resultLine = get('dice-roll-result-line');
+            resultLine.textContent = `${result.outcome.toUpperCase()}!`;
             resultLine.className = `result-line ${result.outcome.toLowerCase()}`;
-            document.getElementById('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
-            document.getElementById('dice-roll-result-container').classList.remove('hidden');
-            document.getElementById('dice-roll-confirm-btn').classList.add('hidden');
-            document.getElementById('dice-roll-close-btn').classList.remove('hidden');
-
+            get('dice-roll-details').textContent = `Roll: ${result.roll} + ${result.bonus} = ${result.total} (vs DC ${result.targetAC})`;
+            get('dice-roll-result-container').classList.remove('hidden');
+            get('dice-roll-confirm-btn').classList.add('hidden');
+            get('dice-roll-close-btn').classList.remove('hidden');
             if(clientState.rollModalCloseTimeout) clearTimeout(clientState.rollModalCloseTimeout);
-            clientState.rollModalCloseTimeout = setTimeout(() => document.getElementById('dice-roll-modal').classList.add('hidden'), 3000);
+            clientState.rollModalCloseTimeout = setTimeout(() => get('dice-roll-modal').classList.add('hidden'), 3000);
         });
     });
 
-    socket.on('promptIndividualDiscovery', (data) => {
-        showDiscoveryModal(data);
-    });
+    socket.on('promptIndividualDiscovery', (data) => showDiscoveryModal(data));
 
     socket.on('chooseToDiscard', ({ newCard, currentHand }) => {
-        const modal = document.getElementById('choose-discard-modal');
-        const newCardContainer = document.getElementById('new-card-to-discard-container');
-        const handContainer = document.getElementById('hand-cards-to-discard-container');
-        const confirmBtn = document.getElementById('confirm-discard-btn');
-
+        const modal = get('choose-discard-modal');
+        const newCardContainer = get('new-card-to-discard-container');
+        const handContainer = get('hand-cards-to-discard-container');
+        const confirmBtn = get('confirm-discard-btn');
         clientState.activeItem = { newCard, currentHand, selectedCardId: null };
         confirmBtn.disabled = true;
-
         newCardContainer.innerHTML = '';
         handContainer.innerHTML = '';
-        
         const handleSelection = (cardEl, cardId) => {
             modal.querySelectorAll('.card').forEach(c => c.classList.remove('selected-for-discard'));
             cardEl.classList.add('selected-for-discard');
             clientState.activeItem.selectedCardId = cardId;
             confirmBtn.disabled = false;
         };
-
         const newCardEl = createCardElement(newCard);
         newCardEl.onclick = () => handleSelection(newCardEl, newCard.id);
         newCardContainer.appendChild(newCardEl);
-
         currentHand.forEach(card => {
             const cardEl = createCardElement(card);
             cardEl.onclick = () => handleSelection(cardEl, card.id);
             handContainer.appendChild(cardEl);
         });
-
         modal.classList.remove('hidden');
     });
 
-    // Voice Chat Listeners
-    socket.on('existing-voice-chatters', (chatterIds) => {
-        chatterIds.forEach(id => voiceChatManager.addPeer(id, true));
-    });
-    socket.on('new-voice-chatter', (chatterId) => {
-        voiceChatManager.addPeer(chatterId, false);
-        showToast('A player joined voice chat.', 'info');
-    });
-    socket.on('voice-chatter-left', (chatterId) => {
-        voiceChatManager.removePeer(chatterId);
-    });
-    socket.on('webrtc-signal', (payload) => {
-        voiceChatManager.handleSignal(payload);
-    });
+    socket.on('existing-voice-chatters', (ids) => ids.forEach(id => voiceChatManager.addPeer(id, true)));
+    socket.on('new-voice-chatter', (id) => { voiceChatManager.addPeer(id, false); showToast('A player joined voice chat.', 'info'); });
+    socket.on('voice-chatter-left', (id) => voiceChatManager.removePeer(id));
+    socket.on('webrtc-signal', (payload) => voiceChatManager.handleSignal(payload));
 }
 // --- 7. APP INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {

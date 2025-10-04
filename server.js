@@ -615,6 +615,12 @@ class GameManager {
                 if (oldPlayer.role === 'DM') {
                     room.gameState.board.monsters.forEach(m => {
                         m.statusEffects = m.statusEffects.map(e => ({...e, duration: e.duration - 1})).filter(e => e.duration > 0);
+                        // Decrement ability cooldowns
+                        if (m.cooldowns) {
+                            Object.keys(m.cooldowns).forEach(key => {
+                                if (m.cooldowns[key] > 0) m.cooldowns[key]--;
+                            });
+                        }
                     });
                 }
             }
@@ -659,19 +665,33 @@ class GameManager {
     }
     
     // --- 3.6. AI Logic & Event Triggers ---
+    
+    /**
+     * Coordinator for the DM's turn, breaking it into logical phases.
+     */
     async handleDmTurn(room) {
-        // 1. World Event Management: Decrement duration of existing event at the START of the DM turn.
+        await this._manageWorldEvents(room);
+        await this._manageBoardState(room);
+        await this._executeMonsterActions(room);
+    }
+
+    /**
+     * Handles the world event phase of the DM's turn.
+     * Manages existing event durations and triggers new events.
+     */
+    async _manageWorldEvents(room) {
+        // 1. Decrement duration of existing event.
         if (room.gameState.worldEvents.currentEvent) {
             room.gameState.worldEvents.duration -= 1;
             if (room.gameState.worldEvents.duration <= 0) {
                 room.chatLog.push({ type: 'system', text: `The event '${room.gameState.worldEvents.currentEvent.name}' has ended.`, timestamp: Date.now() });
                 room.gameState.worldEvents.currentEvent = null;
-                this.emitGameState(room.id); // Update clients that the event ended
+                this.emitGameState(room.id);
                 await new Promise(res => setTimeout(res, 1000));
             }
         }
 
-        // 2. New World Event Check: 60% chance each DM turn if no event is currently active.
+        // 2. Check for a new world event.
         if (!room.gameState.worldEvents.currentEvent && Math.random() < 0.60) {
             const eventCard = this.drawCardFromDeck(room.id, 'worldEvent');
             if(eventCard) {
@@ -683,8 +703,14 @@ class GameManager {
                 await new Promise(res => setTimeout(res, 1500));
             }
         }
-        
-        // 3. Spawn Environmental Object Check: 25% chance to spawn if none exist.
+    }
+
+    /**
+     * Handles the board management phase of the DM's turn.
+     * Spawns environmental objects and new monsters as needed.
+     */
+    async _manageBoardState(room) {
+        // 1. Spawn Environmental Object Check
         if (room.gameState.board.environment.length === 0 && Math.random() < 0.25) {
             const envCardData = this.drawCardFromDeck(room.id, 'environmental');
             if (envCardData) {
@@ -696,15 +722,16 @@ class GameManager {
             }
         }
 
-        // 4. Monster Spawning: Keep at least 2 monsters on the board.
+        // 2. Monster Spawning
         if (room.gameState.board.monsters.length < 2) {
             const monsterData = this.drawCardFromDeck(room.id, 'monster.tier1');
             if (monsterData) {
                 const monsterInstance = { 
                     ...monsterData, 
-                    id: this.generateUniqueCardId(), // Assign a unique instance ID
+                    id: this.generateUniqueCardId(),
                     currentHp: monsterData.maxHp, 
-                    statusEffects: [] 
+                    statusEffects: [],
+                    cooldowns: {},
                 };
                 room.gameState.board.monsters.push(monsterInstance);
                 room.chatLog.push({ type: 'dm', text: gameData.npcDialogue.dm.playMonster[Math.floor(Math.random() * gameData.npcDialogue.dm.playMonster.length)], timestamp: Date.now() });
@@ -712,9 +739,14 @@ class GameManager {
                 await new Promise(res => setTimeout(res, 1000));
             }
         }
+    }
 
-        // 5. Monster Attacks: Each monster attacks a random, living explorer.
-        for (const monster of room.gameState.board.monsters) {
+    /**
+     * Handles the action phase of the DM's turn.
+     * Each monster on the board takes an action.
+     */
+    async _executeMonsterActions(room) {
+        for (const monster of [...room.gameState.board.monsters]) {
             if (monster.statusEffects.some(e => ['Stunned', 'Frightened'].includes(e.name))) {
                 room.chatLog.push({ type: 'combat', text: `${monster.name} is ${monster.statusEffects[0].name} and cannot act!`, timestamp: Date.now() });
                 this.emitGameState(room.id);
@@ -723,26 +755,47 @@ class GameManager {
             }
 
             const livingExplorers = Object.values(room.players).filter(p => p.role === 'Explorer' && !p.isDowned && !p.disconnected);
-            if (livingExplorers.length > 0) {
+            if (livingExplorers.length === 0) continue;
+            
+            const availableAbilities = (monster.abilities || []).filter(a => (monster.cooldowns[a.name] || 0) === 0);
+            let actionTaken = false;
+
+            if (availableAbilities.length > 0 && Math.random() < 0.6) { // 60% chance to use an ability
+                const ability = availableAbilities[Math.floor(Math.random() * availableAbilities.length)];
                 const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
-                
+                room.chatLog.push({ type: 'combat-hit', text: `${monster.name} uses ${ability.name} on ${target.name}!`, timestamp: Date.now() });
+                switch (ability.type) {
+                    case 'damage':
+                        const damage = this.rollDice(ability.dice);
+                        this.applyDamage(room, target, damage);
+                        room.chatLog.push({ type: 'combat-hit', text: `It dealt ${damage} damage.`, timestamp: Date.now() });
+                        break;
+                    case 'control':
+                        target.statusEffects.push({ name: ability.status, duration: ability.duration || 2 });
+                        room.chatLog.push({ type: 'system-bad', text: `${target.name} is now ${ability.status}!`, timestamp: Date.now() });
+                        break;
+                }
+                monster.cooldowns[ability.name] = ability.cooldown;
+                actionTaken = true;
+            }
+
+            if (!actionTaken) { // Standard attack
+                const target = livingExplorers[Math.floor(Math.random() * livingExplorers.length)];
                 const hitRoll = this.rollDice('1d20');
                 const totalRoll = hitRoll + monster.attackBonus;
-                const targetAC = 10 + target.stats.shieldBonus; // Basic AC calculation
-                
+                const targetAC = 10 + target.stats.shieldBonus;
                 const outcome = totalRoll >= targetAC ? 'Hit' : 'Miss';
                 room.chatLog.push({ type: 'combat', text: `${monster.name} attacks ${target.name}... It rolled a ${totalRoll} and it's a ${outcome}!`, timestamp: Date.now() });
-                
                 if (outcome === 'Hit') {
                     const damageRoll = this.rollDice(monster.effect.dice);
                     const totalDamage = damageRoll + (monster.damageBonus || 0);
                     this.applyDamage(room, target, totalDamage);
                     room.chatLog.push({ type: 'combat-hit', text: `${monster.name} dealt ${totalDamage} damage to ${target.name}.`, timestamp: Date.now() });
                 }
-
-                this.emitGameState(room.id);
-                await new Promise(res => setTimeout(res, 1500));
             }
+            
+            this.emitGameState(room.id);
+            await new Promise(res => setTimeout(res, 1500));
         }
     }
 
@@ -836,6 +889,7 @@ class GameManager {
             'resolveAttackRoll': this.resolveAttackRoll,
             'resolveDamageRoll': this.resolveDamageRoll,
             'useConsumable': this.resolveUseConsumable,
+            'castSpell': this.resolveCastSpell,
             'claimLoot': this.resolveClaimLoot,
             'chooseNewCardDiscard': this.resolveNewCardDiscard,
             'resolveDiscovery': this.resolveDiscovery,
@@ -1032,6 +1086,98 @@ class GameManager {
             targetMonster.currentHp -= damage;
             room.chatLog.push({ type: 'combat-hit', text: `${player.name} uses ${card.name} on ${targetMonster.name}, dealing ${damage} damage.`, timestamp: Date.now() });
             if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, targetMonster.id, player.id);
+        }
+        
+        this.emitGameState(room.id);
+    }
+
+    _logSpellCast(room, caster, card, target, effectText) {
+        const targetName = target?.name;
+        const logType = (card.effect.type === 'heal' || card.effect.type === 'buff') ? 'system-good' : 
+                        (card.effect.type === 'damage' || card.effect.type === 'control') ? 'combat-hit' : 'system';
+        
+        let text = `${caster.name} casts ${card.name}`;
+        if (targetName) {
+            text += ` on ${targetName}`;
+        }
+        text += `, ${effectText}.`;
+        
+        room.chatLog.push({ type: logType, text, timestamp: Date.now() });
+    }
+
+    resolveCastSpell(room, player, { cardId, targetId }, socket) {
+        const cardIndex = player.hand.findIndex(c => c.id === cardId);
+        if (cardIndex === -1) return socket.emit('actionError', 'Spell card not found in hand.');
+        const card = player.hand[cardIndex];
+    
+        if (card.type !== 'Spell') return socket.emit('actionError', 'That card is not a spell.');
+        if (player.currentAp < (card.apCost || 0)) return socket.emit('actionError', 'Not enough AP to cast the spell.');
+        
+        player.currentAp -= (card.apCost || 0);
+        player.hand.splice(cardIndex, 1);
+        room.gameState.discardPile.push(card);
+    
+        const { effect } = card;
+        let targetPlayer = room.players[targetId];
+        let targetMonster = room.gameState.board.monsters.find(m => m.id === targetId);
+        
+        switch (effect.type) {
+            case 'heal':
+                if (targetPlayer) {
+                    const healing = this.rollDice(effect.dice);
+                    targetPlayer.stats.currentHp = Math.min(targetPlayer.stats.maxHp, targetPlayer.stats.currentHp + healing);
+                    this._logSpellCast(room, player, card, targetPlayer, `healing for ${healing} HP`);
+                }
+                break;
+            case 'damage':
+                const damage = this.rollDice(effect.dice);
+                if (effect.target === 'aoe') {
+                    this._logSpellCast(room, player, card, null, `dealing ${damage} damage to all monsters`);
+                    // Use [...monsters] to avoid issues if a monster is removed during iteration
+                    [...room.gameState.board.monsters].forEach(monster => {
+                        monster.currentHp -= damage;
+                        if (monster.currentHp <= 0) this.handleMonsterDefeated(room, monster.id, player.id);
+                    });
+                } else if (targetMonster) {
+                    targetMonster.currentHp -= damage;
+                    this._logSpellCast(room, player, card, targetMonster, `dealing ${damage} damage`);
+                    if (targetMonster.currentHp <= 0) this.handleMonsterDefeated(room, targetMonster.id, player.id);
+                }
+                break;
+            case 'buff':
+                const targets = (effect.target === 'party') ? 
+                    Object.values(room.players).filter(p => p.role === 'Explorer') : 
+                    (targetPlayer ? [targetPlayer] : []);
+                
+                if (targets.length > 0) {
+                    targets.forEach(p => {
+                        const newEffect = {
+                            name: card.name,
+                            duration: effect.duration || 2, // Default duration of 2 rounds (ends on caster's turn)
+                            bonuses: effect.bonuses || {},
+                            status: effect.status || null,
+                        };
+                        p.statusEffects.push(newEffect);
+                        p.stats = this.calculatePlayerStats(p, room.gameState.partyHope); // Recalculate stats immediately
+                    });
+                    const logTarget = effect.target === 'party' ? { name: 'the party' } : targetPlayer;
+                    this._logSpellCast(room, player, card, logTarget, 'granting a boon');
+                }
+                break;
+            case 'control':
+                 if (targetMonster) {
+                     targetMonster.statusEffects.push({
+                         name: effect.status,
+                         duration: effect.duration || 2
+                     });
+                     this._logSpellCast(room, player, card, targetMonster, `inflicting ${effect.status}`);
+                 }
+                 break;
+            case 'utility':
+                 this._logSpellCast(room, player, card, null, 'creating a utility effect');
+                 break;
+            default:
+                this._logSpellCast(room, player, card, (targetPlayer || targetMonster), 'with an unknown effect');
         }
         
         this.emitGameState(room.id);

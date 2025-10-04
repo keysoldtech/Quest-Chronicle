@@ -105,7 +105,7 @@
             </div>
             
             <div id="menu-error" class="error-message hidden"></div>
-            <p class="build-number-font-menu">v9.0.15 - Modal &amp; Animation Polish</p>
+            <p class="build-number-font-menu">v9.0.20 - Code Refactor</p>
         </div>
     </div>
     
@@ -117,41 +117,41 @@
             <div class="game-area-desktop">
                 <header class="game-header">
                     <div class="header-info">
-                         <p id="turn-indicator" class="turn-indicator-font">Waiting for game to start...</p>
-                         <div id="party-hope-meter-desktop" class="party-hope-meter-container hidden">
+                         <p class="turn-indicator-font" data-container="turn-indicator">Waiting for game to start...</p>
+                         <div id="party-hope-meter-desktop" class="party-hope-meter-container hidden" data-container="party-hope-meter">
                             <span class="party-hope-label">Party Hope</span>
                             <div class="party-hope-meter">
                                 <span class="material-symbols-outlined">stars</span>
                                 <div class="progress-bar-wrapper">
                                     <div class="progress-bar hope">
-                                        <div id="party-hope-bar-desktop" class="progress-bar-fill"></div>
+                                        <div class="progress-bar-fill" data-container="party-hope-bar"></div>
                                     </div>
-                                    <span id="party-hope-text-desktop" class="progress-bar-text"></span>
+                                    <span class="progress-bar-text" data-container="party-hope-text"></span>
                                 </div>
                             </div>
                         </div>
-                        <div id="desktop-resources-container" class="player-resources-container hidden">
+                        <div class="player-resources-container hidden" data-container="player-resources">
                              <div class="player-health-bar-container">
                                  <span class="material-symbols-outlined">favorite</span>
                                  <div class="progress-bar-wrapper">
                                      <div class="progress-bar health">
-                                         <div id="player-health-bar" class="progress-bar-fill"></div>
+                                         <div class="progress-bar-fill" data-container="player-health-bar"></div>
                                      </div>
-                                     <span id="player-health-text" class="progress-bar-text"></span>
+                                     <span class="progress-bar-text" data-container="player-health-text"></span>
                                  </div>
                              </div>
-                             <p id="ap-counter-desktop" class="ap-counter"></p>
+                             <p class="ap-counter" data-container="ap-counter"></p>
                         </div>
-                         <p class="turn-counter">Round: <span id="turn-counter">0</span></p>
+                         <p class="turn-counter">Round: <span data-container="turn-counter">0</span></p>
                     </div>
                      <div class="header-controls">
-                        <p class="build-number-font">v9.0.15 - Modal &amp; Animation Polish</p>
+                        <p class="build-number-font">v9.0.20 - Code Refactor</p>
                         <div id="dm-controls" class="dm-controls hidden">
                              <button id="dm-play-monster-btn" class="btn btn-sm btn-secondary">Play Monster</button>
                         </div>
                         <div class="room-code-display">
                             <span>Room Code</span>
-                            <p id="room-code">----</p>
+                            <p data-container="room-code">----</p>
                         </div>
                         <div class="header-menu">
                             <button id="menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
@@ -170,10 +170,10 @@
                 <aside id="players-list-container" class="players-panel panel">
                     <div id="player-list-display">
                         <h2 class="panel-header">Players</h2>
-                        <div id="game-lobby-settings-display" class="lobby-settings-display hidden"></div>
-                        <ul id="player-list" class="player-list"></ul>
-                        <div id="lobby-controls" class="lobby-controls hidden">
-                           <button id="start-game-btn" class="btn btn-primary" disabled>Start Game</button>
+                        <div class="lobby-settings-display hidden" data-container="game-lobby-settings"></div>
+                        <ul class="player-list" data-container="player-list"></ul>
+                        <div class="lobby-controls hidden" data-container="lobby-controls">
+                           <button class="btn btn-primary" data-container="start-game-btn" disabled>Start Game</button>
                         </div>
                     </div>
                     <div id="character-sheet-block">
@@ -182,21 +182,21 @@
                 </aside>
                 
                 <div id="main-game-area-wrapper">
-                    <div id="active-world-event-display" class="world-event-banner hidden"></div>
+                    <div class="world-event-banner hidden" data-container="world-event-display"></div>
                     <main id="game-board-container" class="board-panel panel">
                         <h2 class="panel-header">Game Board</h2>
-                        <div id="board-cards" class="card-container-row"></div>
+                        <div class="card-container-row" data-container="board-cards"></div>
                     </main>
                     <footer id="hand-equipment-container" class="hand-panel panel">
                         <div class="player-hand-header">
                            <h2 class="panel-header">Your Hand & Equipment</h2>
                         </div>
                        <div class="hand-and-equipped-container">
-                           <div id="equipped-items-container" class="equipped-items-container">
+                           <div class="equipped-items-container">
                                <h3 class="sub-header-font">Equipped</h3>
-                               <div id="equipped-items" class="card-container-row"></div>
+                               <div class="card-container-row" data-container="equipped-items"></div>
                            </div>
-                           <div id="player-hand" class="player-hand-container card-container-row"></div>
+                           <div class="player-hand-container card-container-row" data-container="player-hand"></div>
                        </div>
                    </footer>
                 </div>
@@ -207,53 +207,53 @@
                         <button class="tab-btn" data-tab="party-loot-tab">Party Discoveries</button>
                     </div>
                     <div id="game-log-tab" class="tab-content active">
-                        <div id="game-log-content" class="log-content-area"></div>
+                        <div class="log-content-area" data-container="game-log"></div>
                     </div>
                     <div id="party-loot-tab" class="tab-content">
-                        <div id="party-loot-container" class="card-container-row"></div>
+                        <div class="card-container-row" data-container="party-loot"></div>
                     </div>
                 </aside>
     
                 <div id="chat-preview-container"></div>
-                <div id="fixed-action-bar" class="fixed-action-bar hidden">
-                    <button id="action-skill-challenge-btn" class="btn btn-special hidden">Challenge (1 AP)</button>
-                    <button id="action-guard-btn" class="btn btn-secondary">Guard (1AP)</button>
-                    <button id="action-brief-respite-btn" class="btn btn-secondary">Respite (1AP)</button>
-                    <button id="action-full-rest-btn" class="btn btn-secondary">Rest (2AP)</button>
-                    <button id="action-end-turn-btn" class="btn btn-primary">End Turn</button>
+                <div class="fixed-action-bar hidden" data-container="action-bar">
+                    <button class="btn btn-special hidden" data-container="action-skill-challenge-btn">Challenge (1 AP)</button>
+                    <button class="btn btn-secondary" data-container="action-guard-btn">Guard (1AP)</button>
+                    <button class="btn btn-secondary" data-container="action-brief-respite-btn">Respite (1AP)</button>
+                    <button class="btn btn-secondary" data-container="action-full-rest-btn">Rest (2AP)</button>
+                    <button class="btn btn-primary" data-container="action-end-turn-btn">End Turn</button>
                 </div>
             </div>
     
             <!-- ================= MOBILE LAYOUT ================= -->
             <div class="game-area-mobile">
                 <header class="mobile-header">
-                    <p id="mobile-turn-indicator" class="turn-indicator-font">Waiting...</p>
+                    <p class="turn-indicator-font" data-container="turn-indicator">Waiting...</p>
                     <div class="mobile-header-right-cluster">
                         <div class="mobile-resources">
-                            <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden">
+                            <div id="party-hope-meter-mobile" class="party-hope-meter-container mobile hidden" data-container="party-hope-meter">
                                 <span class="party-hope-label">Party Hope</span>
                                 <div class="party-hope-meter mobile">
                                     <span class="material-symbols-outlined">stars</span>
-                                    <span id="party-hope-text-mobile"></span>
+                                    <span data-container="party-hope-text"></span>
                                 </div>
                             </div>
-                            <div id="mobile-resources-container" class="player-resources-container mobile hidden">
+                            <div class="player-resources-container mobile hidden" data-container="player-resources">
                                 <div class="player-health-bar-container mobile">
                                     <span class="material-symbols-outlined">favorite</span>
                                     <div class="progress-bar-wrapper">
                                         <div class="progress-bar health">
-                                            <div id="mobile-player-health-bar" class="progress-bar-fill"></div>
+                                            <div class="progress-bar-fill" data-container="player-health-bar"></div>
                                         </div>
-                                        <span id="mobile-player-health-text" class="progress-bar-text"></span>
+                                        <span class="progress-bar-text" data-container="player-health-text"></span>
                                     </div>
                                 </div>
-                                <p id="ap-counter-mobile" class="ap-counter"></p>
+                                <p class="ap-counter" data-container="ap-counter"></p>
                             </div>
                         </div>
                         <div class="mobile-header-controls">
                             <div class="room-code-display mobile">
                                 <span>CODE</span>
-                                <p id="mobile-room-code">----</p>
+                                <p data-container="room-code">----</p>
                             </div>
                             <div class="header-menu">
                                 <button id="mobile-menu-toggle-btn" class="btn btn-sm btn-icon"><span class="material-symbols-outlined">menu</span></button>
@@ -270,22 +270,22 @@
                 </header>
                 
                 <main class="mobile-main">
-                    <div id="mobile-active-world-event-display" class="world-event-banner hidden"></div>
+                    <div class="world-event-banner hidden" data-container="world-event-display"></div>
                     <!-- Mobile Screen 1: Game (Board, Equipment, Hand, Actions) -->
                     <div id="mobile-screen-game" class="mobile-screen active">
                         <div class="panel mobile-panel">
                             <h2 class="panel-header">Game Board</h2>
-                            <div id="mobile-board-cards" class="card-container-row"></div>
+                            <div class="card-container-row" data-container="board-cards"></div>
                         </div>
-                        <div id="mobile-player-equipment" class="panel mobile-panel">
+                        <div class="panel mobile-panel">
                              <h2 class="panel-header">Your Equipment</h2>
-                             <div id="mobile-equipped-items" class="card-container-row"></div>
+                             <div class="card-container-row" data-container="equipped-items"></div>
                         </div>
                         <div class="panel mobile-panel">
                             <div class="player-hand-header">
                                  <h2 class="panel-header">Your Hand</h2>
                             </div>
-                            <div id="mobile-player-hand" class="card-container-row"></div>
+                            <div class="card-container-row" data-container="player-hand"></div>
                         </div>
                     </div>
     
@@ -298,10 +298,10 @@
                     <div id="mobile-screen-party" class="mobile-screen">
                          <div class="panel mobile-panel">
                             <h2 class="panel-header">Players</h2>
-                            <div id="mobile-game-lobby-settings-display" class="lobby-settings-display hidden"></div>
-                            <ul id="mobile-player-list" class="player-list"></ul>
-                             <div id="mobile-lobby-controls" class="lobby-controls hidden">
-                               <button id="mobile-start-game-btn" class="btn btn-primary" disabled>Start Game</button>
+                            <div class="lobby-settings-display hidden" data-container="game-lobby-settings"></div>
+                            <ul class="player-list" data-container="player-list"></ul>
+                             <div class="lobby-controls hidden" data-container="lobby-controls">
+                               <button class="btn btn-primary" data-container="start-game-btn" disabled>Start Game</button>
                             </div>
                         </div>
                     </div>
@@ -310,7 +310,7 @@
                      <div id="mobile-screen-info" class="mobile-screen">
                          <div class="panel mobile-panel">
                             <h2 class="panel-header">Party Discoveries</h2>
-                            <div id="mobile-party-loot-container" class="card-container-row"></div>
+                            <div class="card-container-row" data-container="party-loot"></div>
                         </div>
                     </div>
     
@@ -320,7 +320,7 @@
                             <div class="chat-header" style="margin-bottom: 0.5rem;">
                                 <h2 class="panel-header" style="margin: 0; border: none;">Chat & Log</h2>
                             </div>
-                            <div id="mobile-chat-log" class="chat-log" style="flex-grow: 1;"></div>
+                            <div class="chat-log" style="flex-grow: 1;" data-container="game-log"></div>
                             <form id="mobile-chat-form" class="chat-form" style="padding-top: 0.5rem; border-top: 1px solid var(--color-border)">
                                 <select id="mobile-chat-channel" class="select-field">
                                     <option value="game">Game</option>
@@ -334,12 +334,12 @@
                 </main>
     
                 <div id="mobile-bottom-chrome">
-                    <div id="mobile-action-bar" class="mobile-action-bar hidden">
-                        <button id="mobile-action-skill-challenge-btn" class="btn btn-special btn-sm hidden">Challenge (1 AP)</button>
-                        <button id="mobile-action-guard-btn" class="btn btn-secondary btn-sm">Guard (1AP)</button>
-                        <button id="mobile-action-brief-respite-btn" class="btn btn-secondary btn-sm">Respite (1AP)</button>
-                        <button id="mobile-action-full-rest-btn" class="btn btn-secondary btn-sm">Rest (2AP)</button>
-                        <button id="mobile-action-end-turn-btn" class="btn btn-primary btn-sm">End Turn</button>
+                    <div class="mobile-action-bar hidden" data-container="action-bar">
+                        <button class="btn btn-special btn-sm hidden" data-container="action-skill-challenge-btn">Challenge (1 AP)</button>
+                        <button class="btn btn-secondary btn-sm" data-container="action-guard-btn">Guard (1AP)</button>
+                        <button class="btn btn-secondary btn-sm" data-container="action-brief-respite-btn">Respite (1AP)</button>
+                        <button class="btn btn-secondary btn-sm" data-container="action-full-rest-btn">Rest (2AP)</button>
+                        <button class="btn btn-primary btn-sm" data-container="action-end-turn-btn">End Turn</button>
                     </div>
                     
                     <nav class="mobile-bottom-nav">
@@ -471,20 +471,20 @@
         </div>
 
 
-        <!-- Claim Loot / Target Selection Modal -->
-        <div id="claim-loot-modal" class="modal-overlay hidden">
+        <!-- Target Selection Modal (Used for Loot/Abilities) -->
+        <div id="target-selection-modal" class="modal-overlay hidden">
             <div class="modal-content">
                  <div class="modal-header-fixed">
-                    <h2 id="claim-loot-title" class="panel-header">Claim Loot For...</h2>
-                    <p id="claim-loot-prompt">Who should receive this item?</p>
+                    <h2 id="target-selection-title" class="panel-header">Select a Target</h2>
+                    <p id="target-selection-prompt">Please choose a target from the list below.</p>
                 </div>
                 <div class="modal-scroll-container">
-                    <div id="claim-loot-player-list" class="button-grid">
+                    <div id="target-selection-list" class="button-grid">
                         <!-- Player buttons will be rendered here by client.js -->
                     </div>
                 </div>
                 <div class="modal-actions modal-footer-fixed">
-                    <button id="claim-loot-cancel-btn" class="btn btn-secondary">Cancel</button>
+                    <button id="target-selection-cancel-btn" class="btn btn-secondary">Cancel</button>
                 </div>
             </div>
         </div>
